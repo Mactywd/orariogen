@@ -1,0 +1,162 @@
+"""Il dataset del Liceo Fermi (data/liceo-fermi/*.md) trascritto in letterali
+Python. La trascrizione è essa stessa il test: se lo schema non riesce a
+rappresentare una riga, il build fallisce."""
+
+from domain import weeks
+from domain.models import (
+    Activity, CompetitionClass, Discipline, InstituteSettings, Room, SchoolClass,
+    Service, StudyPlan, Subject, Teacher, TeachingAssignment, TimeGrid,
+)
+
+WEEKS_IN_YEAR = 33  # periodicità S (33/33) osservata in EDT
+
+DISCIPLINES = {  # codice: (nome, [classi di concorso])
+    "LET": ("Lettere", ["A011", "A013"]),
+    "STF": ("Storia e Filosofia", ["A019"]),
+    "LIN": ("Lingue straniere", ["AB24"]),
+    "MAF": ("Matematica e Fisica", ["A027"]),
+    "SCN": ("Scienze", ["A050"]),
+    "ART": ("Discipline artistiche", ["A017"]),
+    "MOT": ("Scienze motorie", ["A048"]),
+    "REL": ("Religione", ["IRC"]),
+}
+
+SUBJECTS = {  # codice: (nome, disciplina)
+    "ITA": ("Italiano", "LET"), "LAT": ("Latino", "LET"),
+    "STG": ("Storia e Geografia", "LET"),
+    "STO": ("Storia", "STF"), "FIL": ("Filosofia", "STF"),
+    "ING": ("Inglese", "LIN"),
+    "MAT": ("Matematica", "MAF"), "FIS": ("Fisica", "MAF"),
+    "SCI": ("Scienze naturali", "SCN"), "DIS": ("Disegno e Storia dell'Arte", "ART"),
+    "MOT": ("Scienze motorie", "MOT"), "IRC": ("Religione cattolica", "REL"),
+}
+
+CURRICULUM = {  # materia: (ore biennio, ore triennio); None = non presente
+    "ITA": (4, 4), "LAT": (3, 3), "ING": (3, 3), "STG": (3, None),
+    "STO": (None, 2), "FIL": (None, 3), "MAT": (5, 4), "FIS": (2, 3),
+    "SCI": (2, 3), "DIS": (2, 2), "MOT": (2, 2), "IRC": (1, 1),
+}
+
+CLASSES = [f"{y}{s}" for s in "AB" for y in range(1, 6)]  # 1A..5A, 1B..5B
+
+ROOMS = (
+    [(f"A10{i}", 30, 1) for i in range(1, 6)]
+    + [(f"B10{i}", 30, 1) for i in range(1, 6)]
+    + [("LAB-FIS", 30, 1), ("LAB-SCI", 30, 1), ("LAB-INF", 25, 1),
+       ("AUL-DIS", 30, 1), ("PALESTRA", 60, 2), ("AULA-MAGNA", 100, 1)]
+)
+
+ALL = CLASSES
+TEACHERS = [  # (id, nome, abbr, [(materia, [classi])], ore Mh/s, materia preferenziale)
+    ("D01", "Rossi Anna", "ROSSI", [("ITA", ["1A", "2A", "3A"]), ("LAT", ["1A", "2A", "3A"])], 21, "ITA"),
+    ("D02", "Bianchi Marco", "BIANC", [("ITA", ["4A", "5A"]), ("LAT", ["4A", "5A"])], 14, "ITA"),
+    ("D03", "Verdi Chiara", "VERDI", [("ITA", ["1B", "2B", "3B"]), ("LAT", ["1B", "2B", "3B"])], 21, "ITA"),
+    ("D04", "Neri Paolo", "NERI", [("ITA", ["4B", "5B"]), ("LAT", ["4B", "5B"])], 14, "ITA"),
+    ("D05", "Ferrari Giulia", "FERRA", [("ING", ["1A", "2A", "3A", "4A", "5A", "1B"])], 18, "ING"),
+    ("D06", "Russo Elena", "RUSSO", [("ING", ["2B", "3B", "4B", "5B"])], 12, "ING"),
+    ("D07", "Conti Luca", "CONTI", [("FIL", ["3A", "4A", "5A"]), ("STO", ["3A", "4A", "5A"]), ("STG", ["1A"])], 18, "FIL"),
+    ("D08", "Marino Sara", "MARIN", [("FIL", ["3B", "4B", "5B"]), ("STO", ["3B", "4B", "5B"]), ("STG", ["1B"])], 18, "FIL"),
+    ("D09", "Greco Ilaria", "GRECO", [("STG", ["2A", "2B"])], 6, "STG"),
+    ("D10", "Costa Davide", "COSTA", [("MAT", ["1A", "2A", "3A"]), ("FIS", ["1A", "2A", "3A"])], 21, "MAT"),
+    ("D11", "Gallo Francesca", "GALLO", [("MAT", ["4A", "5A"]), ("FIS", ["4A", "5A"])], 14, "MAT"),
+    ("D12", "Lombardi Andrea", "LOMBA", [("MAT", ["1B", "2B", "3B"]), ("FIS", ["1B", "2B", "3B"])], 21, "MAT"),
+    ("D13", "Fontana Silvia", "FONTA", [("MAT", ["4B", "5B"]), ("FIS", ["4B", "5B"])], 14, "MAT"),
+    ("D14", "Ricci Matteo", "RICCI", [("SCI", ["1A", "2A", "3A", "4A", "5A", "1B", "2B"])], 17, "SCI"),
+    ("D15", "Esposito Laura", "ESPOS", [("SCI", ["3B", "4B", "5B"])], 9, "SCI"),
+    ("D16", "Barbieri Giorgio", "BARB", [("DIS", ALL)], 20, "DIS"),
+    ("D17", "Villa Roberto", "VILLA", [("MOT", ALL)], 20, "MOT"),
+    ("D18", "Piani Stefano", "PIANI", [("IRC", ALL)], 10, "IRC"),
+]
+
+
+def _year(class_name):
+    return int(class_name[0])
+
+
+def _hours(subject_code, class_name):
+    biennio, triennio = CURRICULUM[subject_code]
+    return biennio if _year(class_name) <= 2 else triennio
+
+
+def _blocks(subject_code, class_name):
+    hours = _hours(subject_code, class_name)
+    if subject_code == "MAT" and _year(class_name) <= 2:
+        return [2, 1, 1, 1]  # i quattro blocchi da 2h di attivita.md
+    return [1] * hours
+
+
+def build():
+    settings = InstituteSettings.load()
+    settings.default_max_reduced_students = 15
+    settings.save()
+
+    grid = TimeGrid.objects.create(
+        days_per_cycle=5, slots_per_day=6, slot_minutes=60, morning_end_slot=4
+    )
+
+    disciplines, subjects = {}, {}
+    for code, (name, ccs) in DISCIPLINES.items():
+        d = Discipline.objects.create(code=code, name=name)
+        for cc in ccs:
+            obj, _ = CompetitionClass.objects.get_or_create(code=cc)
+            d.competition_classes.add(obj)
+        disciplines[code] = d
+    for code, (name, disc) in SUBJECTS.items():
+        subjects[code] = Subject.objects.create(code=code, name=name, discipline=disciplines[disc])
+
+    plans = {}
+    for year in range(1, 6):
+        plan = StudyPlan.objects.create(
+            code=f"SCI{year}", name=f"Liceo Scientifico - {year} anno", year=year
+        )
+        col = 0 if year <= 2 else 1
+        for subject_code, hours_pair in CURRICULUM.items():
+            hours = hours_pair[col]
+            if hours is not None:
+                Service.objects.create(
+                    study_plan=plan, subject=subjects[subject_code], class_minutes=hours * 60
+                )
+        plans[plan.code] = plan
+
+    rooms = {
+        name: Room.objects.create(name=name, capacity=cap, simultaneous_capacity=simult)
+        for name, cap, simult in ROOMS
+    }
+
+    classes = {}
+    for name in CLASSES:
+        classes[name] = SchoolClass.objects.create(
+            name=name, study_plan=plans[f"SCI{_year(name)}"], year=_year(name),
+            preferred_room=rooms[f"{name[1]}10{name[0]}"],  # 1A→A101 … 5B→B105
+        )
+
+    teachers = {}
+    year_mask = weeks.full_mask(WEEKS_IN_YEAR)
+    for tid, full_name, abbr, assignments, hours, preferred in TEACHERS:
+        last, first = full_name.split(" ", 1)
+        t = Teacher.objects.create(
+            name=full_name, last_name=last, first_name=first, abbreviation=abbr,
+            weekly_minutes=hours * 60, preferred_subject=subjects[preferred],
+        )
+        for subject_code, class_names in assignments:
+            t.teachable_subjects.add(subjects[subject_code])
+            for class_name in class_names:
+                TeachingAssignment.objects.create(
+                    teacher=t, subject=subjects[subject_code],
+                    school_class=classes[class_name],
+                    weekly_minutes=_hours(subject_code, class_name) * 60,
+                )
+                for block in _blocks(subject_code, class_name):
+                    activity = Activity.objects.create(
+                        subject=subjects[subject_code],
+                        duration_slots=block, duration_minutes=block * 60,
+                        week_mask=year_mask,
+                    )
+                    activity.teachers.add(t)
+                    activity.classes.add(classes[class_name])
+        teachers[tid] = t
+
+    return {
+        "grid": grid, "plans": plans, "classes": classes,
+        "teachers": teachers, "subjects": subjects,
+    }
