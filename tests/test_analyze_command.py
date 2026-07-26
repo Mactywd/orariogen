@@ -1,0 +1,58 @@
+"""Il comando analyze: report in stile EDT, exit code per la CI."""
+from io import StringIO
+
+import pytest
+from django.core.management import call_command
+from django.core.management.base import CommandError
+
+from domain.models import SubjectConstraint
+from tests.analysis_helpers import make_activity, mini_school, place
+
+pytestmark = pytest.mark.django_db
+
+
+def _run(*args):
+    out = StringIO()
+    call_command("analyze", *args, stdout=out)
+    return out.getvalue()
+
+
+def test_base_pulita():
+    mini_school()
+    out = _run()
+    assert "Nessun problema di capienza" in out
+    assert "Verifica terminata: nessuna incoerenza." in out
+
+
+def test_deficit_di_capienza_stampa_i_quattro_riquadri_e_fallisce():
+    env = mini_school()
+    for slots in (2, 2, 2, 2, 1, 1):
+        make_activity(env["subject"], classes=[env["klass"]], slots=slots)
+    SubjectConstraint.objects.create(
+        school_class=env["klass"], subject_a=env["subject"],
+        subject_b=env["subject"], type=SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE)
+    out = StringIO()
+    with pytest.raises(CommandError, match="Rimangono delle incoerenze."):
+        call_command("analyze", stdout=out)
+    text = out.getvalue()
+    assert "I vincoli della classe non permettono il piazzamento" in text
+    assert "Durata da piazzare: 10h00" in text
+    assert "Durata piazzabile:  9h00" in text
+    assert "» 1h00 non potrà essere piazzata" in text
+    assert "Rendere i vincoli delle materie meno vincolanti" in text
+    assert "1 problemi di capienza" in text          # il riepilogo che EDT non ha
+
+
+def test_conformita_e_sp_con_schedule():
+    env = mini_school()
+    a = make_activity(env["subject"], teachers=[env["teacher"]])
+    b = make_activity(env["subject"], teachers=[env["teacher"]])
+    non_piazzata = make_activity(env["subject"], classes=[env["klass"]])
+    place(env["schedule"], a, day=0, slot=0)
+    place(env["schedule"], b, day=0, slot=0)          # conflitto
+    out = StringIO()
+    with pytest.raises(CommandError):
+        call_command("analyze", "--schedule", str(env["schedule"].pk), stdout=out)
+    text = out.getvalue()
+    assert "già occupata in un'attività" in text
+    assert "S.P." in text and "Italiano" in text      # la colonna delle non piazzate
