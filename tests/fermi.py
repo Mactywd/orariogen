@@ -2,13 +2,21 @@
 Python. La trascrizione è essa stessa il test: se lo schema non riesce a
 rappresentare una riga, il build fallisce."""
 
+import datetime as dt
+
 from domain import weeks
 from domain.models import (
-    Activity, CompetitionClass, Discipline, InstituteSettings, Room, SchoolClass,
-    Service, StudyPlan, Subject, Teacher, TeachingAssignment, TimeGrid,
+    Activity, CompetitionClass, Discipline, InstituteSettings, Period,
+    ResourceUnavailability, Room, Schedule, SchoolClass, SchoolYear, Service,
+    StudyPlan, Subject, Teacher, TeachingAssignment, TimeGrid,
 )
 
 WEEKS_IN_YEAR = 33  # periodicità S (33/33) osservata in EDT
+
+# Spezzoni (vincoli-attesi.md): D06, D09, D15 indisponibili a giornata intera
+# nei giorni elencati. Il dataset dichiara il bisogno, non i giorni: questa è
+# la nostra istanza concreta, dimensionata per restare risolvibile.
+UNAVAILABLE_DAYS = {"D06": [2, 4], "D09": [0, 1, 3], "D15": [0, 4]}
 
 DISCIPLINES = {  # codice: (nome, [classi di concorso])
     "LET": ("Lettere", ["A011", "A013"]),
@@ -156,7 +164,22 @@ def build():
                     activity.classes.add(classes[class_name])
         teachers[tid] = t
 
+    year = SchoolYear.objects.create(
+        start_date=dt.date(2026, 9, 14),
+        end_date=dt.date(2026, 9, 14) + dt.timedelta(weeks=WEEKS_IN_YEAR) - dt.timedelta(days=1),
+        first_week_monday=dt.date(2026, 9, 14),
+    )
+    period = Period.objects.create(school_year=year, name="Annuale",
+                                   start_date=year.start_date, end_date=year.end_date)
+    schedule = Schedule.objects.create(period=period)
+    for teacher_id, days in UNAVAILABLE_DAYS.items():
+        for day in days:
+            for slot in range(6):
+                ResourceUnavailability.objects.create(
+                    resource=teachers[teacher_id], day=day, slot=slot, level="hard")
+
     return {
         "grid": grid, "plans": plans, "classes": classes,
         "teachers": teachers, "subjects": subjects,
+        "year": year, "period": period, "schedule": schedule,
     }
