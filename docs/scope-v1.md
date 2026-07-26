@@ -1,8 +1,9 @@
 # Scope di v1 — proposta
 
-> **Stato: proposta da rivedere.** Le righe marcate **❓** sono decisioni che
-> attendono conferma; tutte le altre sono proposte motivate, non decisioni prese.
-> Ciò che viene approvato qui diventa un ADR in [decisioni.md](decisioni.md).
+> **Stato: le sei decisioni contese sono state prese** il 2026-07-26 e sono
+> registrate in [ADR-015](decisioni.md). Il resto del documento è una proposta
+> motivata, non ancora ratificata riga per riga: se una scelta appare sbagliata, si
+> corregge qui e si aggiorna l'ADR.
 
 Base di partenza: l'inventario delle funzionalità di EDT censite dalla
 documentazione del progetto — **308 voci** in tre estrazioni indipendenti
@@ -66,7 +67,7 @@ Sono le uniche che è davvero necessario prendere ora.
 | ✅ | **Parte di classe** (IT «gruppo») | dentro | [ADR-013](decisioni.md). L'unità di piazzamento diventa *classe **o** parte*: ogni vincolo scritto su «classe» va scritto su «unità didattica» |
 | ✅ | **Raggruppamento trasversale** | dentro | [ADR-013](decisioni.md), con il costo già messo a verbale: **accoppia classi diverse** e distrugge la decomposizione per classe |
 | ✅ | **IRC / alternativa** come due parti (`_REL`/`_ALT`) | dentro | conseguenza gratuita delle parti — e serve: il peso didattico è **per alunno**, e senza le parti quel conteggio è sbagliato |
-| ❓ | **Classe articolata** (più piani di studi su una classe) | **fuori, ma da discutere** | esiste davvero in Italia (professionali, tecnici). Ma è largamente esprimibile con le **parti**: la parte A segue un piano, la parte B un altro. Propongo di non introdurre l'entità dedicata e vedere se le parti bastano |
+| ✅ | **Classe articolata** — **gestita con le parti di classe**, senza entità dedicata | dentro (per approssimazione) | esiste davvero in Italia (professionali, tecnici): la 3A con 12 alunni di Manutenzione e 10 di Elettronica. La copriamo con le **parti**: la parte A segue un piano, la parte B un altro, le ore comuni si insegnano a classe intera. ⚠ **Condizione tecnica**: le parti devono poter portare **un piano di studi proprio** — se il quadro orario resta agganciato solo alla classe, la scorciatoia non regge. Da verificare presto, non a modello finito |
 | ❌ | **Multi-istituto** | fuori | già dichiarato |
 | ❌ | **Formazione classi** | fuori | è un secondo problema di ottimizzazione, e richiede l'anagrafica alunni (criterio 4) |
 
@@ -79,7 +80,7 @@ Sono le uniche che è davvero necessario prendere ora.
 | ✅ | **Capacità simultanea** (`Qtà`) | dentro | palestre e laboratori. Tecnicamente: da `NoOverlap` a vincolo **cumulativo**. È lo stesso meccanismo per aule e materiali — **una risorsa cumulativa sola**, non due tabelle |
 | ✅ | **Assegnazione delle aule come problema separato** | dentro | EDT ha un ottimizzatore dedicato con criteri propri. Risolvere in due fasi è una semplificazione **validata da un prodotto maturo**, non una scorciatoia |
 | ✅ | **L'aula è un'eccezione dichiarata** | dentro | su 27 attività di una classe, **una sola** ha un'aula. Il resto vive nell'`Aula preferenziale` della classe. Un modello che pretende un'aula per ogni lezione si inventa un problema che la scuola non ha |
-| ❓ | **Sedi distaccate** (multi-plesso) | **fuori v1, ma con il campo nello schema** | gli accorpamenti rendono il multi-plesso sempre più comune, ed è alto valore per chi ce l'ha. Ma introduce la geografia e i vincoli di transizione fra slot consecutivi — forma che nessun altro vincolo richiede. Propongo: `sede` sulle risorse **fin da subito** (costo zero), vincoli di spostamento **dopo** |
+| ✅ | **Sedi distaccate** — campo **+ regola di transizione semplice** | dentro | gli accorpamenti hanno reso il multi-plesso normale. Si entra nel merito: la `sede` sta sulle risorse e sull'attività, **e** c'è un vincolo di transizione — per cambiare plesso servono **N slot liberi in mezzo**, con `N` parametro unico d'istituto. È qui che si paga il costo strutturale vero: il ragionamento su **slot consecutivi**, forma che nessun altro vincolo dell'inventario richiede. Pagato quello, raffinare dopo costa poco.<br>**Fuori da v1**: matrice orientata dei tempi (A→B ≠ B→A), massimo cambi per giorno/settimana, cambio ammesso solo durante un intervallo |
 
 ### D. Il tempo
 
@@ -108,8 +109,8 @@ Qui il criterio 2 pesa più che altrove.
 | ✅ | **Un orario invalido è uno stato ammesso** | dentro | la base demo ha 984/984 piazzate e **21 attività che violano i vincoli**. Implica: nessun vincolo di integrità sul DB, e **ogni vincolo esiste due volte** — come constraint del solver e come predicato valutabile su una soluzione data |
 | ✅ | **Occupata-spostabile vs occupata-bloccata** | dentro | lo slot non è un booleano. È il perno di ogni riparazione |
 | ✅ | **`Piazza e sistema`** | dentro | *«sposta l'attività in una posizione già occupata; se ciò comporta lo spostamento di altre attività, queste verranno automaticamente ricollocate»*. È il modo più economico di dare all'utente il potere di forzare |
-| ❓ | **Risolutore passo-passo interattivo** (catena a N step, reversibile) | **fuori v1** | è la funzione più bella vista in EDT, e la escludo a malincuore. Ma `Piazza e sistema` copre il caso d'uso principale a una frazione del costo. **Il prerequisito comune va però previsto**: il modello deve saper rispondere a *«qual è l'insieme minimo di attività da spostare perché A stia qui?»* |
-| ❓ | **Ricerca di sottoinsiemi infattibili** (violatore di Hall) | **fuori v1** | è metà del valore dell'analisi, ma è ricerca combinatoria che CP-SAT non regala. Le fasi facili (capienza per risorsa, aritmetica per materia) danno la maggior parte del beneficio. Da riprendere subito dopo |
+| ❌ | **Risolutore passo-passo interattivo** (catena a N step, reversibile) | **fuori v1** | è la funzione più bella vista in EDT, ed esce a malincuore. `Piazza e sistema` copre il caso d'uso principale a una frazione del costo: l'utente ottiene comunque la lezione dove la vuole, semplicemente non sceglie il danno collaterale.<br>⚠ **Il prerequisito comune va previsto lo stesso**: il modello deve saper rispondere a *«qual è l'insieme minimo di attività da spostare perché A stia qui?»* — serve a `Piazza e sistema`, ed è ciò che rende riapribile questa decisione senza riscrivere |
+| ❌ | **Ricerca di sottoinsiemi infattibili** (violatore di Hall) | **rimandato**, non escluso | è metà del valore dell'analisi, ma è ricerca combinatoria che CP-SAT non regala (l'UNSAT core è illeggibile: elenca vincoli interni, non persone e classi). Le fasi facili — capienza per risorsa, aritmetica per materia — coprono la maggior parte dei casi reali.<br>⚠ Il componente di analisi va progettato **per accoglierlo**: è il motivo per cui sta separato dal solver |
 | ❌ | **Vincoli fra attività** (11 tipi, dichiarati a mano su coppie) | fuori | **decisione basata su evidenza**: nella base di esempio del produttore quella griglia è **vuota**. Costo strutturale (vincoli dato-driven fra oggetti arbitrari), uso reale osservato zero |
 | ❌ | **Colloqui**, **consigli di classe** | fuori | moduli separati, con problemi di scheduling propri |
 
@@ -164,24 +165,44 @@ famiglia. Elenco quelle in cui la scelta non è ovvia.
 
 ---
 
-## Parte III — Le domande aperte
+## Parte III — Le sei decisioni prese
 
-Le sei ❓ della Parte I, in ordine di quanto cambiano il lavoro:
+Decise il **2026-07-26**, registrate in [ADR-015](decisioni.md).
 
-1. **Risolutore passo-passo interattivo** — dentro o fuori? È la funzione più
-   distintiva di EDT. La proposta è fuori, con `Piazza e sistema` al suo posto.
-2. **Sottoinsiemi infattibili** (violatore di Hall) — la proposta è rimandarlo,
-   tenendo l'analisi di capienza semplice in v1.
-3. **Sedi distaccate** — la proposta è il campo sì, i vincoli no. Dipende da quanto
-   il multi-plesso conta per le scuole a cui pensate.
-4. **Classe articolata** — la proposta è coprirla con le parti invece di
-   un'entità dedicata. Da verificare su un caso reale.
-5. **Personale e materiali** — la proposta è la forma generica ma nessun dato
-   richiesto. Alternativa: escluderli del tutto e tenere tre risorse.
-6. **Vincoli fra attività** — la proposta è fuori, sulla base della griglia vuota
-   nella base del produttore. È l'esclusione su cui ho meno certezza, perché
-   «vuota nella demo» non è «inutile nella pratica».
+| | Decisione | Esito |
+|---|---|---|
+| 1 | Risolutore passo-passo interattivo | ❌ **fuori** — `Piazza e sistema` al suo posto |
+| 2 | Sottoinsiemi infattibili (Hall) | ⏳ **rimandato** — analisi di capienza semplice in v1 |
+| 3 | Sedi distaccate | ✅ **dentro**, campo + regola di transizione semplice |
+| 4 | Classe articolata | ✅ **dentro**, gestita con le parti di classe |
+| 5 | Personale e materiali | ✅ **dentro come forma**, dati non richiesti |
+| 6 | Vincoli fra attività | ❌ **fuori** |
 
-Un rischio non ancora affrontato, che non è una decisione di scope ma la
-condiziona: **la configurazione della griglia oraria non è mai stata osservata in
-UI**, ed è la base su cui poggia tutto il resto.
+### Le tre condizioni da non perdere
+
+Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto ora.
+
+1. **`Piazza e sistema` richiede comunque** la domanda *«qual è l'insieme minimo di
+   attività da spostare perché A stia qui?»*. È lo stesso motore del risolutore
+   passo-passo escluso: prevederlo tiene quella porta aperta.
+2. **Rimandare Hall funziona solo se l'analisi di capienza è un componente a sé**,
+   non un'interpretazione a posteriori dell'output del solver.
+3. **La classe articolata retta dalle parti** presuppone che una **parte** possa
+   portare un **piano di studi proprio**. Da verificare presto: se il quadro orario
+   resta agganciato alla sola classe, questa decisione decade.
+
+---
+
+## Cosa resta davvero aperto
+
+Non sono decisioni di scope, ma condizionano il lavoro che segue.
+
+- ⚠ **La configurazione della griglia oraria non è mai stata osservata in UI** —
+  durata delle fasce, ciclo, linea di mezza giornata. È la base su cui poggia tutto
+  il resto, ed è l'unica parte del modello del tempo che conosciamo solo per via
+  documentale.
+- ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`): il dataset di
+  prova non consente ancora di esercitare l'assegnazione delle aule, che è metà
+  della difficoltà.
+- **La via d'ingresso dei dati anagrafici** resta da scegliere, ora che
+  `Partenaire_Index` è escluso ([ADR-012](decisioni.md)).

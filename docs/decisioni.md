@@ -424,3 +424,73 @@ va scritta due volte.
   questo modello o se serva un adattatore. Non è una decisione presa qui.
 
 **Data.** 2026-07-26
+
+---
+
+## ADR-015 — Perimetro funzionale di v1: le sei decisioni contese
+
+**Contesto.** La documentazione del reverse engineering è stata censita in un
+inventario piatto di **308 funzionalità** (`docs/edt/estratti/inventario-*.md`), di
+cui 59 marcate `strutturale`. La classificazione completa, con i cinque criteri
+usati, sta in [scope-v1.md](scope-v1.md). Quasi tutte le voci seguono dai criteri;
+sei no, e sono decise qui.
+
+**Decisioni.**
+
+| | Funzionalità | Esito |
+|---|---|---|
+| 1 | Risolutore passo-passo interattivo | **fuori** |
+| 2 | Ricerca di sottoinsiemi infattibili (violatore di Hall) | **rimandato** |
+| 3 | Sedi distaccate | **dentro**, campo + regola di transizione semplice |
+| 4 | Classe articolata | **dentro**, gestita con le parti di classe |
+| 5 | Personale e materiali come risorse | **dentro come forma**, dati non richiesti |
+| 6 | Vincoli fra attività (11 tipi, dichiarati su coppie) | **fuori** |
+
+**Motivi, uno per riga.**
+
+1. **Risolutore passo-passo — fuori.** È la funzione più distintiva di EDT: una
+   catena di espulsioni esposta all'utente, che negozia il danno collaterale un
+   passo per volta. Ma `Piazza e sistema` — *«sposta l'attività in una posizione già
+   occupata; se ciò comporta lo spostamento di altre attività, queste verranno
+   automaticamente ricollocate»* — dà lo stesso risultato a una frazione del costo.
+   L'utente ottiene la lezione dove la vuole; semplicemente non sceglie cosa si
+   muove.
+2. **Hall — rimandato, non escluso.** Distingue il caso in cui *nessuna* attività è
+   individualmente impiazzabile ma un loro sottoinsieme sì (osservato in EDT: 25
+   attività, 33h di domanda contro 32h di finestra comune). CP-SAT non lo regala:
+   l'UNSAT core elenca vincoli interni, non persone e classi. Le fasi facili
+   coprono la maggior parte dei casi reali.
+3. **Sedi — dentro, con la regola semplice.** Non solo il campo: anche un vincolo
+   di transizione (*per cambiare plesso servono N slot liberi*, `N` parametro unico
+   d'istituto). È la scelta che **paga il costo strutturale vero** — il
+   ragionamento su slot **consecutivi**, forma che nessun altro vincolo
+   dell'inventario introduce. Pagato quello, la matrice orientata dei tempi e i
+   massimi di cambi sono raffinamenti a basso costo, esclusi da v1.
+4. **Classe articolata — con le parti.** Il caso (la 3A con due indirizzi) è reale
+   nei tecnici e nei professionali, ma è esprimibile con le **parti di classe** già
+   introdotte da [ADR-013](decisioni.md) per gli sdoppiamenti, senza un'entità
+   dedicata né la relazione classe↔piani molti-a-molti dello XSD.
+5. **Personale e materiali — forma sì, dati no.** Costa quasi nulla **perché** la
+   tabella delle disponibilità è generica sulla risorsa, scelta presa comunque per
+   altri motivi. Cablare tre tipi di risorsa costringerebbe a riscrivere per
+   aggiungerli. Il prodotto funziona senza inserirli; chi ha il sostegno
+   strutturato li usa.
+6. **Vincoli fra attività — fuori, su evidenza.** Vincoli dato-driven su coppie di
+   lezioni scelte a mano, da non confondere con i vincoli di **materia** (che sono
+   su categorie e si applicano da soli). Nella base di esempio del produttore quella
+   griglia è **vuota**: EDT li offre da anni e nella loro demo nessuno li usa. ⚠ È
+   l'esclusione con meno margine: «vuota nella demo» non è «inutile nella pratica»,
+   e la demo è una scuola media — un tecnico con laboratori potrebbe usarli.
+
+**⚠ Tre condizioni che tengono in piedi le decisioni.**
+
+- `Piazza e sistema` richiede comunque di saper rispondere a *«qual è l'insieme
+  minimo di attività da spostare perché A stia qui?»* — lo stesso motore del
+  risolutore escluso. Prevederlo tiene aperta la porta a riaprire la decisione 1.
+- Rimandare Hall funziona **solo se** l'analisi di capienza è un componente a sé,
+  separato dal solver, e non un'interpretazione a posteriori del suo output.
+- La decisione 4 presuppone che una **parte** possa portare un **piano di studi
+  proprio**. Se il quadro orario resta agganciato alla sola classe, decade e va
+  ripresa.
+
+**Data.** 2026-07-26
