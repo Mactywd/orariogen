@@ -192,3 +192,141 @@ che tiene le stringhe dai binari all'ultimo posto.
 conferma in UI. Ai livelli 3–5 sì, come per 📖.
 
 **Data.** 2026-07-26
+
+---
+
+## ADR-010 — Niente collocazione per periodo: si rigenera l'orario a ogni periodo
+
+**Decisione.** L'attività ha **una sola collocazione**. Se l'orario cambia al
+secondo quadrimestre, si **rigenera**: ogni periodo è un'istanza indipendente del
+problema. Non implementiamo la `fascia variabile` di EDT.
+
+**Alternative scartate.** Modellare la collocazione come `slot[attività, periodo]`,
+con vincolo di uguaglianza fra periodi quando l'attività è dichiarata fissa — cioè
+il modello di EDT ([tempo-e-calendario.md](edt/tempo-e-calendario.md)).
+
+**Motivo.** La variante di EDT raddoppia la dimensione dello spazio di ricerca e
+complica ogni vincolo (i massimi orari andrebbero valutati per periodo, con le
+quattro modalità di applicazione già documentate). Rigenerare è concettualmente più
+semplice e copre il caso reale: in Italia l'orario che cambia a metà anno si rifà,
+non si "varia".
+
+**⚠ Conseguenza da gestire.** Rigenerando da zero, il secondo quadrimestre può
+risultare **completamente diverso** dal primo per tutti — cosa che docenti e classi
+detestano. In EDT questo non accade perché il default è `fascia fissa`: la maggior
+parte delle lezioni **non si muove** fra i periodi.
+
+Il rimedio non è strutturale ma un **criterio di ottimizzazione**: *«mantieni il più
+possibile le collocazioni del periodo precedente»*. Costa poco (è una distanza dalla
+soluzione precedente, la stessa forma del «minimo insieme di attività da spostare»
+del risolutore passo-passo) e recupera il beneficio senza il costo del modello. EDT
+ha un criterio analogo sulle aule: *"Se possibile mantenendo le assegnazioni della
+precedente ripartizione"*.
+
+**Da implementare insieme alla rigenerazione, non dopo.**
+
+**Data.** 2026-07-26
+
+---
+
+## ADR-011 — Il peso didattico entra in v1
+
+**Decisione.** Implementare il **peso didattico**: un peso intero per materia e dei
+tetti sulla somma per mezza giornata, giornata, settimana (e ciclo, se mai
+servirà). Cascata di default istituto → classe, come in EDT.
+
+**Alternative scartate.** Ottenere lo stesso effetto con le incompatibilità fra
+materie a coppie.
+
+**Motivo.** È il vincolo di **carico cognitivo**: impedisce l'orario con tre materie
+pesanti nella stessa mattina. Le incompatibilità a coppie sono lo strumento
+sbagliato — dichiarano «matematica e fisica non insieme» invece di «non troppa roba
+pesante insieme», e vanno enumerate a mano per ogni coppia.
+
+Costa pochissimo (una somma di interi confrontata con un limite; in CP-SAT tre
+vincoli `sum(...) <= limite` per classe) e ha valore percepito alto: è una qualità
+che un dirigente riconosce subito. EDT lo implementa completo — pesi per materia,
+tetti su mattino/giornata/settimana/ciclo, diagnostica dedicata e alleggerimento a
+quota. Vedi [vincoli.md](edt/vincoli.md).
+
+**Da chiarire prima di implementare:** la scala dei pesi usata da EDT (interi? 1–10?)
+e i valori di default.
+
+**Data.** 2026-07-26
+
+---
+
+## ADR-012 — Non adottiamo `Partenaire_Index` come formato di import
+
+**Decisione.** Non implementare l'import dello schema XSD `Partenaire_Index` V4.6 di
+Index Education.
+
+**Alternative scartate.** Adottarlo come via d'ingresso per le scuole che migrano da
+EDT o da gestionali che parlano con EDT.
+
+**Motivo.** Trasporta **solo la struttura** — anagrafiche, classi, docenti, materie,
+piani di studi e attività da piazzare — e **nessun vincolo, nessun piazzamento**
+([schema-scambio.md](edt/schema-scambio.md)). Una scuola che migrasse si porterebbe
+dietro le cattedre ma dovrebbe reinserire a mano indisponibilità, giorni liberi e
+incompatibilità: cioè tutto il lavoro vero. Il beneficio è quindi molto minore di
+quanto il formato sembri promettere, a fronte di uno schema pensato per
+l'ordinamento francese e pieno di campi che non ci riguardano.
+
+**Cosa resta valido.** Lo schema **rimane la fonte documentaria più autorevole** sul
+modello dati di EDT ([ADR-009](#adr-009--gli-artefatti-dellinstallazione-sono-una-terza-fonte-marcata-)):
+non lo implementiamo, ma continuiamo a leggerlo.
+
+**Conseguenza da affrontare più avanti.** Serve comunque *una* via d'ingresso dei
+dati anagrafici, altrimenti ogni scuola parte da un foglio bianco. Da decidere
+quando arriveremo all'import: formato nostro, CSV, o aggancio al SaaS esistente.
+
+**Data.** 2026-07-26
+
+---
+
+## ADR-013 — Gli sdoppiamenti entrano in v1, raggruppamenti trasversali inclusi
+
+**Decisione.** Supportare l'intera catena `Classe → Suddivisione → Gruppo` di EDT,
+**inclusi i raggruppamenti che attraversano più classi** (le seconde lingue: tre
+classi che si ricompongono in gruppi di francese, spagnolo e tedesco).
+
+**Alternative scartate.** (a) Solo religione/alternativa, come due attività della
+stessa classe vincolate allo stesso slot; (b) solo i gruppi **interni** a una classe
+(laboratori, mezze classi), escludendo quelli trasversali.
+
+**Motivo.** Gli sdoppiamenti sono una necessità reale della scuola italiana, non un
+caso limite, e una v1 che non li copre non è utilizzabile in un liceo. Concretizza
+[ADR-004](#adr-004--i-gruppi-sono-entità-distinte-dalle-classi), che già dichiarava
+i gruppi entità a sé.
+
+**⚠ Cosa costa davvero.** Questa è la decisione più onerosa presa finora, e il costo
+non sta nei gruppi interni ma nei **trasversali**.
+
+Un gruppo interno a una classe è gestibile: due gruppi della stessa classe occupano
+lo stesso slot in aule diverse, e la classe resta l'unità di ragionamento.
+
+Un raggruppamento trasversale **accoppia classi diverse**: se 1A, 1B e 1C si
+ricompongono per la seconda lingua, quelle tre classi non si possono più piazzare
+in modo indipendente — le loro ore di lingua devono cadere nello stesso slot per
+tutte e tre. Si perde la possibilità di decomporre il problema per classe, che è la
+semplificazione più naturale e più efficace su cui contare.
+
+Ordini di grandezza dalla base di esempio di EDT: **187 suddivisioni interne contro
+3 raggruppamenti trasversali**. Il caso costoso è raro ma non eliminabile.
+
+**Conseguenze operative.**
+
+- Le ore si assegnano al **gruppo**, non alla classe; il monte ore per (piano,
+  materia) è già tripartito in classe intera / ridotta / sdoppiata nello schema
+  ufficiale ([schema-scambio.md](edt/schema-scambio.md)).
+- Serve il meccanismo dell'**attività complessa**: nello XSD è l'allineamento a
+  generare il raggruppamento, non il contrario.
+- Diventa rilevante il vincolo **`Attività in gruppo`** (l'ordine fra ore in gruppo
+  e ore a classe intera, i quattro valori `Parties…Classe`): esiste **solo** se
+  supportiamo gli sdoppiamenti. Vedi [vincoli.md](edt/vincoli.md).
+- Va riusata la validazione dell'allineamento di EDT, che elenca **11 modi di
+  fallire** ([motore-risoluzione.md](edt/motore-risoluzione.md)).
+- ⚠ Attenzione all'**inversione terminologica IT↔FR**: in italiano «gruppo» traduce
+  `partie`, non `groupe`. Vedi [glossario-it-fr.md](edt/glossario-it-fr.md).
+
+**Data.** 2026-07-26

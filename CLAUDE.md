@@ -225,13 +225,28 @@ prototipo un pezzo per volta. Vedi [ADR-008](docs/decisioni.md).
       tabella. → `docs/edt/tempo-e-calendario.md`
 - [ ] `Fractionnable` (P.P./P.F.), `Cours isolés`, `Interclasse`: colonne che
       potrebbero essere vincoli non censiti. → `docs/edt/risorse.md`
-- [ ] **Decisione di scope**: supportare gli **sdoppiamenti** in v1?
-      → `docs/edt/gruppi.md`
-- [ ] **Decisione**: adottare `Partenaire_Index` V4.6 come contratto di import.
-      → `docs/edt/schema-scambio.md`
-- [ ] **Decisione**: la **collocazione per periodo** (`fascia variabile`) entra in
-      v1? È la scelta strutturale più costosa da rimandare.
-      → `docs/edt/tempo-e-calendario.md`
+- [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
+      `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
+      CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
+
+## Scope di v1 — deciso il 2026-07-26
+
+Le prime decisioni di prodotto, non più solo di modellazione. Dettaglio e
+motivazioni in [docs/decisioni.md](docs/decisioni.md).
+
+| | Decisione | ADR |
+|---|---|---|
+| ✅ | **Sdoppiamenti**, raggruppamenti trasversali **inclusi** | [ADR-013](docs/decisioni.md) |
+| ✅ | **Peso didattico** delle materie | [ADR-011](docs/decisioni.md) |
+| ❌ | **Collocazione per periodo** (`fascia variabile`) — si **rigenera** a ogni periodo | [ADR-010](docs/decisioni.md) |
+| ❌ | **`Partenaire_Index`** come formato di import | [ADR-012](docs/decisioni.md) |
+
+Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
+
+- rigenerando l'orario a ogni periodo serve un criterio **«mantieni il più possibile
+  le collocazioni precedenti»**, o il secondo quadrimestre verrà stravolto per tutti;
+- i **raggruppamenti trasversali** accoppiano classi diverse: si perde la
+  decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
 
