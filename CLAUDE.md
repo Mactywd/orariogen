@@ -29,7 +29,7 @@ docs/
     piani-di-studi.md  (in corso — campi visti, semantica in parte da confermare)
     bisogni-previsionali.md  fabbisogno ore per materia e allineamenti
     attivita.md        servizio → sotto-servizio → attività, assegnazione docenti
-    vincoli.md         (semantica indisponibilità/blocchi dalla guida 📖; UI da osservare)
+    vincoli.md         indisponibilità e vincoli orari docente osservati in UI; restano classi, aule, materie
   decisioni.md         ADR leggeri: decisione, alternative, motivo, data
 data/
   liceo-fermi/         dataset della scuola di esempio, in markdown tabellare
@@ -41,6 +41,11 @@ data/
     piani-di-studi.md  i 5 piani (indirizzo × anno) e i servizi
     aule.md
     vincoli-attesi.md  conflitti inseriti apposta come test del solver
+preparazione/          screenshot delle viste del modulo Preparazione (sessione 2026-07-15)
+scripts/
+  genera_orario.py     prototipo solver CP-SAT — parcheggiato, vedi sotto
+results.md             output dell'ultima esecuzione del prototipo
+requirements.txt       ortools (serve solo al prototipo)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -87,6 +92,25 @@ Coperto finora (una scuola di esempio inserita in EDT):
   `+/- = 0`) e creazione delle attività — **284 attività / 288h00**, tutte "Non
   piazzata", in Orario > Attività (`docs/edt/attivita.md`).
 
+### Prototipo solver — parcheggiato
+
+`scripts/genera_orario.py` (commit `0ac80ac`) è un test **esplorativo** con OR-Tools
+CP-SAT sul dataset Fermi: serviva a vedere se l'approccio poteva reggere, niente di
+più. Modello minimo — monte ore per (classe, materia), una classe per slot, un
+docente per slot — su 10 classi × 5 giorni × 6 ore: **OPTIMAL in 0.14s, 3180
+variabili** (output in `results.md`).
+
+**Cosa non copre:** aule, blocchi di ore consecutive, indisponibilità docente,
+buchi, gruppi/sdoppiamenti — cioè quasi tutti i conflitti di
+[`data/liceo-fermi/vincoli-attesi.md`](data/liceo-fermi/vincoli-attesi.md). Quel
+OPTIMAL quindi **non dice nulla** sulla risolvibilità dell'istanza reale: è la
+risposta a un problema più facile.
+
+**Il solver resta fermo qui** finché il reverse engineering di EDT non è completo e
+non sappiamo con sicurezza quali feature vogliamo implementare. Prima si capiscono
+**tutti** i vincoli, poi si costruisce il modello — non si aggiungono vincoli al
+prototipo un pezzo per volta. Vedi [ADR-008](docs/decisioni.md).
+
 ### Aperto / da verificare
 
 - [ ] Come EDT modella concretamente i **gruppi/sdoppiamenti**. Dalla guida 📖: non
@@ -102,9 +126,13 @@ Coperto finora (una scuola di esempio inserita in EDT):
       (confermato). → `docs/edt/piani-di-studi.md`
 - [ ] Cosa significa **TRCD** e cosa sono i **bisogni previsionali** e gli
       **allineamenti** delle classi previsionali. → `docs/edt/classi.md`
-- [ ] Vincoli di **indisponibilità docente**: semantica documentata dalla guida 📖
-      (rosso/giallo/verde + vincoli orari, in Orario > Docenti); UI da osservare.
-      → `docs/edt/vincoli.md`
+- [x] Vincoli di **indisponibilità docente**: rosso/giallo/verde + vincoli orari
+      numerici (`D`, `M`, `P`, `E`, `G`), osservati in UI il 2026-07-15 in
+      Orario > Docenti. → `docs/edt/vincoli.md`
+- [ ] Restano da osservare gli **altri vincoli**, necessari prima di riprendere il
+      solver: etichette troncate dei vincoli orari, indisponibilità di **classi** e
+      **aule**, vincoli di **risorsa** (occupazione simultanea di un laboratorio),
+      vincoli di **materia**. → `docs/edt/vincoli.md`, `docs/edt/aule.md`
 - [x] **Blocchi di ore consecutive** = durata dell'attività, fissata nello
       spezzamento (`Nr attività` → Trasforma). Confermato dalla guida 📖; finestra
       da osservare in UI. → `docs/edt/attivita.md`, `docs/edt/vincoli.md`
@@ -114,6 +142,15 @@ Coperto finora (una scuola di esempio inserita in EDT):
 
 ## Changelog
 
+- **2026-07-26** — Messi a indice tre elementi presenti nel repo ma mai
+  documentati: il **prototipo solver** CP-SAT (`scripts/genera_orario.py`,
+  `results.md`, commit `0ac80ac`), gli screenshot in `preparazione/` e
+  `requirements.txt`. Deciso che il **prototipo resta parcheggiato** finché il
+  reverse engineering di EDT non è completo: prima tutti i vincoli, poi il modello
+  ([ADR-008](docs/decisioni.md)). Corretta una voce "Aperto" stantia: le
+  indisponibilità docente risultavano da osservare, ma `docs/edt/vincoli.md` le dà
+  confermate in UI dal 2026-07-15; l'elenco dei vincoli ancora da osservare
+  (classi, aule, risorse, materie) è ora esplicito.
 - **2026-07-15** — L'utente ha fornito la **guida online ufficiale** di EDT; nuova
   convenzione "due fonti, marcate" (📖 = solo guida, da confermare in UI).
   Osservate in UI le viste 3 e 4 di Preparazione delle attività (**Assegnazione

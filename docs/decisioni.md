@@ -121,3 +121,24 @@ spirito di [ADR-003](#adr-003--null-significa-eredita-cascata-risolta-a-runtime)
 materializzare ciò che è derivabile). Vedi [docs/edt/docenti.md](edt/docenti.md).
 
 **Data.** 2026-07-09
+
+---
+
+## ADR-008 — Il solver si costruisce dopo il reverse engineering, non in parallelo
+
+**Decisione.** Congelare il prototipo CP-SAT (`scripts/genera_orario.py`) allo stato
+attuale. Nessun vincolo nuovo finché l'analisi di EDT non è completa e non abbiamo
+deciso quali feature entrano in v1.
+
+**Alternative scartate.** Far crescere il prototipo in parallelo all'analisi,
+aggiungendo ogni vincolo appena viene documentato (aule, blocchi, indisponibilità).
+
+**Motivo.** Il prototipo ha già risposto alla sua domanda — CP-SAT regge il
+dimensionamento (288 ore, OPTIMAL in 0.14s) — e quella era la sola cosa che doveva
+dimostrare. Aggiungere vincoli uno alla volta significherebbe fissare la struttura
+del modello (variabili, granularità dello slot, come si rappresenta un gruppo)
+mentre ancora non sappiamo cosa dovrà esprimere: le scelte prese presto sarebbero
+poi da disfare. Il costo di aspettare è nullo, quello di riscrivere no. Vedi
+[docs/edt/vincoli.md](edt/vincoli.md) per l'elenco di ciò che manca.
+
+**Data.** 2026-07-26

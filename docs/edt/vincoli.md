@@ -59,6 +59,10 @@ esplicitamente di "numero di blocchi". Vedi [attivita.md](attivita.md).
 
 ## Da osservare
 
+Questa lista è il **cancello del solver**: finché non è chiusa, il prototipo resta
+fermo (vedi [ADR-008](../decisioni.md)). Non vogliamo scoprire un tipo di vincolo
+nuovo a modello già scritto.
+
 - [ ] Completare le **etichette troncate** dei vincoli orari (pannello destro) e
       il nome del terzo pennello (⚠ presumibilmente "Preferenze", verde).
 - [ ] **Vincoli di risorsa** (aula/laboratorio a occupazione limitata) — come si

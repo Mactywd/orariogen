@@ -4,6 +4,11 @@
 # ///
 """Primo test del solver: orario del Liceo Fermi con OR-Tools CP-SAT.
 
+PARCHEGGIATO (2026-07-26, ADR-008): non aggiungere vincoli a questo file finché il
+reverse engineering di EDT non è completo. Ha già risposto alla sua domanda —
+CP-SAT regge il dimensionamento — e il modello definitivo si progetta quando
+sappiamo tutto quello che deve esprimere.
+
 Modello volutamente minimo (vedi data/liceo-fermi/):
   - ogni ora del quadro orario di ogni classe va piazzata in uno slot;
   - una classe non ha due lezioni nello stesso slot;
