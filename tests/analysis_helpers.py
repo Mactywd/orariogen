@@ -5,7 +5,7 @@ import datetime as dt
 from domain import weeks
 from domain.models import (
     Activity, Discipline, Period, Placement, Schedule, SchoolClass, SchoolYear,
-    StudyPlan, Subject, Teacher, TimeGrid,
+    StudyPlan, Subject, Teacher, TimeGrid, Service,
 )
 
 N_WEEKS = 4
@@ -47,13 +47,26 @@ def make_activity(subject, *, teachers=(), classes=(), parts=(), groups=(),
         a.teachers.add(t)
     for c in classes:
         a.classes.add(c)
+        _sync_service(c.study_plan, subject, slots * 60)
     for p in parts:
         a.parts.add(p)
+        _sync_service(p.effective_study_plan, subject, slots * 60)
     for g in groups:
         a.groups.add(g)
+        for p in g.parts.all():
+            _sync_service(p.effective_study_plan, subject, slots * 60)
     for r in rooms:
         a.rooms.add(r)
     return a
+
+
+def _sync_service(plan, subject, minutes):
+    """Tiene la copertura quadrata: il monte ore del servizio cresce con le
+    attività create dalla fixture."""
+    service, _ = Service.objects.get_or_create(
+        study_plan=plan, subject=subject, defaults={"class_minutes": 0})
+    service.class_minutes += minutes
+    service.save()
 
 
 def place(schedule, activity, day, slot, room=None):
