@@ -211,9 +211,28 @@ marcate come ipotesi ⚠):
 | Giorno e ora | `Non piazzata` | il piazzamento non è ancora avvenuto |
 | Freq. | `S` | ⚠ settimanale |
 | Stato | icona ⊗ | ⚠ stato di piazzamento (non piazzata) |
-| S.P. | `50` | ⚠ priorità/sequenza di piazzamento, default a metà scala |
-| Nr G. | `5` | ⚠ giorni utili (lun–ven) |
+| S.P. | `50` | **fasce orarie possibili** — vedi sotto, l'interpretazione «priorità» era sbagliata |
+| Nr G. | `5` | **giorni possibili** (lun–ven) |
 | Sezion. | vuoto | ⚠ sezionamento (legami con altre attività) |
+
+⚠ **Correzione (2026-07-26): `S.P.` non è una priorità.** Avevo letto il `50` come
+*«priorità di piazzamento, default a metà scala»*. È sbagliato. I tooltip letterali
+(`UtilitairesEdt_ColonnesCours_RS_HintNbPlacesPossibles` / `…HintNbJoursPossibles`):
+
+> `S.P.` — *«Numero di **fasce orarie possibili** per il piazzamento dell'attività
+> **nel rispetto di tutti i vincoli**»*
+> `Nr G.` — *«Numero di **giorni possibili** per l'attività nel rispetto di tutti i
+> vincoli»*
+
+E il `50` osservato si spiega da sé: la base del Fermi ha **10 fasce × 5 giorni =
+50 collocazioni**, e nessuna attività era ancora piazzata né vincolata. `S.P. = 50`
+con `Nr G. = 5` non è «metà scala»: è **la griglia intera**, cioè un dominio ancora
+completamente aperto. La coincidenza col «default a metà di 100» era casuale.
+
+È lo stesso valore dell'intestazione `1 spazio possibile` del pannello di
+composizione (vedi sotto) e della colonna `S.P.` nella lista attività: **una sola
+grandezza — il dominio residuo della variabile — esposta in tre punti dell'interfaccia**.
+Misure e implicazioni in [motore-risoluzione.md](motore-risoluzione.md).
 | Docente / Materia / Classe | dal previsionale | corretti su tutte le righe visibili |
 | Modalità di scelta | `Senza specifica` | ⚠ criterio di scelta dell'aula |
 | Alu. / Nr A. | `26` / `0` | effettivo classe / ⚠ alunni dissociati |

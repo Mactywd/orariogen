@@ -41,6 +41,7 @@ docs/
     glossario-it-fr.md 📦 IT ↔ FR ↔ EN — ⚠ contiene l'inversione gruppo/raggruppamento
     estratti/          materiale grezzo di estrazione (NON documentazione — vedi il suo README)
   decisioni.md         ADR leggeri: decisione, alternative, motivo, data
+  scope-v1.md          cosa entra in v1 e cosa no — proposta da rivedere
 data/
   liceo-fermi/         dataset della scuola di esempio, in markdown tabellare
     README.md          parametri, dimensionamento, indice del dataset
