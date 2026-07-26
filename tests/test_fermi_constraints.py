@@ -54,7 +54,7 @@ def test_indisponibilita_di_d06_attiva():
 
 def test_sp_su_una_classe_sotto_il_secondo():
     """Prestazioni del dominio residuo: la colonna S.P. di una classe intera
-    (27 attività, orario riempito alla buona) in meno di un secondo."""
+    (26 attività, orario riempito alla buona) in meno di un secondo."""
     env = fermi.build()
     klass = env["classes"]["1A"]
     acts = list(Activity.objects.filter(classes=klass)

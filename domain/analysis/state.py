@@ -20,7 +20,8 @@ def activity_tokens(activity, assigned_room_id=None):
     """Chiavi di occupazione e quantità dei materiali di un'attività.
     Regola dei conflitti sulle unità (v1): la classe intera occupa sé stessa
     e tutte le sue parti; la parte occupa solo sé stessa; il raggruppamento
-    occupa le parti membre. Parti di partizioni diverse non confliggono."""
+    occupa le parti membre. Parti di partizioni diverse non confliggono (v1)
+    — regola provvisoria, da superare con ADR-017 (piano 3)."""
     keys, materials = set(), {}
     for t in activity.teachers.all():
         keys.add(t.pk)

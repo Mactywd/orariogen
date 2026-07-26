@@ -122,12 +122,15 @@ responsabili, come riferimenti a `SubjectConstraint` / `ResourceTimeConstraint`
 Lo stato si costruisce **una volta** dal DB per un dato `Schedule`:
 
 - occupazione `(resource_pk, day, slot) → [attività]`, con l'occupazione
-  **propagata sulla gerarchia delle unità**: un'attività sulla classe occupa
-  tutte le parti di tutte le sue partizioni; un'attività su una parte occupa
-  la parte e (ai fini del conflitto) la classe; un raggruppamento occupa le
-  parti membre. La regola operativa: due attività confliggono su un'unità se
-  gli insiemi di parti espansi si intersecano, o se una è sulla classe intera
-  e l'altra su qualunque sua parte;
+  **propagata sulla gerarchia delle unità**: un'attività sulla classe intera
+  occupa sé stessa e tutte le parti di tutte le sue partizioni; un'attività su
+  una parte occupa solo quella parte; un raggruppamento occupa le parti
+  membre. La regola operativa: due attività confliggono su un'unità se gli
+  insiemi di parti espansi si intersecano, o se una è sulla classe intera e
+  l'altra su qualunque sua parte. ⚠ Ne segue che due parti di **partizioni
+  diverse** della stessa classe non confliggono mai fra loro in questa regola
+  (v1): provvisorio, superato da [ADR-017](../../decisioni.md)
+  (implementazione al piano 3);
 - indice delle indisponibilità per risorsa (livello e data);
 - aggregati per (risorsa, giorno): minuti di attività, minuti di presenza
   (**presenza ≠ attività**: la presenza include i buchi — due conteggi

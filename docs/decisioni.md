@@ -524,3 +524,38 @@ progetto. Il prototipo `scripts/genera_orario.py` resta parcheggiato: si sblocca
 quando il modello di dominio è approvato e tradotto in codice, non prima.
 
 **Data.** 2026-07-26
+
+---
+
+## ADR-017 — Parti di partizioni diverse della stessa classe confliggono
+
+**Decisione.** Due parti della stessa classe possono essere piazzate in
+parallelo **solo se appartengono alla stessa partizione** (il caso `_REL`/`_ALT`
+resta valido: sono parti della stessa partizione, pensate per stare in
+parallelo). Parti di **partizioni diverse** (es. `1A_REL` e `1A-fra`)
+condividono studenti e **confliggono**, anche se il modello v1 attuale non lo
+rileva.
+
+**Alternative scartate.** Tenere la regola v1 così com'è (`activity_tokens` in
+`domain/analysis/state.py`): «parti di partizioni diverse non confliggono» è la
+lettura più diretta della specifica e costa meno da implementare, ma perde
+conflitti reali — due sdoppiamenti indipendenti della stessa classe (uno per
+lingua, uno per laboratorio) possono benissimo condividere lo stesso alunno.
+
+**Motivo.** Segnalato dalla review finale: la regola v1 (`Parti di partizioni
+diverse non confliggono`, documentata nel docstring di `activity_tokens` e
+nella spec `docs/superpowers/specs/2026-07-26-analisi-vincoli-design.md`) tratta
+ogni partizione come se esaurisse la classe, ma le partizioni sono
+**indipendenti** e i loro alunni si sovrappongono. EDT risolve il caso generale
+con i **«legami fra parti»** (*parties sans liens*, letteralmente "parti senza
+legami"): un meccanismo dato-driven che dichiara esplicitamente quali parti di
+partizioni diverse **non** condividono alunni (e quindi possono stare in
+parallelo). Non lo modelliamo ancora.
+
+**Conseguenze.** Implementare correttamente questa regola richiede una codifica
+dei token di occupazione più fine (per alunno, o per legame dichiarato) e il
+relativo constraint nel solver CP-SAT: apre il **piano 3**. Fino a quel
+momento, la regola v1 resta in vigore nel codice ed è **marcata come
+provvisoria** (docstring di `activity_tokens` e la spec del piano 2).
+
+**Data.** 2026-07-26

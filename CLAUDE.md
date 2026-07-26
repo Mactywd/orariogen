@@ -310,7 +310,7 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   solo.
   **Il dominio residuo.** `S.P.`/`Nr G.` di EDT riprodotto come **piazzamento di
   prova**: quante fasce restano legali per un'attività contro lo stato
-  corrente. Misurato sul Fermi: la colonna S.P. di un'intera classe (27
+  corrente. Misurato sul Fermi: la colonna S.P. di un'intera classe (26
   attività) in **~0.3s**.
   **La capienza esatta.** L'algoritmo `Dotazione − Bisogni` di EDT, con
   **colpevoli per sottrazione** (non solo il verdetto, ma quali attività
