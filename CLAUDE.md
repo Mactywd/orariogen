@@ -60,7 +60,8 @@ results.md             output dell'ultima esecuzione del prototipo
 requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture
+  analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -127,9 +128,11 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **L'osservazione di EDT è conclusa** (2026-07-26), e la decisione è stata presa
 > esplicitamente con [ADR-016](docs/decisioni.md): il design del modello di
 > dominio è approvato in [docs/modello-dominio.md](docs/modello-dominio.md). Lo
-> schema **è implementato** e il dataset Fermi **è interamente rappresentato**
-> (39 test verdi); i piani successivi sono predicati/analisi di capienza e
-> modello CP-SAT. Restano due punti aperti, entrambi marginali e non bloccanti:
+> schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
+> predicati e l'analisi di capienza **sono anch'essi implementati**
+> (`domain/analysis/`, 116 test verdi a suite completa, misurati con
+> `venv/bin/pytest`); il piano successivo è il **modello CP-SAT** (piano 3).
+> Restano due punti aperti, entrambi marginali e non bloccanti:
 > le aule mai inserite nella base del Fermi, e l'estensione della cascata di
 > default.
 
@@ -291,6 +294,46 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-07-26 (notte, analisi)** — **L'analisi dei vincoli, implementata:
+  `domain/analysis/`.** Chiude il piano 2 (dodici task) sopra lo schema
+  approvato: un package di predicati con causali nominate, sul modello
+  dell'`Analisi dei vincoli` di EDT osservata dal vivo.
+  **Il registro.** Findings e catalogo causali (`findings.py`, `causali.py`);
+  `ScheduleState` che materializza una settimana (occupazione, indisponibilità,
+  monte ore) **una volta sola per verifica** — i checker leggono lo stato, non
+  fanno query dentro `check()` (`perf(analysis)`, commit `066efc8`); un
+  registro con **copertura completa verificata da test**: gli **otto** vincoli
+  orari sulla risorsa, i **tredici** di materia, e **sei** checker strutturali
+  (griglia, sedi, occupazione/indisponibilità, copertura, peso). Sopra il
+  registro: la conformità di una settimana contro tutti i checker in un colpo
+  solo.
+  **Il dominio residuo.** `S.P.`/`Nr G.` di EDT riprodotto come **piazzamento di
+  prova**: quante fasce restano legali per un'attività contro lo stato
+  corrente. Misurato sul Fermi: la colonna S.P. di un'intera classe (27
+  attività) in **~0.3s**.
+  **La capienza esatta.** L'algoritmo `Dotazione − Bisogni` di EDT, con
+  **colpevoli per sottrazione** (non solo il verdetto, ma quali attività
+  restano fuori e perché); le **due diagnosi osservate in EDT riprodotte sui
+  numeri**: il caso semplice (`600` richiesti, `540` piazzabili) e
+  l'incrociata classe+docente (`360`/`300`).
+  **Il comando.** `manage.py analyze`: report in stile EDT (`Enunciato del
+  problema` → `Dettaglio` → `Soluzione`) più un riepilogo finale.
+  **Il Fermi, arricchito.** Aggiunte le indisponibilità attese di
+  `vincoli-attesi.md` (D06/D09/D15, giornate intere), e un test che inverte
+  deliberatamente STO/SCI in tre servizi: la copertura per (classe, materia)
+  lo rileva anche se i **totali quadrano lo stesso** — il bug reale del
+  2026-07-09 diventa un test di non regressione.
+  **Le code del piano 1, chiuse.** `tests/test_constraint_negatives.py`: i sei
+  test negativi rimandati (cattedra a due/zero unità, vincolo di materia a due
+  unità, partizione duplicata, quota senza risorsa, `Break.straddles` con
+  durata 1) confermano che i `CheckConstraint` **mordono davvero**. Corretto
+  anche un refuso in `modello-dominio.md` (**12 tipi censiti** → **13**: l'enum
+  implementato dei vincoli di materia ne ha 13) e annotato in `institute.py` il
+  percorso di sola lettura di `domain/analysis` (`filter(pk=1).first()`, non
+  `load()`, per non scrivere alla prima analisi). **116 test verdi** a suite
+  completa (`venv/bin/pytest`). Prossimo passo: **il piano 3**, il modello
+  CP-SAT sul registro.
 
 - **2026-07-26 (notte, seguito)** — **Lo schema del dominio, implementato.** Per
   TDD dal design approvato in [docs/modello-dominio.md](docs/modello-dominio.md):

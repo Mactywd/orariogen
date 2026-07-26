@@ -259,7 +259,7 @@ buchi) — due conteggi distinti.
 - **`A = B` è il caso dominante** — 15 righe su 19 nella base reale sono la
   materia con sé stessa: il vincolo serve prima di tutto a distribuire nel tempo
   le ore di una materia;
-- `type` è un enum sui **12 tipi censiti** ([vincoli.md](edt/vincoli.md)),
+- `type` è un enum sui **13 tipi censiti** ([vincoli.md](edt/vincoli.md)),
   inclusi i quattro `Parties…Classe` (ordine fra ore in gruppo e ore a classe
   intera), che servono perché gli sdoppiamenti sono in v1;
 - la granularità dei parametri è la **mezza giornata**, dal modello del tempo.

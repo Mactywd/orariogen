@@ -21,6 +21,8 @@ class InstituteSettings(models.Model):
     max_weight_day = models.PositiveSmallIntegerField(null=True, blank=True)
     max_weight_week = models.PositiveSmallIntegerField(null=True, blank=True)
 
+    # Nota: load() scrive alla prima lettura (get_or_create). Nei percorsi di
+    # sola lettura (domain/analysis) si usa objects.filter(pk=1).first().
     @classmethod
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
