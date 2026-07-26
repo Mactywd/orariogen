@@ -8,7 +8,6 @@ from collections import defaultdict
 from domain.analysis import causali
 from domain.analysis.findings import Finding, Severity
 from domain.analysis.registry import Checker, register
-from domain.models import ClassPart, SchoolClass
 from domain.models.resources import Resource
 
 
@@ -59,14 +58,10 @@ class DidacticWeightChecker(Checker):
                 code = "weight_morning" if half == "morning" else "weight_afternoon"
                 yield emit(code, key, weight, cap, day=day)
 
-        part_class = dict(ClassPart.objects.values_list(
-            "pk", "partition__school_class_id"))
-        class_caps = dict(SchoolClass.objects.values_list(
-            "pk", "max_weekly_weight_per_student"))
         for key, weight in sorted(per_week.items()):
             if resources is not None and key not in resources:
                 continue
-            cap = class_caps.get(part_class.get(key, key))
+            cap = state.class_caps.get(state.part_class.get(key, key))
             if cap is None:
                 cap = s.max_weight_week
             if cap is not None and weight > cap:

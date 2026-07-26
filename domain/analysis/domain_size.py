@@ -28,7 +28,12 @@ def residual_domain(activity, state):
     """Piazzamento di prova su ogni collocazione: ammissibile se non introduce
     nuove violazioni hard rispetto alla baseline. Le violazioni preesistenti
     non squalificano (l'orario invalido è ammesso)."""
-    checkers = all_checkers()
+    # I checker "placement-independent" (es. CoverageChecker) producono
+    # finding che dipendono solo dai dati anagrafici, mai dal piazzamento di
+    # prova: compaiono identici nella baseline e in ogni tentativo, quindi il
+    # loro delta è sempre vuoto. Escluderli dal loop di prova non cambia il
+    # risultato ed evita di ripetere il loro lavoro per ogni cella del dominio.
+    checkers = [c for c in all_checkers() if not c.PLACEMENT_INDEPENDENT]
     was = state.placed.get(activity.id)
     if was is not None:
         state.unplace(activity.id)

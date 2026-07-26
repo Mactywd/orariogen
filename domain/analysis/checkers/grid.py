@@ -9,7 +9,7 @@ from domain.analysis.registry import Checker, register
 class GridChecker(Checker):
     def check(self, state, resources=None):
         g = state.grid
-        boundaries = [b.boundary_slot for b in g.breaks.all()]
+        boundaries = state.break_boundaries
         for aid, pl in sorted(state.placed.items()):
             act = state.activities[aid]
             if resources is not None and not (state.tokens[aid] & resources):

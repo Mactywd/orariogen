@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from domain import weeks
 from domain.models import (
     Activity, ClassPart, Holiday, InstituteSettings, Resource,
-    ResourceUnavailability, TimeGrid,
+    ResourceTimeConstraint, ResourceUnavailability, SchoolClass, Service,
+    Subject, SubjectConstraint, TimeGrid,
 )
 
 _SEVERITY_ORDER = {"hard": 0, "optional": 1, "preference": 2}
@@ -43,6 +44,19 @@ def activity_tokens(activity, assigned_room_id=None):
     return frozenset(keys), materials
 
 
+def _subject_row_unit_keys(row):
+    """L'espansione dell'unità di una riga SubjectConstraint in chiavi di
+    occupazione (stessa logica di checkers.subject_constraints._unit_keys,
+    ricalcolata una sola volta qui in build() invece che ad ogni check())."""
+    if row.school_class_id:
+        parts = ClassPart.objects.filter(
+            partition__school_class_id=row.school_class_id).values_list("pk", flat=True)
+        return frozenset({row.school_class_id, *parts})
+    if row.class_part_id:
+        return frozenset({row.class_part_id})
+    return frozenset(row.group.parts.values_list("pk", flat=True))
+
+
 @dataclass(frozen=True)
 class Placed:
     activity_id: int
@@ -68,6 +82,17 @@ class ScheduleState:
         self.unavailability = {}      # (chiave, giorno, fascia) → livello più severo
         self.holidays = set()         # giorni festivi di questa settimana
         self.n_weeks = 1
+        # Cache di righe/dati anagrafici che i checker consultavano prima con
+        # una query ORM ad ogni check(): caricate una volta qui, in millisecondi
+        # (contratto dichiarato in cima a questo modulo).
+        self.time_rows = []           # tutte le righe ResourceTimeConstraint
+        self.subject_rows = []        # [(riga SubjectConstraint, unit_keys precalcolate)]
+        self.part_class = {}          # ClassPart pk → SchoolClass pk (partizione)
+        self.class_caps = {}          # SchoolClass pk → max_weekly_weight_per_student
+        self.services_by_plan = {}    # StudyPlan pk → {subject_id: class_minutes}
+        self.student_units = []       # [(chiave, StudyPlan pk, nome)] — coverage._student_units
+        self.break_boundaries = []    # boundary_slot degli intervalli della griglia
+        self.subject_names = {}       # Subject pk → nome
 
     @classmethod
     def build(cls, schedule, week=0):
@@ -116,6 +141,36 @@ class ScheduleState:
             delta = (h.date - year.first_week_monday).days
             if delta // 7 == week and 0 <= delta % 7 < grid.days_per_cycle:
                 state.holidays.add(delta % 7)
+
+        state.time_rows = list(ResourceTimeConstraint.objects.all())
+
+        subject_rows = (SubjectConstraint.objects
+                        .select_related("subject_a", "subject_b", "school_class",
+                                        "class_part", "group"))
+        state.subject_rows = [(row, _subject_row_unit_keys(row)) for row in subject_rows]
+
+        state.part_class = dict(ClassPart.objects.values_list(
+            "pk", "partition__school_class_id"))
+        state.class_caps = dict(SchoolClass.objects.values_list(
+            "pk", "max_weekly_weight_per_student"))
+
+        state.subject_names = dict(Subject.objects.values_list("id", "name"))
+        services = defaultdict(dict)
+        for s in Service.objects.all():
+            services[s.study_plan_id][s.subject_id] = s.class_minutes
+        state.services_by_plan = dict(services)
+
+        for klass in SchoolClass.objects.select_related("study_plan"):
+            parts = list(ClassPart.objects.filter(partition__school_class=klass)
+                         .select_related("partition__school_class__study_plan", "study_plan"))
+            if parts:
+                for part in parts:
+                    state.student_units.append(
+                        (part.pk, part.effective_study_plan.pk, part.name))
+            else:
+                state.student_units.append((klass.pk, klass.study_plan_id, klass.name))
+
+        state.break_boundaries = [b.boundary_slot for b in grid.breaks.all()]
         return state
 
     def place(self, activity, day, start_slot):

@@ -21,7 +21,9 @@ class _TimeChecker(Checker):
     TYPE = None
 
     def check(self, state, resources=None):
-        for row in ResourceTimeConstraint.objects.filter(type=self.TYPE):
+        for row in state.time_rows:
+            if row.type != self.TYPE:
+                continue
             if resources is not None and row.resource_id not in resources:
                 continue
             yield from self.violations(state, row, state.resource_days(row.resource_id))

@@ -8,6 +8,11 @@ class Checker:
     filtro di ottimizzazione: il checker può saltare il lavoro sulle risorse
     fuori dall'insieme, ma i findings che le toccano devono restare completi."""
 
+    # True per i checker i cui finding non dipendono dal piazzamento (solo dai
+    # dati anagrafici): residual_domain può escluderli dal loop di prova, il
+    # delta rispetto alla baseline è comunque sempre vuoto.
+    PLACEMENT_INDEPENDENT = False
+
     def check(self, state, resources=None):
         raise NotImplementedError
 

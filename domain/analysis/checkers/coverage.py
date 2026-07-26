@@ -7,33 +7,20 @@ from collections import defaultdict
 from domain.analysis import causali
 from domain.analysis.findings import Finding, Severity
 from domain.analysis.registry import Checker, register
-from domain.models import ClassPart, SchoolClass, Service, Subject
-
-
-def _student_units():
-    """(chiave Resource, StudyPlan effettivo, nome) per ogni parte, o per la
-    classe se non ha partizioni."""
-    for klass in SchoolClass.objects.select_related("study_plan"):
-        parts = list(ClassPart.objects.filter(partition__school_class=klass)
-                     .select_related("partition__school_class__study_plan", "study_plan"))
-        if parts:
-            for part in parts:
-                yield part.pk, part.effective_study_plan, part.name
-        else:
-            yield klass.pk, klass.study_plan, klass.name
 
 
 @register("structural:coverage")
 class CoverageChecker(Checker):
+    # I finding dipendono solo da attività e servizi anagrafici, mai da come
+    # le attività sono piazzate: residual_domain può escluderlo dal loop di
+    # prova (vedi domain_size.py).
+    PLACEMENT_INDEPENDENT = True
+
     def check(self, state, resources=None):
-        subject_names = dict(Subject.objects.values_list("id", "name"))
-        services = defaultdict(dict)
-        for s in Service.objects.all():
-            services[s.study_plan_id][s.subject_id] = s.class_minutes
-        for key, plan, unit_name in _student_units():
+        for key, plan_id, unit_name in state.student_units:
             if resources is not None and key not in resources:
                 continue
-            expected = services.get(plan.pk, {})
+            expected = state.services_by_plan.get(plan_id, {})
             actual = defaultdict(int)
             for aid, act in state.activities.items():
                 if key in state.tokens[aid]:
@@ -44,7 +31,7 @@ class CoverageChecker(Checker):
                     yield Finding(
                         "coverage_mismatch",
                         causali.message("coverage_mismatch", unit=unit_name,
-                                        subject=subject_names[subject_id]),
+                                        subject=state.subject_names[subject_id]),
                         Severity.HARD, resources=(key,),
                         quantities={"expected_minutes": want, "actual_minutes": got},
                     )

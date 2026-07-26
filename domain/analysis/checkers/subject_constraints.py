@@ -57,10 +57,9 @@ class _SubjectChecker(Checker):
     CODE = None
 
     def check(self, state, resources=None):
-        rows = (SubjectConstraint.objects.filter(type=self.TYPE)
-                .select_related("subject_a", "subject_b"))
-        for row in rows:
-            keys = _unit_keys(row)
+        for row, keys in state.subject_rows:
+            if row.type != self.TYPE:
+                continue
             if resources is not None and not (keys & resources):
                 continue
             a = _placed_of(state, keys, row.subject_a_id)
