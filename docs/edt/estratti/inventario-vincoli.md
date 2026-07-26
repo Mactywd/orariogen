@@ -169,4 +169,4 @@ imputato una volta sola ma pesato su tutto ciò che ne dipende:
   l'intero gruppo H4–H12, H21, H22.
 
 E una dipendenza **esterna** già decisa: **C9** e **E4** esistono solo perché
-[ADR-013](../../docs/decisioni.md) ha messo gli sdoppiamenti in v1.
+[ADR-013](../../decisioni.md) ha messo gli sdoppiamenti in v1.
