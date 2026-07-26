@@ -21,7 +21,12 @@ Estratti il 2026-07-26 da EDT Monoposto 2026.1.3 installato sotto Wine.
 | `catalogo-tipi-interni.md` | Catalogo del modello dati interno: 1039 classi persistenti, 227 tabelle di relazione, 2565 enumerazioni, raggruppate per dominio | [`motore-risoluzione.md`](../motore-risoluzione.md), vari |
 | `stringhe-localizzazione.md` | Etichette di interfaccia IT/FR/EN allineate per chiave, per tema (vincoli, aule, gruppi, servizi, docente) | [`glossario-it-fr.md`](../glossario-it-fr.md), [`vincoli.md`](../vincoli.md) |
 | `formato-edt-analisi.md` | Reverse engineering del formato binario `.edt`: contenitore, tabelle, record `COURS`, codifica della collocazione | [`formato-file.md`](../formato-file.md) |
+| `motore-diagnostica.md` | Il catalogo delle causali di mancato piazzamento, il risolutore automatico e quello passo-passo, la modalità diagnostica | [`diagnostica.md`](../diagnostica.md), [`motore-risoluzione.md`](../motore-risoluzione.md) |
+| `modello-del-tempo.md` | Griglia oraria, suddivisioni sub-orarie, intervalli, mezza giornata, mensa, calendario, periodi, periodicità, sedi | [`tempo-e-calendario.md`](../tempo-e-calendario.md) |
+| `risorse-e-colonne.md` | Personale, materiali, incarichi; le ~590 colonne visualizzabili sulle risorse | [`risorse.md`](../risorse.md) |
+| `moduli-adiacenti.md` | Sostituzioni, colloqui, consigli di classe, `Estrai`, import/export; confine EDT ↔ PRONOTE | [`moduli-e-scope.md`](../moduli-e-scope.md) |
 | `parse_xsd.py` | Lo script che produce il dump dello schema | — |
+| `extract_strings.py` | Lo script che riproduce `it_fr_en.tsv` dalle tabelle di lingua della DLL | — |
 
 ## Come rigenerare
 
