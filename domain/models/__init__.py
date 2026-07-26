@@ -5,6 +5,10 @@ from .classes import ClassPart, ClassPartition, Group, SchoolClass
 from .teachers import Teacher, TeachingAssignment
 from .time import Break, Holiday, Period, Schedule, SchoolYear, TimeGrid
 from .activities import Activity, ActivityMaterialRequirement, Placement
+from .constraints import (
+    Extraction, RelaxationQuota, ResourceTimeConstraint,
+    ResourceUnavailability, SubjectConstraint,
+)
 
 __all__ = [
     "InstituteSettings", "Site",
@@ -14,4 +18,6 @@ __all__ = [
     "Teacher", "TeachingAssignment",
     "Break", "Holiday", "Period", "Schedule", "SchoolYear", "TimeGrid",
     "Activity", "ActivityMaterialRequirement", "Placement",
+    "Extraction", "RelaxationQuota", "ResourceTimeConstraint",
+    "ResourceUnavailability", "SubjectConstraint",
 ]
