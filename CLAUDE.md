@@ -29,7 +29,11 @@ docs/
     piani-di-studi.md  (in corso — campi visti, semantica in parte da confermare)
     bisogni-previsionali.md  fabbisogno ore per materia e allineamenti
     attivita.md        servizio → sotto-servizio → attività, assegnazione docenti
-    vincoli.md         indisponibilità, vincoli orari, di materia e attività↔attività
+    vincoli.md         indisponibilità, vincoli orari, di materia, attività↔attività, peso didattico
+    diagnostica.md     📦 perché un'attività non si piazza: il catalogo delle causali
+    tempo-e-calendario.md 📦 griglia oraria, periodi, periodicità, mensa, sedi
+    risorse.md         📦 le cinque risorse di piazzamento; personale, materiali, incarichi
+    moduli-e-scope.md  📦 i moduli oltre l'Orario, e cosa sta dentro o fuori
     schema-scambio.md  📦 lo schema XSD ufficiale Partenaire_Index V4.6 — modello dati formale
     nomenclatura-sidi.md 📦 tabelle ministeriali MIM incorporate in EDT (indirizzi, materie, quadri orari)
     motore-risoluzione.md 📦 come EDT risolve: pipeline, criteri, alleggerimenti
@@ -86,6 +90,12 @@ file in `data/liceo-fermi/` contiene **i dati concreti** della scuola di esempio
   Gli artefatti 📦 hanno autorevolezza variabile — uno **schema XSD annotato vale
   più di uno screenshot**, una stringa estratta da un binario vale molto meno.
   Gerarchia completa in [ADR-009](docs/decisioni.md).
+- **⚠ Il binario di EDT è condiviso con PRONOTE**, il registro elettronico gemello
+  di Index Education. Delle 69 888 stringhe di interfaccia, molte migliaia
+  riguardano competenze, stage, bollettini, punizioni e vita scolastica: **non sono
+  funzionalità di EDT**. Ogni affermazione tratta dalle stringhe va accompagnata dal
+  controllo che la famiglia di chiavi sia di EDT (`*EDT*`/`*Edt*`) o
+  inequivocabilmente sul piazzamento. Vedi [moduli-e-scope.md](docs/edt/moduli-e-scope.md).
 
 ## Stato del progetto
 
@@ -182,32 +192,154 @@ prototipo un pezzo per volta. Vedi [ADR-008](docs/decisioni.md).
       `Lavorare solo mezza giornata al giorno` — **gli stessi vincoli orari del
       docente**, applicati alla classe. → `docs/edt/classi.md`
 
+**Chiuso il 2026-07-26** dalle 69 888 stringhe di interfaccia (📦, seconda passata):
+
+- [x] `TContrainteItalieProfReglementaire`: **non esiste alcuna interfaccia**.
+      Terza ricerca indipendente, negativa: nessuna delle 69 888 etichette nomina
+      l'Italia in senso normativo, e l'ultimo candidato (`Parametri → Piazzamento
+      automatico`) ha due sole voci. **Non c'è un vincolo normativo italiano da
+      replicare.** → `docs/edt/motore-risoluzione.md`
+- [x] **TRCD/TRMD**: è la vista di **bilancio** `Dotazione − Bisogni = Scarto` su
+      Globale / Ore posto / HSA / IMP, con i plafond del **decreto francese
+      2014-940**. Non è orario, ed è normativa estera. → **fuori scope,
+      dichiarato**. → `docs/edt/risorse.md`
+- [x] **Gli incarichi incidono sul monte ore**: formula letterale
+      `Ore supplementari = Durata/Coeff. + Extra − Monte ore`. Ma l'**IMP** è un
+      compenso annuale (riforma francese *PACTE*), fuori dalla formula oraria.
+      → `docs/edt/risorse.md`
+- [x] I quattro valori `Parties…Classe`: confermati da una **seconda fonte
+      indipendente**, la causale di diagnostica *"ordine delle attività in gruppo
+      rispetto alle attività a classe intera non rispettato"*. → `docs/edt/diagnostica.md`
+
 **Ancora aperto:**
 
 - [ ] ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`):
-      `data/liceo-fermi/aule.md` è progetto, non osservazione, e va creato in EDT
-      per provare i vincoli di aula *sul nostro dataset*. Il meccanismo però è
-      ormai noto dalla base di esempio. → `docs/edt/aule.md`
-- [ ] `TContrainteItalieProfReglementaire`: **unico vincolo normativo italiano**
-      cablato nel motore. **Cercato in UI senza successo** (pannello vincoli
-      docente + intero menu `Parametri`): probabile codice morto. Ultimo
-      candidato da guardare: `Parametri → Piazzamento automatico delle attività`.
-      → `docs/edt/motore-risoluzione.md`
+      `data/liceo-fermi/aule.md` è progetto, non osservazione. → `docs/edt/aule.md`
 - [ ] La **cascata di default** oltre `Al./Rid.`: il candidato **Statuto → Mh/s**
       resta non confermato. → `docs/edt/docenti.md`
-- [ ] Se l'**impegno degli incarichi** docente incide sul calcolo ore.
-      → `docs/edt/docenti.md`
-- [ ] **TRCD**: è la resa italiana di **TRMD**, ma lo scioglimento della sigla non
-      esiste in nessuna delle sei lingue del prodotto. Vista pesantemente francese
-      (HSA, IMP, décret 2014-940) → candidata a **fuori scope**. → `docs/edt/classi.md`
-- [ ] I quattro valori `Parties…Classe` di `TypeIncompatibiliteMatiereClasse`
-      (ordine fra ore in gruppo e ore a classe intera). → `docs/edt/vincoli.md`
+- [ ] Il significato dei **`punti`** nella finestra degli alleggerimenti: l'unico
+      indizio di un punteggio in un motore che altrove usa solo quote.
+      → `docs/edt/motore-risoluzione.md`
+- [ ] La **scala dei pesi didattici** e i valori di default. → `docs/edt/vincoli.md`
+- [ ] Se `Amenagement` (eccezione per settimana) e **sostituzione** siano la stessa
+      tabella. → `docs/edt/tempo-e-calendario.md`
+- [ ] `Fractionnable` (P.P./P.F.), `Cours isolés`, `Interclasse`: colonne che
+      potrebbero essere vincoli non censiti. → `docs/edt/risorse.md`
 - [ ] **Decisione di scope**: supportare gli **sdoppiamenti** in v1?
       → `docs/edt/gruppi.md`
 - [ ] **Decisione**: adottare `Partenaire_Index` V4.6 come contratto di import.
       → `docs/edt/schema-scambio.md`
+- [ ] **Decisione**: la **collocazione per periodo** (`fascia variabile`) entra in
+      v1? È la scelta strutturale più costosa da rimandare.
+      → `docs/edt/tempo-e-calendario.md`
 
 ## Changelog
+
+- **2026-07-26** — **Il motore, il tempo e le risorse mancanti.** Fino a qui
+  avevamo documentato bene **cosa EDT sa rappresentare** (dati e vincoli) e quasi
+  nulla di **cosa EDT sa fare**. Questa passata colma il buco, rileggendo le 69 888
+  stringhe di interfaccia per finestra invece che per parola chiave. Quattro
+  documenti nuovi e una riscrittura.
+  **1) Il motore visto dall'utente** (`motore-risoluzione.md`, riscritto). La
+  generazione non è un bottone: il menu `Elabora` ha **cinque comandi di
+  risoluzione**, usati in sequenza. Fra questi due mai immaginati: il **risolutore
+  passo-passo**, che è una **ricerca a catena di espulsioni** (*"Trova una soluzione
+  al massimo in %d step"*) con la griglia annotata slot per slot — *"in bianco, le
+  collocazioni senza attività che creano problemi; in grigio, quelle che comportano
+  lo spostamento di almeno un'altra attività"*, più il costo in vincoli e
+  spostamenti; e **`Piazza e sistema`**, che impone una collocazione occupata e
+  ripara il resto, con l'opzione *"Ignora i vincoli dell'attività selezionata"*.
+  Trovata anche la **funzione obiettivo esposta**: i `Criteri di calcolo` sono una
+  lista che l'utente sposta fra *considerati* e *ignorati*, e i massimi orari hanno
+  **quattro modalità** (per settimana / per ciclo / media su 2 settimane con scarto
+  massimo / media su 2 cicli). L'ottimizzazione ha **tre criteri ordinati** più una
+  **`perdita di qualità tollerata`** per l'altra popolazione: il compromesso è
+  sempre una **quota**, mai un peso. ⚠ Due correzioni al «tutto hard di default»:
+  `Durata se possibile`, `Frequenza se possibile` e `Periodi se possibile` sono
+  degradabilità dichiarate **sull'attività**.
+  **2) La diagnostica** (`diagnostica.md`, nuovo). ~170 causali **nominate**: non
+  «infeasible», ma *"La classe è già occupata in un'attività bloccata"*. Il perno è
+  la distinzione **occupata-spostabile / occupata-bloccata**, che è ciò che rende
+  possibile il risolutore a catena. Scoperto un attributo mai visto: le attività
+  hanno una **priorità** (`Rendi prioritarie le attività`), distinta dal blocco.
+  **Poi verificato in UI, e ha smentito una conclusione:** EDT **sì** che
+  diagnostica e suggerisce, nell'`Analisi dei vincoli` (vedi sotto).
+  **3) Il modello del tempo** (`tempo-e-calendario.md`, nuovo). Lo XSD conferma
+  formalmente `place = giorno × 10 + rango`
+  (`NombreJoursParCycle × NombreSequencesParJour × NombrePlacesParSequence`). Ma la
+  scoperta strutturale è **`Fascia fissa` vs `Fascia variabile`**: *"EDT può
+  modificare la collocazione dell'attività a seconda dei periodi"* — cioè una
+  lezione non ha *una* collocazione, ne ha **una per periodo**. Inoltre gli
+  **`Amenagement`** (eccezioni su una singola settimana) sono un **layer separato**
+  sovrapposto all'orario annuale, e non sono un caso limite: 141 su 984 attività
+  nella base demo. ⚠ Le settimane «A/B» **non esistono col quel nome**: il prodotto
+  usa `Q1`/`Q2`, e trimestri e quadrimestri sono codificati con lo stesso
+  meccanismo numeratore/denominatore.
+  **4) Le risorse** (`risorse.md`, nuovo). La verifica di coerenza pre-piazzamento
+  elenca **cinque risorse sullo stesso piano**: classi, docenti, aule, **personale**,
+  **materiali** — le ultime due mai documentate. Il materiale ha una **quantità che
+  è un vincolo hard** (*"%d quantità di questo materiale sono utilizzate
+  simultaneamente"*), cioè lo stesso meccanismo della capacità simultanea dell'aula:
+  **una risorsa cumulativa sola**, non due tabelle.
+  **5) I moduli** (`moduli-e-scope.md`, nuovo). Delimitato il confine EDT ↔ PRONOTE
+  (nuova convenzione, sopra). Le **sostituzioni non hanno un solver**: filtro
+  multi-criterio + workflow, assegnazione manuale — quindi non c'è tecnologia da
+  recuperare per il SaaS del committente, solo criteri (due buoni: «chi ha già un
+  buco lì», «chi è stato liberato da un'assenza di classe»). Colloqui e consigli
+  invece hanno un motore vero, e i consigli usano **lo stesso schema a tre stadi**
+  dell'orario: è un **pattern architetturale del prodotto**, non una scelta
+  specifica. E `Estrai` non è un filtro di vista ma una **selezione persistente e
+  componibile** su cui piazzamento e ottimizzazione operano *esclusivamente*.
+  **Un vincolo mai censito:** il **peso didattico** delle materie, con tetti per
+  mattina/pomeriggio/giornata/settimana/ciclo, diagnostica e alleggerimento propri
+  (`vincoli.md`). È il vincolo di carico cognitivo — facile da implementare, alto
+  valore percepito, e nessuno lo fa.
+  **Quattro punti aperti chiusi:** il vincolo normativo italiano **non esiste**
+  (terza ricerca, negativa: nessuna delle 69 888 etichette nomina l'Italia in senso
+  normativo); **TRCD/TRMD** è contabilità di bilancio su decreti francesi → fuori
+  scope; gli **incarichi incidono** sul monte ore, con formula letterale, ma l'IMP
+  no; i quattro valori **`Parties…Classe`** confermati da una seconda fonte.
+  **Verificato subito in UI:** il **solver funziona anche senza registrazione** —
+  tutte le voci di `Elabora` sono attive (la clausola francese di primo avvio non si
+  applica a questa build). E il menu ha una **quarta sezione mai prevista**,
+  `Analisi → Lancia l'analisi dei vincoli`: si analizza *prima* di calcolare.
+  Le quattro sezioni sono **analizza → piazza → risolvi gli scarti → ottimizza**.
+  🔑 **L'analisi dei vincoli è la funzione più preziosa trovata finora**, e ha
+  **smentito** la conclusione «EDT non suggerisce quale vincolo allentare»: quella
+  vale per il pannello `Alleggerimenti`, non per l'analisi. Cinque fasi
+  selezionabili, di cui la quinta è `Controllo dell'insieme di attività non
+  piazzabili` — la ricerca di **sottoinsiemi infattibili**, cioè un violatore di
+  Hall, non il caso banale della singola attività bloccata. E una diagnosi reale
+  osservata è strutturata in quattro riquadri: `Enunciato del problema` in italiano
+  corrente, `Azioni che permettono di risolvere il problema`, `Dettaglio` con
+  **l'aritmetica esplicita** (*"Classe 1B, LETTERE, 6 attività, durata da piazzare
+  10h00, durata piazzabile 9h00 » 1h00 non potrà essere piazzata"*) e `Soluzione`
+  con **la riga di vincolo colpevole mostrata in loco** (LETTERE incompatibile con
+  sé stessa nella giornata). Più il pulsante `Estrai le materie, le risorse
+  coinvolte e le attività`, che riversa la diagnosi nella selezione di lavoro.
+  Osservate **tre forme di diagnosi** di natura crescente: un vincolo su una
+  risorsa; **vincoli incrociati** di classe *e* docente, dove il riquadro
+  `Soluzione` mostra affiancati due vincoli di famiglie diverse (incompatibilità
+  di materia **e** giornate libere del docente) che sono innocui separatamente e
+  fatali insieme; e infine la fase 5, che ha trovato un **violatore di Hall** vero —
+  *11 docenti + 1 classe + 1 aula* nominati insieme, 25 attività, 33h di domanda
+  contro 32h di *finestra di disponibilità comune*. Il riquadro `Soluzione` è
+  **operativo**: tendine e griglia delle indisponibilità modificabili sul posto,
+  poi `Rilancia la verifica` — si diagnostica e si ripara senza cambiare finestra.
+  È la differenza fra `INFEASIBLE` e un prodotto: **da progettare come componente a
+  sé**, perché è un conteggio di capienza, non richiede il solver.
+  🔑 **E l'analisi è esatta, verificato.** Una base con 984/984 attività piazzate
+  dichiarava comunque incoerenze; `Estrai → Attività che non rispettano i vincoli`
+  ha restituito **21 attività su 984 (38h00)**, fra cui **entrambe** le diagnosi
+  (EPICURO/LETTERE su 1B, DI MILETO/MATEMATICA su 1E). Quindi l'orario contiene
+  davvero lezioni illegali piazzate a mano: **un orario valido non è un invariante**
+  in EDT, la violazione è uno stato ammesso e interrogabile. Scelta di progetto da
+  imitare. Quel comando apre prima una finestra `Criteri di estrazione` con le
+  **dieci famiglie violabili** (dove ci sono `Mensa` e `Intervallo` — conferma che
+  sono hard — ma ⚠ **mancano `Massimo di ore` e `Peso didattico`**, da chiarire).
+  ⚠ Debolezza annotata: la chiusura (`Verifica terminata / Rimangono delle
+  incoerenze`) **non riepiloga nulla** — chi ha scorso dieci problemi non può
+  rivederli. → `docs/edt/diagnostica.md`, `docs/edt/vincoli.md`
 
 - **2026-07-26** — **Verifica in UI sulla base di esempio del prodotto.** Copiata
   la base demo di EDT (completa e risolta: 18 aule, 187 parti, 3 raggruppamenti,

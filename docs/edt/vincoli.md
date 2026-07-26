@@ -284,9 +284,95 @@ rispetto a quelle a classe intera.
 sdoppiamenti**. Entra quindi nella decisione di scope aperta in
 [gruppi.md](gruppi.md), non è un dettaglio a sé.
 
-Esiste anche un **peso didattico**: *"Peso didattico massimo per settimana per un
-alunno"* (`Poids pédagogique maximum par semaine pour un élève`) — un vincolo di
-carico cognitivo per classe, mai emerso finora.
+## 🔑 Le dieci famiglie violabili — osservate in UI
+
+**Osservato il 2026-07-26.** Il comando `Estrai le attività che non rispettano i
+vincoli` apre prima una finestra `Criteri di estrazione`: un elenco a caselle di
+**quali vincoli considerare** nel giudizio di irregolarità. Sono **dieci**, tutte
+spuntate di default, ciascuna col proprio badge colorato:
+
+| Badge | Famiglia |
+|---|---|
+| **P** | `Massimo di presenza` |
+| **G** | `Giorni e 1/2 giornate libere` |
+| ⅁ | `Mezze giornate di lavoro` |
+| ❗ | `Vincolo materia` |
+| 🍽 | `Mensa` |
+| **S** | `Sedi distaccate` |
+| ❗ | `Intervallo` |
+| ▨ | `Indisponibilità opzionali` |
+| ▮ | `Indisponibilità` |
+| ❗ | `Vincolo tra attività` |
+
+Perché è più interessante di quanto sembri:
+
+- È la **lista canonica di ciò che un piazzamento può violare**, dichiarata dal
+  prodotto. Non coincide né con l'elenco dei vincoli configurabili né con quello
+  degli alleggerimenti: è un terzo taglio, quello del *controllo a posteriori*.
+- 🔑 **`Mensa` e `Intervallo` ci sono.** Conferma indipendente che sono vincoli
+  hard veri e non impostazioni di visualizzazione
+  ([tempo-e-calendario.md](tempo-e-calendario.md)).
+- ⚠ **`Massimo di ore` (badge `M`) e il `Peso didattico` non ci sono**, pur essendo
+  vincoli a pieno titolo altrove (compaiono entrambi negli alleggerimenti). Non
+  sappiamo se sia una lacuna del controllo o se quei due siano verificati per
+  costruzione. **Da chiarire.**
+- I badge coincidono con quelli del pannello vincoli del docente (`P`, `G`, `S`),
+  confermando che è la stessa tassonomia riusata.
+
+**Per noi.** Un controllo di conformità *dell'orario esistente* è una funzione
+distinta sia dal solver sia dall'analisi preventiva, e va progettata come tale —
+serve ogni volta che si modifica a mano, si importa, o si cambia un vincolo dopo
+aver piazzato.
+
+## 🔑 Il peso didattico — una famiglia di vincoli a sé 📦
+
+Era emerso come accenno (*"Peso didattico massimo per settimana per un alunno"*).
+Non è un accenno: è una **famiglia di vincoli completa**, con finestra propria,
+diagnostica propria e riga propria negli alleggerimenti. Ci era sfuggita del tutto.
+
+**A cosa serve.** È il vincolo di **carico cognitivo**: impedisce di concentrare
+tutte le materie pesanti nella stessa mattina. Ogni materia ha un peso, e la somma
+dei pesi ha dei tetti.
+
+### Come è strutturato
+
+Finestra `Peso didattico per materia` (`FicEDT_AffClassesPoidsMatieres`), con
+selezione per classe:
+
+| Livello | Campo |
+|---|---|
+| **materia** | `Peso didattico per materia` — il peso unitario |
+| **classe** | `Peso didattico massimo per settimana per un alunno` |
+| **istituto** | `Peso didattico massimo per l'istituto:` con `Limite del mattino:` · `Limite del pomeriggio:` · `Limite della giornata:` · `Limite della settimana:` · `Limite del ciclo:` |
+
+Cinque finestre di applicazione, quindi — le stesse su cui ragionano gli altri
+vincoli di quantità. E la cascata di default ([ADR-003](../decisioni.md)) vale anche
+qui: limiti d'istituto che la classe può ridefinire.
+
+### Dove riappare
+
+- **In griglia**: `Totale dei pesi didattici della mattinata / del pomeriggio /
+  della giornata`, in fondo alle colonne — l'utente lo vede sommato mentre lavora.
+- **In diagnostica**: `Limite dei pesi didattici superato nella giornata / nel
+  mattino / nel pomeriggio` ([diagnostica.md](diagnostica.md)).
+- **Negli alleggerimenti**: `Peso didattico delle materie` → *"Autorizza un
+  supplemento di … un giorno per settimana"* ([motore-risoluzione.md](motore-risoluzione.md)).
+- **Sui raggruppamenti**: *"Alcuni raggruppamenti (%d) superano il limite dei pesi
+  didattici"*.
+- **In stampa**: `Stampa dei pesi didattici delle materie per classe`.
+
+### Implicazione per noi
+
+È un vincolo **facile da implementare e di alto valore percepito**: un intero
+lineare per materia, somme su mattina/giornata/settimana, confronto con un tetto.
+In CP-SAT sono tre `sum(...) <= limite` per classe.
+
+E risolve un problema che ogni scuola ha e che nessuno modella: *"non mettete
+matematica, fisica e latino tutte lo stesso giorno"*. Oggi lo si ottiene a fatica
+con incompatibilità fra materie, che è lo strumento sbagliato — dichiara relazioni
+a coppie invece di un budget.
+
+⚠ Da verificare in UI: la scala dei pesi (interi? 1–10?) e i valori di default.
 
 ## Vincoli fra attività (`TNetContrainteCoursACours`) — osservati in UI
 
