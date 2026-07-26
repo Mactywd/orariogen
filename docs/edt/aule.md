@@ -60,11 +60,22 @@ Esiste *anche* una gerarchia padre/figlio, ma serve ad altro: dare **identità e
 nome ai singoli spazi**. Nella base, `PALESTRE` (`Qtà = 2`) contiene `Palestra 1`
 e `Palestra 2`, mostrate in corsivo e nascoste finché non si espande il nodo.
 
-Sui figli si osserva una **cascata di default**: il campo `Gestori` riporta
-`Tosco Luisa (Gr.)` — il suffisso `(Gr.)` significa *ereditato dal gruppo* — e
-`Sedi` è vuoto, quindi anch'esso ereditato. È lo stesso meccanismo di
-[`Al./Rid.`](materie.md), su un'altra entità: conferma che la cascata è un
-pattern trasversale del prodotto, non un caso isolato ([ADR-003](../decisioni.md)).
+Sui figli il campo `Gestori` riporta `Tosco Luisa (Gr.)`, dove il suffisso `(Gr.)`
+significa *proveniente dal gruppo*, e `Sedi` è vuoto.
+
+⚠ **Correzione (2026-07-26).** Avevo letto questa osservazione come conferma che la
+cascata di default fosse *«un pattern trasversale del prodotto»*. **Non lo è.**
+
+Il marcatore `(Gr.)` ha **due sole occorrenze** in tutte le 69 888 stringhe di
+interfaccia, entrambe la stessa etichetta in due pannelli di **permessi su risorse
+prenotabili** — accanto a `(G)` = *«è gestore»*. Riguarda `Gestionnaire` e
+`Réservable par`, cioè **diritti**, non valori di configurazione. Nessun campo che
+incida sul piazzamento lo porta.
+
+L'osservazione in sé resta valida — un'aula figlia eredita davvero il gestore dal
+contenitore — ma è un'**ereditarietà di ACL**, non la cascata di
+[`Al./Rid.`](materie.md). Sono due meccanismi diversi che si somigliano in UI. Vedi
+[ADR-003](../decisioni.md), emendato di conseguenza.
 
 L'occupazione è contabilizzata **sul padre** (`48h00 / 48%`), non sui figli
 (`0h00` entrambi).

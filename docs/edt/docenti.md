@@ -67,11 +67,30 @@ Stesso spirito di [ADR-003](../decisioni.md); registrato come [ADR-007](../decis
   vale **18**.
 - **HSMax** è il tetto delle ore supplementari; **HS Prev.** è l'overtime *proiettato*.
   Alimentano i vincoli di carico del solver, non l'anagrafica pura.
-- **Ipotesi (da confermare):** lo **Statuto** guida il default di `Mh/s`. Sarebbe un
-  altro livello della cascata di ereditarietà (statuto → docente), il candidato più
-  promettente per la domanda aperta «la cascata vale oltre `Al./Rid.`?»
-  (vedi [materie.md](materie.md) e *Aperto* in [CLAUDE.md](../../CLAUDE.md)). Non ancora
-  osservato: **non** darlo per acquisito.
+### 🔑 Chiuso: `Mh/s` ha un default, ma non viene dallo Statuto (2026-07-26)
+
+L'ipotesi era che lo **Statuto** guidasse il default di `Mh/s`, come livello
+intermedio di una cascata a tre livelli. **Sbagliata a metà.**
+
+**Il default esiste**, ed è **globale**:
+
+> `FicheEDT_ParametresBase_OptionsRessources_RS_Apport`
+> FR: **«Apport par défaut pour les professeurs»**
+
+⚠ Ma **la traduzione italiana perde il «par défaut»** — rende soltanto *«Monte ore
+settimanale dei docenti»* — per cui **in UI italiana non si vede che è un default**.
+È lo stesso genere di perdita segnalato in [glossario-it-fr.md](glossario-it-fr.md):
+sulla semantica dei default va interrogato il francese.
+
+**Lo Statuto però non c'entra.** Battute una trentina di chiavi `Statut`: nessuna
+lo lega a un monte ore. Lo statuto è anagrafica (titolare / supplente /
+provvisorio), e la stessa parola serve altrove per lo stato del motivo d'assenza e
+per il coordinatore.
+
+**Quindi la catena è a due livelli — globale → docente — non a tre.**
+
+⚠ Residuo, una sola schermata: verificare se la tabella degli statuti abbia una
+colonna di monte ore. Le stringhe dicono di no.
 
 ## Il docente nello schema di scambio 📦
 
@@ -162,7 +181,8 @@ esplicitamente. Da riprendere in [vincoli.md](vincoli.md) se rientra in scope.
   intera.
 - **Campi previsionali** (`Occ. prev.`, `HS Prev.`, `+/-`, `Extra`): non memorizzare,
   ricalcolare. Vedi [ADR-007](../decisioni.md).
-- **`Statuto`:** probabile sorgente di default per `Mh/s` (cascata) — da confermare.
+- **`Statuto`:** ~~probabile sorgente di default per `Mh/s`~~ → **no**, chiuso: il
+  default di `Mh/s` è **globale**, lo statuto è pura anagrafica (vedi sopra).
 - **`G. Mensa`:** insieme di giorni per docente; probabile fuori scope v1.
 
 ## Osservazioni dall'inserimento (2026-07-09)

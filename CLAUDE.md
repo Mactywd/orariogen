@@ -64,10 +64,14 @@ file in `data/liceo-fermi/` contiene **i dati concreti** della scuola di esempio
 
 ## Convenzioni
 
-- **Cascate di default (globale → entità → istanza).** EDT eredita i default lungo
-  una catena. Nel nostro schema `NULL` significa "eredita": **non** materializzare i
-  default nelle righe, risolvere la cascata a runtime. Vedi
-  [ADR-003](docs/decisioni.md).
+- **Cascate di default — ma poche, e dichiarate.** Dove EDT eredita un default, nel
+  nostro schema `NULL` significa "eredita" e la cascata si risolve a runtime.
+  ⚠ **Non è un meccanismo generale del prodotto**: i campi dimostrati sono
+  `Al./Rid.` delle materie e `Mh/s` dei docenti (default **globale**, non dallo
+  Statuto). Ovunque altrove si materializza. E **«eredita» ≠ «copia dal modello»**:
+  le indisponibilità standard sono *copiate alla creazione*, e confonderle
+  riscriverebbe le personalizzazioni di tutti. Vedi
+  [ADR-003 + emendamento](docs/decisioni.md).
 - **La disciplina è una tabella, non un enum.** Le scuole la personalizzano. Va
   mappata alle classi di concorso (A011, A027…), perché la normativa sulle
   sostituzioni ragiona per classe di concorso. Vedi [ADR-001](docs/decisioni.md),
@@ -255,8 +259,6 @@ prototipo un pezzo per volta. Vedi [ADR-008](docs/decisioni.md).
 
 - [ ] ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`):
       `data/liceo-fermi/aule.md` è progetto, non osservazione. → `docs/edt/aule.md`
-- [ ] La **cascata di default** oltre `Al./Rid.`: il candidato **Statuto → Mh/s**
-      resta non confermato. → `docs/edt/docenti.md`
 - [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
       `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
       CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.

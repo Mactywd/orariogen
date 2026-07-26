@@ -66,6 +66,43 @@ campo `Al./Rid.` delle materie. Vedi [docs/edt/materie.md](edt/materie.md).
 
 **Data.** 2026-07-09
 
+### Emendamento 2026-07-26 — la cascata è locale, non generale
+
+La decisione **resta valida**, ma il suo ambito era stato sopravvalutato. Cercando
+l'estensione della cascata è emerso che **in EDT non esiste alcun meccanismo
+generale di ereditarietà**:
+
+- il marcatore `(Gr.)`, che avevo preso per il segno visibile dell'ereditarietà, ha
+  **due sole occorrenze** in 69 888 stringhe, entrambe in pannelli di **permessi**
+  su risorse prenotabili (`Gestionnaire`, `Réservable par`): è provenienza di un
+  **diritto**, non di un valore. Vedi [aule.md](edt/aule.md), corretto.
+- nessun vocabolario dedicato: FR `propag` compare **zero** volte; FR `hérit` due,
+  di cui una è un errore del framework Delphi; le 327 `par défaut` sono quasi tutte
+  default di UI o di stampa.
+
+**I campi su cui la cascata è dimostrata sono pochi:**
+
+| Campo | Catena |
+|---|---|
+| `Al./Rid.` delle materie | globale → materia → istanza |
+| `Apport` / `Mh/s` dei docenti | **globale → docente** (due livelli, non tre: lo Statuto non c'entra — vedi [docenti.md](edt/docenti.md)) |
+| Aula del colloquio | docente → colloquio (modulo Colloqui, fuori scope) |
+
+**Conseguenza pratica:** i campi nullable servono a **pochi** attributi, non a tutto
+il modello. Materializzare i default è la scelta giusta quasi ovunque; `NULL =
+eredita` è l'eccezione, e va applicata dove il prodotto la dichiara.
+
+### ⚠ Un meccanismo diverso da non confondere: copia alla creazione
+
+Le **indisponibilità standard** di docenti e classi non sono ereditate: sono
+**copiate all'atto della creazione** dell'istanza. La differenza non è accademica.
+Se le trattassimo come cascata, cambiare il default globale **riscriverebbe le
+indisponibilità già personalizzate di tutti i docenti** — un bug silenzioso e
+difficile da diagnosticare, perché si manifesterebbe solo mesi dopo.
+
+Regola: *«eredita»* e *«copia dal modello»* sono due meccanismi distinti, e vanno
+distinti anche nello schema.
+
 ---
 
 ## ADR-004 — I gruppi sono entità distinte dalle classi
