@@ -30,11 +30,25 @@ classi di concorso.
 
 **Motivo.** La normativa sulle **sostituzioni** ragiona per classe di concorso, non
 per materia. Questo impatta direttamente il SaaS di gestione sostituzioni già in
-produzione, di cui questo generatore è modulo. Nota: la classe di concorso è **nostra
-estensione**, non un campo EDT osservato. Vedi
+produzione, di cui questo generatore è modulo. Vedi
 [docs/edt/discipline.md](edt/discipline.md).
 
-**Data.** 2026-07-09
+**Aggiornamento 2026-07-26.** La nota originale — *"la classe di concorso è nostra
+estensione, non un campo EDT osservato"* — va corretta a metà. Nella **base di
+riferimento italiana fornita col prodotto** le discipline hanno per `Codice`
+esattamente le classi di concorso (`A-01`, `A-22`, `A-25`, `A-28`, `A-30`,
+`A-49`, `A-60`, più `REL` e `SOST`). Quindi non è un campo dedicato, ma è **il
+posto dove EDT Italia si aspetta che la si metta**: una convenzione d'uso
+documentata dal produttore, non una nostra invenzione.
+
+Ciò che **non** cambia: EDT non incorpora la tabella ministeriale delle classi di
+concorso (verificato: i codici stanno solo nei dati della base demo, non nei
+binari né in `TabellaSIDI.xml`), non valida nulla, e il `Codice` è scalare mentre
+la relazione reale è molti-a-molti in un liceo (Lettere → A-11/A-12/A-13). La
+decisione resta quindi valida: **tabella di mappatura a sé**, con il `Codice`
+della disciplina usato come sorgente di import quando è valorizzato.
+
+**Data.** 2026-07-09 (aggiornato 2026-07-26)
 
 ---
 
@@ -140,5 +154,41 @@ del modello (variabili, granularità dello slot, come si rappresenta un gruppo)
 mentre ancora non sappiamo cosa dovrà esprimere: le scelte prese presto sarebbero
 poi da disfare. Il costo di aspettare è nullo, quello di riscrivere no. Vedi
 [docs/edt/vincoli.md](edt/vincoli.md) per l'elenco di ciò che manca.
+
+**Data.** 2026-07-26
+
+---
+
+## ADR-009 — Gli artefatti dell'installazione sono una terza fonte, marcata 📦
+
+**Decisione.** Accettare come fonte documentaria i file dell'installazione di EDT
+(schemi XSD, tabelle XML di nomenclatura, stringhe estratte dai binari, basi dati
+di esempio), marcandoli **📦** e distinguendoli sia dall'osservazione in UI (fonte
+di default, non marcata) sia dalla guida online (**📖**).
+
+**Gerarchia di autorevolezza**, dalla più forte:
+
+1. **📦 schemi XSD** — dichiarazioni formali con nomi, tipi, cardinalità e
+   annotazioni dell'autore. Più forti dell'osservazione in UI, che è
+   interpretazione di ciò che si vede.
+2. **UI osservata** — comportamento reale del prodotto.
+3. **📦 tabelle XML** (`TabellaSIDI.xml`) — dati di riferimento, non semantica.
+4. **📖 guida online** — prosa divulgativa, talvolta imprecisa.
+5. **📦 stringhe estratte dai binari** — indiziarie: dicono che una cosa *esiste*,
+   non cosa *significa*.
+
+**Alternative scartate.** Continuare col solo reverse engineering per
+osservazione, screenshot per screenshot.
+
+**Motivo.** L'installazione contiene lo schema di scambio ufficiale
+`Partenaire_Index` V4.6, annotato dall'autore, che ha chiuso in un colpo domande
+rimaste aperte per sessioni (allineamento → attività complessa; tre monte ore per
+materia; capacità simultanea come attributo della risorsa). Un XSD è *più*
+autorevole di uno screenshot: non va interpretato. Restava il rischio di
+documentare come fatto ciò che è solo un nome di simbolo — da qui la gerarchia,
+che tiene le stringhe dai binari all'ultimo posto.
+
+**Conseguenza operativa.** Un elemento marcato 📦 al livello 1 non richiede
+conferma in UI. Ai livelli 3–5 sì, come per 📖.
 
 **Data.** 2026-07-26

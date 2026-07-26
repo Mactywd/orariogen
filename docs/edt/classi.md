@@ -7,10 +7,48 @@ due sezioni (A, B), ~26 alunni ciascuna.
 
 ## Campi osservati nella UI
 
-> Da completare: non abbiamo ancora documentato campo per campo la scheda "Classe"
-> di EDT. Quanto segue è ciò che è emerso indirettamente dall'inserimento.
+Colonne dell'`Elenco delle classi` (Orario > Classi), osservate il 2026-07-26
+sulla base di esempio (40 classi):
 
-Attributi impliciti nel dataset:
+| Colonna | Cosa contiene |
+|---|---|
+| `Nome` | |
+| `Alu.ins.` / `N.Alu` | alunni inseriti (anagrafica) / numero di alunni previsto |
+| `Livelli` | `1°`, `2°`, `3°` — l'entità `Niveau` |
+| `Piano di studi` | es. `2° TEMPO NORMALE` |
+| `Occ.` | ore occupate, calcolato (31h00–33h00) |
+| `Docente coordinatore` | uno per classe nella base |
+| `Referente didattico` | ruolo distinto dal coordinatore, vuoto nella base |
+| `TOP` | tasso di occupazione, `100%` su tutte |
+| **`Aula preferenziale`** | l'aula abituale della classe (= `Classe/Salle` dello schema) |
+| **`MMG`** | **Massimo di mezze giornate di lavoro** |
+| **`MG`** | **Lavorare solo mezza giornata al giorno** |
+| *(colore)* | colore della classe |
+| `N.Sedi` | numero di sedi frequentate (`1` su tutte) |
+
+Due note.
+
+**`Aula preferenziale` sta sulla classe, non sulla materia.** È l'unico legame
+didattica↔aula che EDT modella nativamente, e riflette come funziona una scuola
+reale: la classe ha la sua aula e si sposta solo per laboratorio o palestra. Vedi
+[aule.md](aule.md).
+
+**`MMG` e `MG` sono vincoli orari della classe**, e sono **gli stessi due che
+esistono sul docente** (`Massimo di mezze giornate di lavoro` con la sua opzione
+`Lavorare solo mezza giornata al giorno`, vedi [vincoli.md](vincoli.md)). Il
+`*-*` è il valore "non impostato".
+
+È l'ennesima conferma della **genericità sulla risorsa**: non esiste una famiglia
+di vincoli "del docente" e una "della classe": esiste una famiglia di vincoli
+orari che si applica a entrambi. Nel nostro schema è una tabella sola con una FK
+polimorfica, non due.
+
+Otto classi su 40 hanno il **triangolo di espansione**: sono quelle con parti
+(`1 A/A`, `1 A/R`, `1 B/A`, `1 B/R`, `1C`, `1F`, `1H`, `2D`). `1C` e `1F` sono
+due delle quattro che nel file portano le parti `_REL`/`_ALT` — vedi
+[gruppi.md](gruppi.md).
+
+Attributi impliciti nel dataset del Fermi:
 
 - **Sezione** (A / B).
 - **Anno / livello** (1–5), da cui deriva il regime **biennio** (anni 1–2) vs.
@@ -18,6 +56,39 @@ Attributi impliciti nel dataset:
 - **Monte ore settimanale**: 27 h nel biennio, 30 h nel triennio. Non è un numero
   libero della classe: è la somma del quadro orario (monte ore per materia per
   livello) — vedi [`data/liceo-fermi/classi.md`](../../data/liceo-fermi/classi.md).
+
+## La classe nello schema di scambio 📦
+
+Colma in parte il "da completare" qui sopra
+([schema-scambio.md](schema-scambio.md)):
+
+```
+Classe
+├── @Nom, @Couleur, @ID_Partenaire
+├── Niveau               (0..1)   ← l'anno/livello, entità a sé
+├── Mef                  (0..N)   ← PIÙ piani di studi per classe
+├── PartieDeClasse       (0..N)
+├── ProfesseurPrincipal  (0..N)   ← più di un coordinatore è ammesso
+├── Salle                (0..1)   aula abituale della classe
+└── Etablissement        (1..1)   obbligatorio: l'istituto di appartenenza
+```
+
+Tre osservazioni:
+
+- **`Niveau` è un'entità, non un intero.** L'anno di corso ha anagrafica propria
+  (`Ident` + `Libelle`), e compare anche su `Mef`. La distinzione biennio/triennio
+  dedotta qui sopra non è quindi un attributo della classe: si legge attraverso il
+  livello e il piano.
+- **`Mef` è `0..N`.** ⚠ Una classe può avere più piani di studi. Non è il caso del
+  Fermi (un piano per classe), ma è il caso delle **classi articolate** — da tenere
+  presente perché rompe l'ipotesi `classe → 1 piano` che il nostro schema
+  adotterebbe naturalmente.
+- **`Etablissement` è obbligatorio** e si riferisce alla tabella
+  `EtablissementsGeres`: il formato prevede nativamente il **multi-istituto**. Fuori
+  scope per noi, ma spiega perché `Site` compare un po' ovunque.
+
+Nessun campo "monte ore" sulla classe: conferma che il monte ore sta sul piano di
+studi e non sulla classe, come già dedotto.
 
 ## Semantica dedotta
 
@@ -91,8 +162,10 @@ solo alunno (verificato sui [bisogni](bisogni-previsionali.md)).
 - La classe ha una FK verso la sezione e un attributo anno/livello.
 - Il regime biennio/triennio è derivabile dall'anno, ma pilota il quadro orario:
   modellare la relazione classe → (materia, ore) passando per il livello.
-- Prevedere fin da subito la relazione classe → gruppi (uno-a-molti), anche se la
-  modellazione EDT dei gruppi è ancora da osservare.
+- Prevedere fin da subito la relazione classe → parti → gruppi, che è
+  **molti-a-molti** e non uno-a-molti ([gruppi.md](gruppi.md)).
+- La classe porta un'**aula preferenziale** (FK opzionale verso l'aula) e
+  probabilmente vincoli propri sulle mezze giornate (`MMG`/`MG`).
 
 ## Dataset di esempio
 

@@ -73,6 +73,57 @@ Stesso spirito di [ADR-003](../decisioni.md); registrato come [ADR-007](../decis
   (vedi [materie.md](materie.md) e *Aperto* in [CLAUDE.md](../../CLAUDE.md)). Non ancora
   osservato: **non** darlo per acquisito.
 
+## Il docente nello schema di scambio 📦
+
+Lo schema ufficiale ([schema-scambio.md](schema-scambio.md)) dichiara:
+
+```
+Professeur
+├── @Nom, @Prenom, @Abreviation, @DateNaissance
+├── @Statut                                    ← esiste come campo di scambio
+├── Civilite  (0..1)
+├── Apport    (0..N)   "Liste des apports en minutes pour chaque discipline"
+│   ├── @DureeMinutes
+│   └── Discipline (0..1)
+├── AHE       (0..N)   @Ident + @DureeMinutes
+└── Salle     (0..1)   "Salle de préférence"
+```
+
+Tre riscontri e un'assenza:
+
+- **`Statut` è un campo di scambio di prima classe**, non un attributo interno.
+  Rafforza l'ipotesi che sia un livello di cascata, ma ⚠ **non la conferma**: lo
+  schema lo dichiara come stringa libera senza legarlo ad alcun monte ore.
+- **`Salle de préférence`** conferma per via indipendente la distinzione
+  preferenza vs. assegnazione già stabilita per le materie: EDT applica lo stesso
+  pattern all'aula.
+- **`Apport` quantifica la capacità**: non solo *quali* discipline, ma *quanti
+  minuti* per disciplina. È una precisazione di [ADR-006](../decisioni.md), che
+  finora trattava la capacità come relazione booleana.
+- **`Apport` *è* `Mh/s`** — confermato 📦. Non c'è un campo separato per il monte
+  ore perché `Apport` è il monte ore: le tabelle di lingua danno
+  `UtilitairesEdt_ColonnesRessources_RS_App*` → IT corto **`Mh/s`**, IT esteso
+  **`Monte ore settimanale`**, FR corto `App.`, FR esteso **`Apport`**. La stessa
+  parola è tradotta `Monte ore` anche nella vista *Consumo per disciplina*.
+
+  Due conseguenze:
+
+  1. **`Mh/s` non è un massimo**, malgrado la sigla lo suggerisca: è il monte ore
+     *contrattuale dovuto*. Coerente col tooltip già osservato ("ore dovute dal
+     docente"), ma ora è certo.
+  2. Nel formato di scambio il monte ore è **scomposto per disciplina** (un
+     `Apport` per disciplina, in minuti). `Mh/s` in UI ne è la somma. Il nostro
+     modello dovrebbe tenere la scomposizione, non solo il totale — è la stessa
+     informazione che serve a `Occ. prev.` per disciplina.
+
+⚠ **Ambiguità su `Statuto`.** La chiave `Chaines_EdT_RS_WinColonStaLong` traduce
+FR `Statut` → IT `Statuto` (lo statuto giuridico: titolare/supplente/provvisorio,
+quello della tabella qui sopra). Ma `WinAffVSProfesseurAffectation` traduce FR
+`Affectation` → IT `Statuto` in un'altra griglia, dove significa
+**assegnazione**. Due colonne italiane con lo stesso nome e significati diversi:
+verificare sempre in quale vista si è. Vedi
+[glossario-it-fr.md](glossario-it-fr.md).
+
 ## La cattedra
 
 La cattedra associa a un docente una o più **materie**, le **classi** su cui le insegna

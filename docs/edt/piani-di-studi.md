@@ -54,11 +54,57 @@ Il monte ore è quindi **tripartito per servizio**: `H/Classe` (classe intera) +
 servizio" somma la colonna: per il Fermi **27h00 al biennio (verificato su SCI1)**,
 30 atteso al triennio.
 
+> **Tripartizione confermata 📦.** Lo schema di scambio ufficiale dichiara
+> esattamente tre durate per la coppia (piano, materia):
+> `Mef/Matiere/@DureeMinutesClasse`, `@DureeMinutesReduite`,
+> `@DureeMinutesDedoublee`. Le colonne `H/Classe`, `Ridotto` e `Sdop.` sono la resa
+> in UI di questi tre attributi — l'inferenza fatta qui il 2026-07-09
+> era corretta. Vedi [schema-scambio.md](schema-scambio.md).
+>
+> Lo schema conferma anche la **chiave del piano**: `Mef` è identificato da
+> `Formation` + `Specialite` ("*Formation+Specialite constituent la clé unique*"),
+> cioè indirizzo × anno, come dedotto dal campo Livello.
+
+> ⚠ **Attenzione, `Spec.` è ambiguo** 📦. Esistono **due** colonne italiane
+> abbreviate `Spec.`, con origini diverse:
+>
+> | Dove | IT | FR | Significato |
+> |---|---|---|---|
+> | Scheda del **piano di studi** | `Spec.` | `Spéc.` | **Specializzazione** — quella vera, = `Mef/@Specialite` |
+> | Liste **Servizi docenti / Servizi classi** | `Spec.` | `Mod.` | **Modalità di scelta** (`Modalité d'élection`) |
+>
+> La seconda è quasi certamente una svista del traduttore italiano. Il `Spec.`
+> della tabella qui sopra — che è sulla scheda del piano — è la
+> **specializzazione**. Ma prima di attribuire un significato a una colonna
+> `Spec.` incontrata altrove, guardare in quale griglia si trova. Vedi
+> [glossario-it-fr.md](glossario-it-fr.md).
+
+## Le colonne dei servizi — sciolte 📦
+
+| Colonna | Esteso IT | FR |
+|---|---|---|
+| `A` | Stato di attivazione | — |
+| `Coeff.` | Coefficiente | `Pondération` |
+| `MS` | **Modalità di scelta** | `Modalité d'élection` — codici `N/O/F/L/D/R/X` |
+| `Ridotto` | Durata con alunni ridotti | — |
+| `Sdop.` | Durata con alunni sdoppiati | — |
+
+`Coeff.` = FR `Pondération`, che nello schema di scambio è l'elemento
+`Cours/Ponderation`: è quindi la stessa quantità che scende in cascata fino
+all'attività ([attivita.md](attivita.md)).
+
+Il motore conosce **quattro** durate per il servizio previsionale, non tre:
+`ColDureeEleve`, `ColDureeClasseEntiere`, `ColDureeReduite`, `ColDureeDedoublee` —
+che corrispondono esattamente alle colonne `H/Al.`, `H/Classe`, `Ridotto`,
+`Sdop.` osservate in UI. L'enumerazione `TypeGenreDureePrev` ne distingue tre
+(`gdpClasse`, `gdpDedoublee`, `gdpReduite`): `H/Al.` è derivata, non un genere a
+sé. Coerente con lo schema di scambio, che ne esporta tre.
+
 ## Aperto / da osservare
 
-- Semantica di **Spec.** sul piano.
-- Semantica fine di **Coeff.** (quando si usa un valore ≠ 60/60?) e di **MS**
-  (modalità di scelta — materie opzionali?).
+- Semantica fine di **Coeff.**: quando si usa un valore ≠ `60/60`? (è la
+  `Pondération` del formato di scambio).
+- I sette codici di **MS** (`N/O/F/L/D/R/X`): quali sono e cosa fanno.
 - Cosa comporta un servizio **inattivo**.
 - Compilare **Ridotto/Sdop.** su un servizio (es. ING) per osservare come nascono i
   gruppi → [gruppi.md](gruppi.md).

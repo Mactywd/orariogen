@@ -14,6 +14,35 @@ La singola materia di insegnamento (Italiano, Matematica…). Punta a una
 | Disciplina | FK → Discipline | |
 | Al./Rid. | intero | Tooltip letterale: *"Numero ridotto di alunni della materia"*. Default **15**. |
 
+## Cosa aggiunge lo schema di scambio 📦
+
+```
+Matiere
+├── @Ident, @Code, @Libelle
+├── @Couleur           colore in RGB esadecimale
+├── @ID_Partenaire     identificativo nel sistema del partner
+└── Discipline (0..1)
+```
+
+- **`Matiere → Discipline` è confermato come riferimento singolo e opzionale**
+  (`0..1`), non come attributo derivato: rafforza [ADR-001](../decisioni.md)
+  (disciplina come tabella con FK in arrivo). Nota la cardinalità: una materia
+  **può non avere disciplina**.
+- **`@Couleur`** è un attributo di prima classe (RGB esadecimale) — lo stesso
+  `Couleur` compare su `Classe`, `Groupe` e `Site`. Serve alla resa grafica
+  dell'orario; da prevedere se il nostro modulo produrrà viste a griglia.
+- **`@ID_Partenaire`** è il campo pensato per l'identificativo esterno: è lì che
+  va agganciato il codice del gestionale chiamante.
+- ⚠ **Nessun `Al./Rid.` nello schema.** Il numero ridotto di alunni non viaggia
+  sulla materia nel formato di scambio: le tre durate stanno sul piano di studi
+  (`Mef/Matiere`, vedi [piani-di-studi.md](piani-di-studi.md)). Coerente con
+  [ADR-003](../decisioni.md) — `Al./Rid.` sulla materia è un **default da
+  cascata**, e i default non si esportano, si esportano i valori risolti.
+
+**Codice esterno.** La nomenclatura ministeriale italiana è incorporata in EDT
+(4364 voci): vedi [nomenclatura-sidi.md](nomenclatura-sidi.md) per usare
+`CodeSIDI` come codice materia interoperabile col SIDI.
+
 ## Il campo `Al./Rid.` — cosa NON è
 
 Il campo `Al./Rid.` **non è un flag** (classe intera vs. ridotta) e **non è un

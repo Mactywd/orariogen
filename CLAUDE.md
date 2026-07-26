@@ -25,11 +25,17 @@ docs/
     classi.md
     docenti.md
     aule.md
-    gruppi.md          (guida 📖: creati automaticamente dalle attività complesse; UI da osservare)
+    gruppi.md          classe → suddivisione → gruppo; raggruppamenti trasversali; IRC/alternativa
     piani-di-studi.md  (in corso — campi visti, semantica in parte da confermare)
     bisogni-previsionali.md  fabbisogno ore per materia e allineamenti
     attivita.md        servizio → sotto-servizio → attività, assegnazione docenti
-    vincoli.md         indisponibilità e vincoli orari docente osservati in UI; restano classi, aule, materie
+    vincoli.md         indisponibilità, vincoli orari, di materia e attività↔attività
+    schema-scambio.md  📦 lo schema XSD ufficiale Partenaire_Index V4.6 — modello dati formale
+    nomenclatura-sidi.md 📦 tabelle ministeriali MIM incorporate in EDT (indirizzi, materie, quadri orari)
+    motore-risoluzione.md 📦 come EDT risolve: pipeline, criteri, alleggerimenti
+    formato-file.md    📦 il formato binario .edt, per validare la semantica sui dati reali
+    glossario-it-fr.md 📦 IT ↔ FR ↔ EN — ⚠ contiene l'inversione gruppo/raggruppamento
+    estratti/          materiale grezzo di estrazione (NON documentazione — vedi il suo README)
   decisioni.md         ADR leggeri: decisione, alternative, motivo, data
 data/
   liceo-fermi/         dataset della scuola di esempio, in markdown tabellare
@@ -71,11 +77,15 @@ file in `data/liceo-fermi/` contiene **i dati concreti** della scuola di esempio
 - **Non inventare campi**: si documentano solo i campi effettivamente osservati
   nella UI di EDT. Ciò che è nostra estensione (es. mappatura classe di concorso) va
   segnalato come tale, non spacciato per campo EDT.
-- **Due fonti, marcate.** Oltre all'osservazione diretta della UI (fonte di
-  default) usiamo la [guida online ufficiale](https://docs.index-education.com/docs_it/it-supporto-edt-personnel-client.php)
-  di EDT. Ciò che proviene **solo dalla guida** è marcato **📖** e va confermato
-  in UI appena possibile (chiedere all'utente uno screenshot della vista
-  corrispondente); alla conferma il marcatore si toglie.
+- **Tre fonti, marcate.** Oltre all'osservazione diretta della UI (fonte di
+  default, non marcata) usiamo la [guida online ufficiale](https://docs.index-education.com/docs_it/it-supporto-edt-personnel-client.php)
+  di EDT (**📖**) e gli **artefatti dell'installazione** (**📦**: schemi XSD,
+  tabelle XML, stringhe dai binari, basi di esempio). Ciò che proviene **solo
+  dalla guida** va confermato in UI appena possibile (chiedere all'utente uno
+  screenshot della vista corrispondente); alla conferma il marcatore si toglie.
+  Gli artefatti 📦 hanno autorevolezza variabile — uno **schema XSD annotato vale
+  più di uno screenshot**, una stringa estratta da un binario vale molto meno.
+  Gerarchia completa in [ADR-009](docs/decisioni.md).
 
 ## Stato del progetto
 
@@ -113,34 +123,185 @@ prototipo un pezzo per volta. Vedi [ADR-008](docs/decisioni.md).
 
 ### Aperto / da verificare
 
-- [ ] Come EDT modella concretamente i **gruppi/sdoppiamenti**. Dalla guida 📖: non
-      si creano a mano, li genera l'**attività complessa**; resta l'esperimento ING
-      a effettivo ridotto, da fare in Orario. → `docs/edt/gruppi.md`
-- [ ] La **cascata di default** vale anche per altri campi oltre a `Al./Rid.`?
-      Candidato emerso: **Statuto → Mh/s** del docente (da confermare).
-      → `docs/edt/materie.md`, `docs/edt/docenti.md`
-- [ ] Se l'**impegno degli incarichi** docente incide sul calcolo ore o è solo
-      anagrafico. → `docs/edt/docenti.md`
-- [ ] Semantica delle colonne dei **servizi** del piano di studi (A, Coeff., MS,
-      Ridotto, Sdop., …) e del campo **Spec.** Il quadro orario si aggancia al piano
-      (confermato). → `docs/edt/piani-di-studi.md`
-- [ ] Cosa significa **TRCD** e cosa sono i **bisogni previsionali** e gli
-      **allineamenti** delle classi previsionali. → `docs/edt/classi.md`
-- [x] Vincoli di **indisponibilità docente**: rosso/giallo/verde + vincoli orari
-      numerici (`D`, `M`, `P`, `E`, `G`), osservati in UI il 2026-07-15 in
-      Orario > Docenti. → `docs/edt/vincoli.md`
-- [ ] Restano da osservare gli **altri vincoli**, necessari prima di riprendere il
-      solver: etichette troncate dei vincoli orari, indisponibilità di **classi** e
-      **aule**, vincoli di **risorsa** (occupazione simultanea di un laboratorio),
-      vincoli di **materia**. → `docs/edt/vincoli.md`, `docs/edt/aule.md`
-- [x] **Blocchi di ore consecutive** = durata dell'attività, fissata nello
-      spezzamento (`Nr attività` → Trasforma). Confermato dalla guida 📖; finestra
-      da osservare in UI. → `docs/edt/attivita.md`, `docs/edt/vincoli.md`
-- [ ] Gestione **IRC vs. attività alternativa**. Pista dalla guida 📖: attività
-      complessa / compresenza. → `docs/edt/vincoli.md`, `docs/edt/gruppi.md`
-- [ ] Se supportare gli **sdoppiamenti** o dichiararli fuori scope v1. → `docs/edt/gruppi.md`
+**Chiuso il 2026-07-26** dagli artefatti dell'installazione (📦):
+
+- [x] **Vincoli di indisponibilità docente** (già osservati in UI il 2026-07-15):
+      etichette troncate ora **complete**, terzo pennello = **`Preferenze`**,
+      `D.T.B.` = *Durata tollerata dei buchi*. → `docs/edt/vincoli.md`
+- [x] **Vincoli di materia** (12 tipi + enum a 13 valori) e **vincoli
+      attività↔attività** (11 tipi, con flag di opzionalità). → `docs/edt/vincoli.md`
+- [x] ~~**Occupazione simultanea** = gruppo di aule con `Nr > 1`~~ → **conclusione
+      sbagliata, corretta in UI**: è il campo `Numero di aule` sull'aula stessa
+      (colonna `Qtà`). Le sotto-aule sono un meccanismo separato. →
+      `docs/edt/aule.md`
+- [x] **Indisponibilità di classi e aule**: il meccanismo rosso/giallo/verde è
+      **generico sulla risorsa**. Indisponibilità e assenze condividono **una sola
+      tabella**. → `docs/edt/vincoli.md`
+- [x] **Colonne dei servizi**: `A`, `Coeff.` (= *Pondération*), `MS`, `Ridotto`,
+      `Sdop.` → `docs/edt/piani-di-studi.md`. **`Spec.`**: due colonne omonime con
+      significati diversi → `docs/edt/glossario-it-fr.md`
+- [x] **Allineamenti**: l'allineamento **genera l'attività complessa** (dichiarato
+      nello schema XSD ufficiale). → `docs/edt/schema-scambio.md`
+- [x] **Gruppi e sdoppiamenti**: `Classe → Suddivisione → Gruppo`, con
+      `Raggruppamento` trasversale a più classi. ⚠ Attenzione all'**inversione
+      terminologica IT↔FR**. → `docs/edt/gruppi.md`
+- [x] **IRC vs. attività alternativa**: modellato come **due parti della stessa
+      classe** (`_REL` / `_ALT`), non come gruppi né come compresenza. Verificato
+      sui dati. → `docs/edt/gruppi.md`
+- [x] **`Mh/s`** = *Monte ore settimanale* = FR `Apport`: monte ore contrattuale,
+      scomposto per disciplina. → `docs/edt/docenti.md`
+- [x] **Blocchi di ore consecutive** = durata dell'attività; lo spezzamento è
+      **padre/figlio** sulla stessa entità. → `docs/edt/attivita.md`
+
+**Chiuso il 2026-07-26 osservando la UI** sulla base di esempio del prodotto
+(`~/Desktop/EDT_COMPLETE/Esempio.edt`, copia di lavoro):
+
+- [x] **Confermate in UI le due griglie di vincoli** ricostruite dalle stringhe.
+      `Vincoli delle materie delle classi` è **popolata con dati reali** (19
+      righe su `2 A/R`); `Vincoli tra attività` è vuota ma il suo menu espone
+      **esattamente gli 11 tipi** previsti. → `docs/edt/vincoli.md`
+- [x] **L'opzionalità dei vincoli fra attività** è una casella **spuntata di
+      default**, con la semantica scritta in chiaro: *"può essere alleggerito
+      durante il piazzamento delle attività scartate"*. Conferma in UI della
+      strategia a due passate. → `docs/edt/motore-risoluzione.md`
+- [x] **Cosa vincola l'assegnazione di un'aula**: tre soli vincoli
+      (`Sedi distaccate`, `Indisponibilità opzionali`, `Indisponibilità`).
+      Capienza, categoria e tipologia **non sono vincoli**. → `docs/edt/aule.md`
+- [x] **Le `Tipologie` dell'aula** sono tag di dotazione a due livelli definiti
+      dall'utente, non il "tipo d'aula". Il legame didattica↔aula passa dalla
+      **classe** (`Aula preferenziale`), non dalla materia. → `docs/edt/aule.md`
+- [x] **La cascata di default vale anche sulle aule** (suffisso `(Gr.)` sui campi
+      ereditati dal contenitore). → `docs/edt/aule.md`
+- [x] **Le dieci colonne dei vincoli di materia**, decodificate dall'aiuto
+      contestuale del prodotto. `Attività in gruppo` = ordine fra ore in gruppo e
+      ore a classe intera (i quattro valori `Parties…Classe`); `Conc. Imp.` =
+      concatenazione imposta con **ritardo massimo**. La discrepanza 10-contro-12
+      si spiega: alcuni "tipi" sono valori di parametro della stessa colonna.
+      → `docs/edt/vincoli.md`
+- [x] **`MMG`** e **`MG`** sulla classe = `Massimo di mezze giornate di lavoro` e
+      `Lavorare solo mezza giornata al giorno` — **gli stessi vincoli orari del
+      docente**, applicati alla classe. → `docs/edt/classi.md`
+
+**Ancora aperto:**
+
+- [ ] ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`):
+      `data/liceo-fermi/aule.md` è progetto, non osservazione, e va creato in EDT
+      per provare i vincoli di aula *sul nostro dataset*. Il meccanismo però è
+      ormai noto dalla base di esempio. → `docs/edt/aule.md`
+- [ ] `TContrainteItalieProfReglementaire`: **unico vincolo normativo italiano**
+      cablato nel motore. **Cercato in UI senza successo** (pannello vincoli
+      docente + intero menu `Parametri`): probabile codice morto. Ultimo
+      candidato da guardare: `Parametri → Piazzamento automatico delle attività`.
+      → `docs/edt/motore-risoluzione.md`
+- [ ] La **cascata di default** oltre `Al./Rid.`: il candidato **Statuto → Mh/s**
+      resta non confermato. → `docs/edt/docenti.md`
+- [ ] Se l'**impegno degli incarichi** docente incide sul calcolo ore.
+      → `docs/edt/docenti.md`
+- [ ] **TRCD**: è la resa italiana di **TRMD**, ma lo scioglimento della sigla non
+      esiste in nessuna delle sei lingue del prodotto. Vista pesantemente francese
+      (HSA, IMP, décret 2014-940) → candidata a **fuori scope**. → `docs/edt/classi.md`
+- [ ] I quattro valori `Parties…Classe` di `TypeIncompatibiliteMatiereClasse`
+      (ordine fra ore in gruppo e ore a classe intera). → `docs/edt/vincoli.md`
+- [ ] **Decisione di scope**: supportare gli **sdoppiamenti** in v1?
+      → `docs/edt/gruppi.md`
+- [ ] **Decisione**: adottare `Partenaire_Index` V4.6 come contratto di import.
+      → `docs/edt/schema-scambio.md`
 
 ## Changelog
+
+- **2026-07-26** — **Verifica in UI sulla base di esempio del prodotto.** Copiata
+  la base demo di EDT (completa e risolta: 18 aule, 187 parti, 3 raggruppamenti,
+  984 attività piazzate) in `~/Desktop/EDT_COMPLETE/` e aperta in EDT per
+  osservare ciò che nella base del Fermi non è osservabile. Ha **confermato**
+  gran parte del lavoro sugli artefatti — le due griglie di vincoli mai viste
+  esistono e i conteggi coincidono (11 tipi attività↔attività) — e ha
+  **smentito due conclusioni**.
+  **1) L'occupazione simultanea dell'aula non è il gruppo di aule.** È il campo
+  `Numero di aule` (colonna `Qtà`), scalare e modificabile: `PALESTRE succ` ha
+  `Qtà = 2` e **zero** sotto-aule. Le sotto-aule servono a nominare gli spazi, e
+  portano una cascata di default (suffisso `(Gr.)`). Le stringhe descrivevano il
+  caso tipico, non il modello — motivo per cui [ADR-009](docs/decisioni.md) le
+  mette in fondo alla gerarchia.
+  **2) La `Tipologia` dell'aula non è il "tipo d'aula".** È un tag di dotazione a
+  due livelli definito dall'utente (`Attrezzature → PC docente, Videoproiettore`),
+  usato solo per raggruppare la lista. **Capienza, categoria e tipologia non sono
+  vincoli**: la finestra `Aule disponibili` dichiara tre soli vincoli
+  (`Sedi distaccate`, `Indisponibilità opzionali`, `Indisponibilità`). Il legame
+  didattica↔aula esiste ma passa dalla **classe** (`Aula preferenziale`), non
+  dalla materia — la relazione materia → tipo d'aula è **nostra estensione**.
+  **Confermato in UI**, con testo letterale: i tre pennelli
+  (`Indisponibilità` / `Indisponibilità opzionali` / `Preferenze`); i vincoli fra
+  attività **nascono opzionali** (casella spuntata di default) e l'alleggerimento
+  avviene *"durante il piazzamento delle attività scartate"* — cioè la strategia
+  a due passate dedotta dal motore, scritta in una finestra; `Raggruppamenti` e
+  `Gruppi` come righe distinte nella composizione dell'attività, che regge
+  l'inversione terminologica IT↔FR.
+  **Dai dati reali** della griglia dei vincoli di materia (19 righe su `2 A/R`):
+  il caso d'uso dominante è la **materia con sé stessa** (non due ore di ARTE
+  nello stesso giorno), non la relazione fra materie diverse — e la relazione è
+  **orientata**, `A→B` e `B→A` sono record distinti.
+  **Limite aggirato:** la tabella `SALLE` è cifrata nel file, ma le 18 aule sono
+  perfettamente leggibili aprendo la base in EDT.
+  **L'aiuto contestuale del prodotto** (pulsante `?` del pannello dei vincoli) ha
+  chiuso le ultime due colonne oscure con sette casi d'uso: `Attività in gruppo`
+  = ordine fra ore in gruppo e ore a classe intera — cioè i quattro valori
+  `Parties…Classe` che erano aperti dal 26 luglio mattina — e `Conc. Imp.` =
+  concatenazione imposta con ritardo massimo. Spiegata anche la discrepanza fra
+  le 10 colonne della griglia e i 12 tipi delle stringhe: alcuni "tipi" sono
+  **valori di parametro** della stessa colonna, non vincoli distinti.
+  ⚠ Nota di metodo: **l'aiuto è in inglese anche nella build italiana**, quindi
+  non è una fonte per la terminologia IT.
+  **Le classi di concorso ci sono, ma come dato.** Nella base di riferimento
+  italiana le discipline hanno per `Codice` le classi di concorso reali (`A-01`,
+  `A-22`, `A-25`, `A-28`, `A-30`, `A-49`, `A-60`, `REL`, `SOST`): non è un campo
+  dedicato, ma è **il posto dove EDT Italia si aspetta che la si metta**.
+  Verificato però che il prodotto **non incorpora la tabella ministeriale** — i
+  codici stanno solo nei dati della demo, non nei binari né in `TabellaSIDI.xml`.
+  [ADR-002](docs/decisioni.md) aggiornato di conseguenza: resta valido (relazione
+  molti-a-molti in una tabella a sé), ma la nota "è nostra estensione" era troppo
+  netta.
+  **Il vincolo normativo italiano non si trova in UI**: battuti il pannello
+  vincoli del docente (sette gruppi, tutti generici) e l'intero menu `Parametri`
+  (28 voci). Probabile codice morto.
+
+- **2026-07-26** — **Reverse engineering degli artefatti dell'installazione.**
+  EDT gira sotto Wine su questa macchina: l'installazione e le basi dati sono
+  leggibili come file. Da lì sono usciti quattro filoni, ora documentati, e una
+  nuova convenzione di fonte (**📦**, [ADR-009](docs/decisioni.md)).
+  **1) Lo schema XSD ufficiale** `Partenaire_Index` V4.6 (`docs/edt/schema-scambio.md`):
+  è un formato di *input* — trasporta anagrafica, struttura e attività da piazzare,
+  **nessun vincolo e nessun piazzamento**. Ha chiuso da solo tre domande aperte:
+  l'**allineamento genera l'attività complessa** (dichiarato testualmente), il
+  monte ore per (piano, materia) è **tripartito** (classe intera / ridotta /
+  sdoppiata — l'inferenza del 2026-07-09 era corretta), e la griglia oraria è a
+  due livelli (sequenza → posizione) su un **ciclo** che può eccedere la settimana.
+  **2) Le tabelle di lingua** del prodotto (`docs/edt/glossario-it-fr.md`): 69 888
+  stringhe italiane allineate per chiave a francese e inglese. Hanno sciolto le
+  **etichette troncate dei vincoli orari**, il nome del terzo pennello
+  (**`Preferenze`**), `D.T.B.` (*Durata tollerata dei buchi*), `Mh/s` (= FR
+  `Apport`, il monte ore contrattuale) e le colonne dei servizi. Hanno rivelato
+  un'**inversione terminologica IT↔FR** che invalidava un'ipotesi di modello:
+  «gruppo» in italiano traduce `partie`, non `groupe`.
+  **3) Il modello interno e il motore** (`docs/edt/motore-risoluzione.md`):
+  il piazzamento è una **pipeline a 7 fasi** con ottimizzazione separata, si
+  ottimizza per docenti **o** per classi mai insieme, e i vincoli sono **tutti
+  hard** con rilassamento esplicito **a quota** (non penalità). Sono emersi i
+  vincoli di **materia** (12 tipi) e **attività↔attività** (11 tipi), mai
+  osservati. Segnalato `TContrainteItalieProfReglementaire`: unico vincolo
+  normativo italiano cablato nel motore, da indagare.
+  **4) Le basi dati** (`docs/edt/formato-file.md`): il `.edt` è un contenitore
+  Delphi non compresso con 744 tabelle auto-descrittive. Decodificata la
+  collocazione (`place = giorno × 10 + rango`, validata contro `NBCOURSPLACES`).
+  Due risultati sui dati: **IRC e attività alternativa sono due parti della stessa
+  classe** (`_REL`/`_ALT`), non gruppi né compresenza — la pista della guida 📖 era
+  sbagliata; e **indisponibilità e assenze condividono una sola tabella**,
+  distinte dalla presenza della data.
+  **Anomalia trovata e da sanare:** la base del Fermi dichiara `NBSALLES = 0` —
+  **le aule non sono mai state inserite in EDT**, quindi `docs/edt/aule.md` e
+  `data/liceo-fermi/aule.md` sono progetto, non osservazione. Marcato nei file.
+  **Limite dichiarato:** la tabella `SALLE` del `.edt` è cifrata (con sei tabelle
+  di dati personali), quindi i dati delle aule restano illeggibili.
+  Materiale grezzo in `docs/edt/estratti/`.
 
 - **2026-07-26** — Messi a indice tre elementi presenti nel repo ma mai
   documentati: il **prototipo solver** CP-SAT (`scripts/genera_orario.py`,

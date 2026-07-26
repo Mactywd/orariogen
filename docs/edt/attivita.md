@@ -227,6 +227,129 @@ Conferma del modello: l'attività concreta è `(classe, materia, durata, docente
 [aula])` con attributi di piazzamento (priorità, periodicità, stato) — l'unità
 esatta su cui lavorerà il nostro solver.
 
+### Il pannello di composizione (osservato 2026-07-26)
+
+Selezionando un'attività si apre un riquadro fluttuante che ne mostra **le
+risorse impegnate**, una riga per tipo, con il conteggio a destra. Su un'attività
+della base di esempio:
+
+```
+1h00 - lunedì alle 13h00 - S
+1 spazio possibile - 17 alunni - alu.ins: 17
+
+Materie           1    LETTER - LETTERE
+Docenti           1    ALIGHIERI Dante
+Personale         0
+Raggruppamenti    0
+Classi            1    2 A/R
+Gruppi            0
+Alunni dissociati 0
+Aule              0
+Materiali         0
+```
+
+È l'elemento `Cours` dello schema di scambio visto dal vivo, e si clicca su ogni
+riga per assegnare quella risorsa (la riga `Aule` apre `Aule disponibili`, vedi
+[aule.md](aule.md)).
+
+Due cose da qui:
+
+- **`Raggruppamenti` e `Gruppi` sono righe distinte.** Conferma in UI che i due
+  livelli sono separati e non sinonimi ([gruppi.md](gruppi.md)).
+- **`1 spazio possibile`** nell'intestazione: EDT espone all'utente il numero di
+  collocazioni ammesse dall'attività — cioè il dominio residuo della variabile.
+  Un dato del solver mostrato come informazione.
+
+### Azioni sull'attività (menu contestuale)
+
+`Modifica` · `Duplica` · `Dividi` · `Cancella` · `Sospendi` · `Metti in attesa` ·
+`Blocca non sospendibili` / `Sblocca non sospendibili` · `Blocca senza spostare` /
+`Sblocca` · **`Rendi fissa` (F)** / **`Rendi variabile` (V)** · `Dettaglia` ·
+`Allinea` · `Ripristina gli orari per settimana` · `Trasforma in priorità di
+sostituzione` · `Assegna un nome al raggruppamento` · `Differenzia il
+raggruppamento per alunni variabili` · `Estrai`.
+
+La colonna `P.P.` dell'elenco porta il badge `F`/`V`: è lo stato **fissa /
+variabile**, cioè se il piazzamento dell'attività può essere spostato dal motore.
+Sono quattro livelli distinti di immobilità (fissa, bloccata-senza-spostare,
+non-sospendibile, sospesa) — più granulari del semplice booleano "pinned" che
+avremmo modellato.
+
+⚠ `Allinea` risulta disattivato con una sola attività selezionata: coerente col
+fatto che l'allineamento è una relazione fra attività.
+
+## L'attività nello schema di scambio 📦
+
+Lo schema ufficiale ([schema-scambio.md](schema-scambio.md)) dichiara `Cours`
+così:
+
+```
+Cours
+├── DureeMinutes     (1..1)   durata in minuti
+├── DureeSequences   (1..1)   durata in numero di sequenze
+├── Matiere          (1..1)   ← l'unico riferimento obbligatorio
+├── Professeur       (0..N)
+├── Groupe           (0..N)
+├── PartieDeClasse   (0..N)
+├── Classe           (0..N)
+├── Salle            (0..N)
+├── Personnel        (0..N)
+├── Materiel         (0..N)
+├── Site             (0..1)
+├── Alignement       (0..1)
+├── Libelle          (0..1)
+└── Ponderation      (0..1)
+```
+
+Cinque cose che l'osservazione in UI non poteva dare:
+
+1. **La durata è doppia e obbligatoria**: minuti *e* numero di sequenze. La
+   colonna `Durata` (`1h00`, `2h00`) ne è la resa compatta. Un'attività va quindi
+   sempre espressa nelle due unità della griglia.
+2. **La sola cosa obbligatoria è la materia.** Docente, classe e aula sono tutti
+   `0..N`: un'attività senza docente è legale nel formato. Utile a capire che
+   "docente supplementare/da definire" non è un caso speciale ma il caso normale
+   con cardinalità zero.
+3. **`Professeur` è `0..N`** → la compresenza è nel formato base. È la colonna
+   `Compr.` osservata vuota qui sopra.
+4. **`Alignement` è il legame fra attività**: attività con lo stesso allineamento
+   diventano una sola attività complessa.
+5. **`Ponderation`** è la colonna `Coeff.` — confermato 📦: `Coeff.` traduce il
+   francese `Pondération`, che è esattamente questo elemento. Scende in cascata
+   dai servizi fino all'attività.
+
+### La colonna `Sezion.` — sciolta 📦
+
+`Sezion.` è il **sezionamento dell'attività complessa**: come si distribuiscono
+docenti e raggruppamenti fra le lezioni che la compongono. Codici a 1–2 lettere
+mostrati in UI (famiglia `FicCoursComplexe_RS_*`, testo letterale):
+
+| Codice | Significato |
+|---|---|
+| `S` | `Una lezione per docente` |
+| `SQ` | `Una lezione per docente ogni 15 giorni` |
+| `SC` | `Una lezione per docente per ogni ciclo` |
+| `SP` | `Una lezione per docente, gli alunni dipendono dal periodo` |
+| `A` | `I docenti cambiano raggruppamento a metà dell'attività` |
+| `AQ` | `…e si alternano ogni 15 giorni` |
+| `AC` | `…e si alternano ad ogni ciclo` |
+
+I codici `A*` sono il caso dell'**alternanza**: due docenti che si scambiano i
+raggruppamenti a metà anno o a quindicine alterne — tipico di laboratori e
+compresenze. Il nostro modello deve poterlo esprimere, o dichiararlo fuori scope
+esplicitamente.
+
+### Lo spezzamento è padre/figlio 📦
+
+L'enumerazione interna `TypeParenteCours` ha tre valori — `CoursSimple`,
+`CoursPere`, `CoursFils` — e `TNetRelationCours` è un'**auto-relazione**. Lo
+spezzamento di un servizio in blocchi non produce quindi righe indipendenti: le
+attività figlie restano legate all'attività padre sulla **stessa entità**, non in
+una tabella separata. Da replicare nel nostro schema con una FK ricorsiva.
+
+Nota: lo schema **non trasporta il piazzamento** (nessun giorno, nessuna ora).
+Conferma che l'attività è l'input del solver e che giorno/ora sono output.
+
 ## Semantica dedotta
 
 - L'**attività** è l'unità di piazzamento del solver: (classe, materia, durata,
