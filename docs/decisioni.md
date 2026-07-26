@@ -494,3 +494,33 @@ sei no, e sono decise qui.
   ripresa.
 
 **Data.** 2026-07-26
+
+---
+
+## ADR-016 — L'osservazione di EDT è conclusa: si progetta il modello di dominio
+
+**Decisione.** Dichiarare soddisfatta la condizione di [ADR-008](decisioni.md) e
+chiudere la fase di reverse engineering. La fase successiva è la **progettazione
+del modello di dominio**, come documento di design
+([modello-dominio.md](modello-dominio.md)) prima del codice. Il modello nasce
+**autonomo dal SaaS** sostituzioni in produzione: schema proprio, nessuna tabella
+condivisa ora, con le due entità di convergenza (attività con maschera temporale,
+disponibilità con data opzionale) disegnate per l'aggancio futuro.
+
+**Alternative scartate.** (a) Costruire subito il modello solver CP-SAT: fissa la
+forma dei dati prima di averla disegnata. (b) Estendere da subito il DB del SaaS
+(entità condivisa, massimo valore di ADR-014): vincola il design al legacy e
+richiede una migrazione in produzione prima ancora di avere un modello maturo.
+(c) Chiudere prima i punti aperti residui (griglia oraria in UI, aule del Fermi):
+nessuno dei due è bloccante per il modello, e lo XSD copre la griglia con la fonte
+più autorevole disponibile.
+
+**Motivo.** ADR-008 chiedeva di capire *tutti* i vincoli prima di costruire il
+modello: l'inventario delle 308 funzionalità, lo scope di v1
+([ADR-015](decisioni.md)) e la chiusura di tutti i punti aperti non marginali lo
+soddisfano. I due punti restanti (aule mai inserite nella base del Fermi,
+estensione della cascata di default) sono dichiarati non bloccanti nello stato del
+progetto. Il prototipo `scripts/genera_orario.py` resta parcheggiato: si sblocca
+quando il modello di dominio è approvato e tradotto in codice, non prima.
+
+**Data.** 2026-07-26

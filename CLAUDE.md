@@ -42,6 +42,7 @@ docs/
     estratti/          materiale grezzo di estrazione (NON documentazione — vedi il suo README)
   decisioni.md         ADR leggeri: decisione, alternative, motivo, data
   scope-v1.md          cosa entra in v1 e cosa no — proposta da rivedere
+  modello-dominio.md   il design del modello di dominio v1 — approvato, pre-codice
 data/
   liceo-fermi/         dataset della scuola di esempio, in markdown tabellare
     README.md          parametri, dimensionamento, indice del dataset
@@ -120,12 +121,12 @@ Coperto finora (una scuola di esempio inserita in EDT):
   osservati mentre lavorano, con tempi e comportamento in caso di conflitto
   (`docs/edt/motore-risoluzione.md`).
 
-> **L'osservazione di EDT si può considerare conclusa** (2026-07-26). Restano due
-> punti aperti, entrambi marginali e nessuno dei due bloccante per il modello: le
-> aule mai inserite nella base del Fermi, e l'estensione della cascata di default.
-> La condizione posta da [ADR-008](docs/decisioni.md) per sbloccare il prototipo
-> solver è quindi **sostanzialmente soddisfatta**: è una decisione da prendere
-> esplicitamente, non da dare per acquisita.
+> **L'osservazione di EDT è conclusa** (2026-07-26), e la decisione è stata presa
+> esplicitamente con [ADR-016](docs/decisioni.md): la fase attuale è la
+> **progettazione del modello di dominio**, il cui design approvato sta in
+> [docs/modello-dominio.md](docs/modello-dominio.md). Restano due punti aperti,
+> entrambi marginali e non bloccanti: le aule mai inserite nella base del Fermi, e
+> l'estensione della cascata di default.
 
 ### Prototipo solver — parcheggiato
 
@@ -141,10 +142,10 @@ buchi, gruppi/sdoppiamenti — cioè quasi tutti i conflitti di
 OPTIMAL quindi **non dice nulla** sulla risolvibilità dell'istanza reale: è la
 risposta a un problema più facile.
 
-**Il solver resta fermo qui** finché il reverse engineering di EDT non è completo e
-non sappiamo con sicurezza quali feature vogliamo implementare. Prima si capiscono
-**tutti** i vincoli, poi si costruisce il modello — non si aggiungono vincoli al
-prototipo un pezzo per volta. Vedi [ADR-008](docs/decisioni.md).
+**Il solver resta fermo** finché il modello di dominio approvato
+([docs/modello-dominio.md](docs/modello-dominio.md)) non è tradotto in codice:
+prima la forma dei dati, poi il modello CP-SAT. Vedi [ADR-008](docs/decisioni.md)
+e [ADR-016](docs/decisioni.md).
 
 ### Aperto / da verificare
 
@@ -285,6 +286,27 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-07-26 (notte)** — **Cambio di fase: da analisi a progettazione.**
+  [ADR-016](docs/decisioni.md) chiude formalmente la condizione di ADR-008:
+  l'osservazione di EDT è conclusa, si progetta. Scritto e approvato (sezione per
+  sezione, in sessione) il **design del modello di dominio v1**
+  ([docs/modello-dominio.md](docs/modello-dominio.md)). Le scelte portanti:
+  modello **autonomo dal SaaS** con due entità di convergenza (attività con
+  maschera temporale, disponibilità con data opzionale); le **tre condizioni di
+  ADR-015 sciolte in forma** — piazzamento come entità separata con quattro
+  livelli di immobilità, vincoli come righe di dato interrogabili (ogni vincolo =
+  constraint CP-SAT + predicato + causale nominata), parte di classe con FK
+  nullable al piano di studi (`NULL` = eredita); risorsa **generica** a sei tipi
+  (le cinque di EDT + la parte) con una sola tabella di disponibilità a tre
+  livelli e data opzionale, e capacità cumulativa unica per aule e materiali;
+  griglia parametrica con **mezza giornata** e intervalli-separatori;
+  rigenerazione per periodo tramite l'entità `schedule`; attività con la sola
+  materia obbligatoria e maschera di settimane a bit; vincoli sui quattro assi con
+  la relazione **orientata** e `A = B` come caso dominante; alleggerimenti **a
+  quota**, modello lessicografico, niente funzione di costo. Prossimo passo: il
+  piano di implementazione (schema Django + dataset Fermi come primo test di
+  rappresentazione).
 
 - **2026-07-26 (sera)** — **Il motore visto girare, e la scoperta che tocca il
   SaaS.** Ultima passata su EDT: chiusi tutti i punti aperti tranne due, e
