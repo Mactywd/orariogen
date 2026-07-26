@@ -211,6 +211,10 @@ class ImposedSuccessionChecker(_SubjectChecker):
 
 @register(T.HALF_DAY_GAP)
 class HalfDayGapChecker(_SubjectChecker):
+    """Scarto minimo fra occorrenze. Deliberatamente simmetrico anche con
+    A ≠ B: lo scarto è una distanza temporale, e la distanza non ha verso.
+    L'orientamento della relazione vale per le righe di dato, non per
+    l'effetto di questo tipo."""
     TYPE, CODE = T.HALF_DAY_GAP, "subject_half_day_gap"
 
     def violations(self, state, row, a, b):
