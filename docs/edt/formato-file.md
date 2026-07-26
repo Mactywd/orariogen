@@ -85,6 +85,7 @@ l'ident):
 
 | Offset | Tipo | Contenuto |
 |---|---|---|
+| **8** | uint8 | **natura dell'attività** — vedi sotto |
 | 10–15 | 48 bit | **maschera delle settimane** (effettiva) |
 | 18–25 | 64 bit | maschera delle settimane (dominio pieno) |
 | 42–45 | uint32 | place |
@@ -95,6 +96,58 @@ l'ident):
 
 Istogramma delle durate: `1×885, 2×293, 3×41, 4×1, 8×4`. Il corso da 8 sequenze è
 `ATTIVITÀ DI SEGRETERIA` con due unità di personale — non una lezione.
+
+### 🔑 La natura dell'attività — e la scoperta che ne discende
+
+Il byte a **offset 8** classifica il record. Distribuzione sulla base di esempio:
+
+| Natura | Record | Cosa sono |
+|---|---|---|
+| 0 | 1001 | attività **annuali** |
+| 1 | 62 | **i consigli di classe** — `NBCONSEILS = 62` nell'header, quadra |
+| 2 | **141** | **= `NBAMENAGEMENTS` esatto** |
+| 4 | 20 | sostituzioni su più settimane |
+
+Le 141 di natura 2 sono esattamente le attività con **un solo bit acceso** nella
+maschera delle settimane. Da cui:
+
+> **L'`Amenagement` non è una tabella.** È una riga di `COURS` con la maschera
+> delle settimane ridotta a una settimana sola.
+
+⚠ Trappola evitata: le quattro tabelle il cui nome contiene `AMENAGEMENT` sono di
+**PRONOTE** (adattamenti PDP/PEI per alunno) e sono **tutte a zero record**.
+L'aménagement dell'orario non è lì. Vedi la convenzione sul binario condiviso in
+[moduli-e-scope.md](moduli-e-scope.md).
+
+### 🔑🔑 Sostituzione e spostamento settimanale sono lo stesso atto
+
+`RELATIONCOURSSUBSTITUT` (161 record) lega sostituto → originale. Verificato su
+**tutti e 161**:
+
+- i sostituti sono **esattamente** le nature 2 + 4 (141 + 20);
+- gli originali sono **161/161 annuali** (natura 0);
+- **159/161 cambiano docente**, a parità di **classe (161/161)** e di **aula
+  (161/161)**.
+
+Cioè una supplenza è: *la stessa lezione, della stessa classe, nella stessa aula,
+in una sola settimana, con un docente diverso* — più `ANNULATIONCOURS`, che
+sopprime l'occorrenza annuale sottostante (112 dei 122 originali).
+
+`REMPLACEMENTLONG` (3 record) è la sola **testata**, decodificata come
+`(ident ABSENCERESSOURCE, docente supplente, data inizio, data fine)` e verificata:
+le assenze 407–415 del docente **37**, supplente **100** — gli stessi 37→100 dei 20
+corsi multi-settimana. **Le ore restano righe di `COURS`**: la testata raggruppa,
+non sostituisce.
+
+**Implicazione, la più consequenziale del progetto.** Il committente ha già un SaaS
+di sostituzioni in produzione. Se il generatore adotta questo modello, generatore e
+sostituzioni **parlano la stessa lingua** invece di essere due sistemi che si
+scambiano dati. Vedi [ADR-014](../decisioni.md).
+
+**Due sottoprodotti.** `MODIFICATIONCOURS` **non** è una tabella di eccezioni: è un
+log **1:1 con `COURS`** (1224/1224). E i 62 record di natura 1 — nessun docente, una
+classe più un'aula, zero settimane accese — sono i **consigli di classe**, che
+condividono la tabella delle attività.
 
 ### La collocazione: `place = giorno × 10 + rango`
 

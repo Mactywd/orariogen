@@ -25,6 +25,8 @@ Estratti il 2026-07-26 da EDT Monoposto 2026.1.3 installato sotto Wine.
 | `modello-del-tempo.md` | Griglia oraria, suddivisioni sub-orarie, intervalli, mezza giornata, mensa, calendario, periodi, periodicità, sedi | [`tempo-e-calendario.md`](../tempo-e-calendario.md) |
 | `risorse-e-colonne.md` | Personale, materiali, incarichi; le ~590 colonne visualizzabili sulle risorse | [`risorse.md`](../risorse.md) |
 | `moduli-adiacenti.md` | Sostituzioni, colloqui, consigli di classe, `Estrai`, import/export; confine EDT ↔ PRONOTE | [`moduli-e-scope.md`](../moduli-e-scope.md) |
+| `vincoli-aperti.md` | `Fractionnable`/`P.P.`, `Cours isolés`, `Interclasse`, scala e default del peso didattico | [`vincoli.md`](../vincoli.md), [`moduli-e-scope.md`](../moduli-e-scope.md) |
+| `motore-punti-aperti.md` | I «punti» degli alleggerimenti; `Amenagement` ≡ sostituzione sul modello dati; aree mobile, intervalli, spostamento fra sedi | [`formato-file.md`](../formato-file.md), [`motore-risoluzione.md`](../motore-risoluzione.md), [`tempo-e-calendario.md`](../tempo-e-calendario.md) |
 | `parse_xsd.py` | Lo script che produce il dump dello schema | — |
 | `extract_strings.py` | Lo script che riproduce `it_fr_en.tsv` dalle tabelle di lingua della DLL | — |
 

@@ -94,8 +94,22 @@ non può essere spezzata a cavallo di una pausa.
 
 Sono anche l'**ancora temporale dei cambi di sede** (vedi sotto).
 
-⚠ Da verificare: se un intervallo occupi una `Place` propria o sia solo un confine
-fra due fasce adiacenti. Lo XSD non ha un concetto di *récréation*.
+**🔑 Chiuso: è un separatore, non una `Place`.** Era aperto se l'intervallo
+consumasse un rango della griglia. Non lo consuma. La tabella `RECREATION` ha **due
+soli record** — etichetta più indice di rango (`Intervallo del mattino` = 2,
+`Intervallo del pomeriggio` = 4) — mentre le dieci sequenze coprono 08:00–18:00.
+
+Prova sui dati: i ranghi **2 e 4 sono fra i più occupati** della base (168 e 162
+attività). Se l'intervallo consumasse un rango, sarebbero vuoti. L'unico rango
+vuoto è il **6**, che è la mensa. Le stringhe concordano: le attività stanno «**a
+cavallo** dell'intervallo», e l'utente «sposta le **linee gialle**» — è un confine
+disegnato fra due ranghi.
+
+Il vincolo che ne discende è però **hard**, con eccezione per classe
+(`NONRESPECTCLASSERECREATION`) — vedi [vincoli.md](vincoli.md).
+
+⚠ In italiano «intervallo» traduce **due** parole francesi diverse: `récréation`
+(questa) e `interclasse`. Vedi [glossario-it-fr.md](glossario-it-fr.md).
 
 ### La linea di mezza giornata
 
@@ -269,20 +283,41 @@ alla griglia li cancellano.
 `NBCOURS = 984`. Circa un'eccezione ogni sette attività.
 
 **Per noi, molto rilevante.** È esattamente il livello a cui vive una sostituzione o
-uno spostamento puntuale — il dominio del SaaS già in produzione. EDT lo modella
-come **layer separato sovrapposto**, non come modifica della ricorrenza. Vale la
-pena adottare la stessa separazione: `attività` (ricorrente) + `eccezione`
-(datata). ⚠ Da chiarire se in EDT `Amenagement` e sostituzione siano la stessa
-tabella.
+uno spostamento puntuale — il dominio del SaaS già in produzione.
+
+### 🔑 Chiuso: è la stessa struttura della sostituzione — e non è un layer
+
+Era aperto se `Amenagement` e sostituzione fossero la stessa tabella. **Lo sono**, e
+la risposta corregge anche il modo in cui avevo descritto l'`Amenagement`.
+
+Non è un «layer separato sovrapposto». È **una riga di `COURS`** come tutte le
+altre, distinta solo da due cose: il byte di **natura** (offset 8) e una **maschera
+delle settimane con un solo bit acceso**. Le 141 attività di natura 2 sono
+esattamente le `NBAMENAGEMENTS` dichiarate nell'header.
+
+E i sostituti di `RELATIONCOURSSUBSTITUT` sono **esattamente** quelle stesse nature:
+una supplenza è la stessa lezione, stessa classe, stessa aula, **una sola
+settimana**, docente diverso — più `ANNULATIONCOURS` che sopprime l'occorrenza
+annuale. Verifica completa sui 161 record in
+[formato-file.md](formato-file.md).
+
+**Quindi la separazione da adottare non è «ricorrenza + eccezione datata», ma una
+sola entità attività con una maschera temporale.** L'eccezione è il caso limite
+della ricorrenza, non un'entità diversa. Vedi [ADR-014](../decisioni.md).
 
 ## Le sedi e il tempo di spostamento
 
 Esiste sempre una sede `Principale`, non cancellabile. Le `Opzioni di trasferimento
 di sede` sono configurate separatamente per **classi** e per **docenti/personale**:
 
+🔑 **La durata è per coppia di sedi e orientata.** Era aperto se fosse un parametro
+globale: non lo è. La griglia ha le colonne `Sede A` · `Sede B` · **`Verso`** ·
+`Durata`, quindi A→B e B→A possono costare diverso — il che è realistico (salita,
+traffico, senso unico) e va replicato: una matrice, non uno scalare.
+
 | Leva | Dettaglio |
 |---|---|
-| `Durata` | il tempo di spostamento, parametrizzato |
+| `Durata` | il tempo di spostamento, **per coppia orientata di sedi** |
 | `Nelle pause` | il cambio può essere confinato alle pause/intervalli |
 | `Numero massimo di cambi di sede` | `per giorno` · `per settimana` · `per ciclo` |
 

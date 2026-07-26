@@ -204,13 +204,43 @@ vincoli ulteriori.
 | Colonna | Cosa suggerisce | Priorità |
 |---|---|---|
 | **`ProfHeuresP1/P2/P3`** — Priorità 1/2/3 | un sistema di priorità **numerato** sul docente. ⚠ Molto probabilmente sono le **priorità di sostituzione** (`Priorità 1/2/3` per docente × fascia, vedi [moduli-e-scope.md](moduli-e-scope.md)), non un parametro del piazzamento — da confermare | media |
-| **`Fractionnable`** (P.P. / P.F.) | proprietà di piazzamento, probabile «spezzabile / non spezzabile» sul blocco di ore | media |
-| **`Cours isolés`** — Attività isolate | contatore/vincolo sulle ore singole non concatenate; è anche un criterio di ottimizzazione | media |
-| **`Interclasse`** | la ricreazione come colonna propria, forse separazione fra due attività adiacenti | media |
+| ~~**`Fractionnable`** (P.P. / P.F.)~~ | **chiuso**: è `P.P.` = *Proprietà di Piazzamento* = `Fascia fissa`/`variabile`; `P.F.` è la stessa colonna in inglese. Non un vincolo nuovo → [moduli-e-scope.md](moduli-e-scope.md) | — |
+| ~~**`Cours isolés`**~~ | **chiuso**: criterio di ottimizzazione + contatore, **mai un vincolo** → [vincoli.md](vincoli.md) | — |
+| ~~**`Interclasse`**~~ | **chiuso**: falso amico, significa *intervallo/ricreazione*; vincolo hard a tre entità → [vincoli.md](vincoli.md) | — |
 | **`Retard de service`** — Permessi / arretrato di servizio | debito/credito ore da recuperare | bassa |
 | `Salle NbProf` / `NomsProfs` | quanti e quali docenti usano un'aula | bassa — utile per **inferire** l'aula di fatto dedicata a una disciplina, senza dichiararla |
 | `Rempliss. Max/Min/Moy` | riempimento dell'aula | bassa — probabilmente solo diagnostico |
 | `Prof NatureSupport` / `ModAffectation` / `Code/Echelon/DateGrade` | stato giuridico e carriera, terminologia HR francese | **fuori scope** |
+
+## 🔑 Le cinque risorse, viste sui dati (2026-07-26)
+
+Le cinque risorse erano state ricostruite dalle stringhe **senza vederle mai usate**.
+Il pannello di riepilogo di una selezione di 27 attività le ha mostrate tutte,
+contate:
+
+```
+Materie 10   ·   Docenti 10   ·   Classi 1 (1 A/R: 27)
+Raggruppamenti 0   ·   Gruppi 0   ·   Alunni dissociati 0
+Aule 1        LAB. LINGUISTICO  1
+Personale 1   Guglielmi Marco   3
+Materiali 3   PC portatile      4
+```
+
+**Personale e materiali non sono teoria**: in una base reale esistono e sono
+agganciati alle attività. Lo stesso riquadro riappare nel risolutore passo-passo,
+dove le risorse **in conflitto diventano rosse** — quindi il conteggio per risorsa è
+una struttura ricorrente del prodotto, non una vista isolata.
+
+### 🔑 L'aula è l'eccezione, non un attributo di ogni lezione
+
+Su 27 attività di una classe intera, **una sola ha un'aula** (il laboratorio
+linguistico). Nella base di esempio le aule si assegnano solo dove servono davvero —
+laboratorio, palestra — e tutto il resto vive implicitamente nell'aula della classe
+(`Aula preferenziale`, vedi [aule.md](aule.md)).
+
+Indicazione forte per il modello: **l'aula è un'eccezione dichiarata**, non una
+colonna obbligatoria dell'attività. Un modello che pretende un'aula per ogni lezione
+si crea da solo un problema di assegnazione che la scuola non ha.
 
 ## Cosa resta da verificare in UI
 
@@ -222,9 +252,7 @@ vincoli ulteriori.
    materiale con quantità 2 su 3 attività simultanee: il piazzamento lo rifiuta?
 4. **`ProfHeuresP1/P2/P3`**: esiste un pannello «Priorità» sulla scheda docente, ed
    è quello delle sostituzioni o del piazzamento?
-6. **`Fractionnable` (P.P./P.F.)**: su quale entità compare e cosa valgono i due
-   valori.
-7. **`Cours isolés` / `Interclasse`**: sono colonne aggiuntive della griglia dei
-   vincoli che non avevamo censito?
-8. Che in EDT Italia le voci **IMP / PACTE / TRMD** siano assenti o disattivate —
+5. ~~`Fractionnable` / `Cours isolés` / `Interclasse`~~ — **chiusi il 2026-07-26**,
+   vedi la tabella sopra. Nessuno dei tre era un vincolo non censito.
+6. Che in EDT Italia le voci **IMP / PACTE / TRMD** siano assenti o disattivate —
    chiuderebbe formalmente il punto.

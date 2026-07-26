@@ -330,3 +330,60 @@ Ordini di grandezza dalla base di esempio di EDT: **187 suddivisioni interne con
   `partie`, non `groupe`. Vedi [glossario-it-fr.md](edt/glossario-it-fr.md).
 
 **Data.** 2026-07-26
+
+---
+
+## ADR-014 — Una sola entità attività, con maschera temporale: la sostituzione non è un'entità a parte
+
+**Decisione.** Modelliamo l'attività come **una sola entità** portatrice di una
+maschera delle settimane. Uno spostamento puntuale e una **sostituzione** non sono
+tipi diversi: sono la stessa entità con la maschera ridotta a una settimana, più un
+riferimento all'attività annuale che rimpiazzano e la soppressione di quella
+occorrenza.
+
+**Alternative scartate.**
+
+- *Ricorrenza + tabella di eccezioni datate.* È il modello che avevo dedotto e
+  scritto in [tempo-e-calendario.md](edt/tempo-e-calendario.md) prima di guardare i
+  dati. Sembra più pulito, ma raddoppia le entità e costringe a duplicare ogni
+  vincolo: uno per le lezioni ricorrenti, uno per le eccezioni.
+- *Sostituzione come entità del modulo supplenze, separata dall'orario.* È il
+  confine naturale fra i due prodotti, e sarebbe la scelta di default. È proprio
+  quella che i dati smentiscono.
+
+**Motivo.** Verifica sui 161 record di `RELATIONCOURSSUBSTITUT` della base di
+esempio ([formato-file.md](edt/formato-file.md)):
+
+- i sostituti sono **esattamente** le attività con maschera a una settimana
+  (nature 2 e 4, 141 + 20 = 161);
+- gli originali sono **161/161** annuali;
+- **159/161 cambiano solo il docente**, a parità di classe (161/161) e aula
+  (161/161).
+
+Cioè, nel modello dati di EDT, **sostituire un docente e spostare un'ora per una
+settimana sono lo stesso atto**. E le 141 attività di natura 2 coincidono al record
+con il `NBAMENAGEMENTS` dichiarato nell'header: non è un'interpretazione, è
+un'identità.
+
+**Perché ci riguarda più che EDT.** Il committente ha **già un SaaS di sostituzioni
+in produzione**. Se il generatore adotta questo modello, generatore e sostituzioni
+condividono l'entità invece di scambiarsi dati: una supplenza inserita nel SaaS è
+già un'attività leggibile dal solver, e un orario rigenerato non invalida le
+supplenze in corso. Se invece li teniamo separati, ogni funzione che tocca entrambi
+va scritta due volte.
+
+**Conseguenze.**
+
+- La partecipazione risorsa↔attività **non è booleana ma temporale**: la maschera
+  compare anche per singola relazione in `RELATIONCOURSRESSOURCE`.
+- Serve un campo **natura** (o equivalente) sull'attività, e una relazione
+  *sostituisce* verso l'attività annuale.
+- Serve una **soppressione dell'occorrenza** annuale distinta dalla cancellazione
+  dell'attività (in EDT: `ANNULATIONCOURS`).
+- La supplenza lunga ha una **testata** che raggruppa (in EDT: `REMPLACEMENTLONG`
+  = assenza + supplente + intervallo di date), ma **le ore restano attività**: la
+  testata raggruppa, non sostituisce.
+- ⚠ Da decidere al momento dell'integrazione: se il SaaS esistente possa adottare
+  questo modello o se serva un adattatore. Non è una decisione presa qui.
+
+**Data.** 2026-07-26

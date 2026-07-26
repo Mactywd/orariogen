@@ -236,9 +236,32 @@ essenzialmente gratuite una volta che il modello esiste.
 ### Le colonne della lista attività
 
 Osservate nella stessa schermata, utili come conferma del modello:
-`Durata` · `Giorno` · `Docente` · `Materia` · `Modalità di scelta` · `Classe` ·
+`Durata` · `Giorno` · **`P.P.`** · `Freq.` · `Stato` · **`S.P.`** · **`Nr G.`** ·
+`Sezion.` · `Docente` · `Materia` · `Modalità di scelta` · `Classe` ·
 `Sett. App.` · `Alu.` · `Nr A.` · `Aula` · `Sede` · `Int.` · `Periodicità` ·
 `Compr.` · `Coeff.` · `Alu. Var.` · `Tipologia`.
+
+Quattro sigle sciolte 📦 (le prime due sono **scoperte**, non conferme):
+
+| Colonna | Chiave / FR | Significato |
+|---|---|---|
+| **`S.P.`** | `NbPlacesLibresCourt` / `Nb. P.` | *«Numero di fasce orarie possibili per il piazzamento dell'attività nel rispetto di tutti i vincoli»* — **la dimensione del dominio**, vedi [motore-risoluzione.md](motore-risoluzione.md) |
+| **`Nr G.`** | `NbJoursLibresCourt` / `Nb. J.` | *«Numero di giorni possibili per l'attività nel rispetto di tutti i vincoli»* |
+| **`P.P.`** | `FractionnableCourt` / `P.P.` (EN `P.F.`) | **Proprietà di Piazzamento**: *«influisce sulla collocazione dell'attività: fissa o variabile»* — il badge `F` è `Fascia fissa`, ed è il default |
+| **`Int.`** | `InterclasseLong` / `Récréation` | **Intervallo** — falso amico, vedi [vincoli.md](vincoli.md) |
+
+⚠ Su `P.P.` la premessa era doppiamente sbagliata. Non sono due colonne `P.P.` e
+`P.F.`: è **la stessa colonna in due lingue** (IT/FR `P.P.`, EN `P.F.`). E non
+significa «Parte Principale/Finale»: è `Fractionnable`, cioè il nome interno di
+`Fascia fissa` / `Fascia variabile` già documentato in
+[tempo-e-calendario.md](tempo-e-calendario.md) — **non è un vincolo nuovo**, è la
+feature esclusa da [ADR-010](../decisioni.md).
+
+E c'è una distinzione che l'italiano fa e il francese no: **frazionare** (spezzare
+sui *periodi*, questa colonna) contro **sezionare** (spezzare la *durata*, cioè lo
+spezzamento padre/figlio di [attivita.md](attivita.md)). Due meccanismi diversi con
+nomi vicini. ⚠ Terza collisione di sigla: `Type_Contrainte_RS_LegendePP` è
+`Peso didatt.`, un altro `PP` ancora.
 
 Due valori istruttivi:
 

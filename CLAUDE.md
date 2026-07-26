@@ -111,6 +111,16 @@ Coperto finora (una scuola di esempio inserita in EDT):
 - L'intera catena **Preparazione → Orario**: ripartizione puntuale (18 docenti a
   `+/- = 0`) e creazione delle attività — **284 attività / 288h00**, tutte "Non
   piazzata", in Orario > Attività (`docs/edt/attivita.md`).
+- **Il motore in esecuzione**: piazzamento automatico e risolutore passo-passo
+  osservati mentre lavorano, con tempi e comportamento in caso di conflitto
+  (`docs/edt/motore-risoluzione.md`).
+
+> **L'osservazione di EDT si può considerare conclusa** (2026-07-26). Restano due
+> punti aperti, entrambi marginali e nessuno dei due bloccante per il modello: le
+> aule mai inserite nella base del Fermi, e l'estensione della cascata di default.
+> La condizione posta da [ADR-008](docs/decisioni.md) per sbloccare il prototipo
+> solver è quindi **sostanzialmente soddisfatta**: è una decisione da prendere
+> esplicitamente, non da dare per acquisita.
 
 ### Prototipo solver — parcheggiato
 
@@ -211,20 +221,42 @@ prototipo un pezzo per volta. Vedi [ADR-008](docs/decisioni.md).
       indipendente**, la causale di diagnostica *"ordine delle attività in gruppo
       rispetto alle attività a classe intera non rispettato"*. → `docs/edt/diagnostica.md`
 
+**Chiuso il 2026-07-26 (sera) — l'ultima passata su EDT:**
+
+- [x] **Il motore visto girare.** Reinserite 27 attività (una classe intera) in un
+      orario pieno: **27/27, zero scarti, ~10–15 s**; una singola attività, ~2 s.
+      Quattro fasi dichiarate mentre girano, progresso parziale visibile,
+      **interrompibile**. → `docs/edt/motore-risoluzione.md`
+- [x] 🔑 **Il risolutore passo-passo**, osservato end-to-end. Il costo di una mossa
+      è dichiarato **per nome** (le lezioni con giorno, ora, materia, docente,
+      classe), le risorse in conflitto diventano rosse, e le attività scacciate
+      diventano una **coda di lavoro** con cursore. Ogni passo reversibile, commit
+      finale. → `docs/edt/motore-risoluzione.md`
+- [x] 🔑 **`S.P.` e `Nr G.` sono la dimensione del dominio**, ricalcolata contro lo
+      stato corrente e mostrata in una colonna ordinabile. Diagnostica preventiva
+      **gratuita**. → `docs/edt/motore-risoluzione.md`, `docs/edt/diagnostica.md`
+- [x] I **`punti`** degli alleggerimenti **non sono un punteggio**: sono punti di
+      *peso didattico* (`points` → IT `pesi`). Cade l'ultimo dubbio: **in EDT non
+      esiste alcuna funzione di costo numerica**. → `docs/edt/motore-risoluzione.md`
+- [x] 🔑 **`Amenagement` e sostituzione sono la stessa struttura**: una riga di
+      `COURS` con maschera a una settimana. Verificato sui 161 record di
+      `RELATIONCOURSSUBSTITUT`. → [ADR-014](docs/decisioni.md),
+      `docs/edt/formato-file.md`
+- [x] **Peso didattico**: default **1** (non 0), `Totale = Peso × Durata`, quattro
+      tetti d'istituto **tutti a `nessuno`**; e il totale è **per alunno**, non per
+      classe. → `docs/edt/vincoli.md`
+- [x] `Fractionnable`/`P.P.` = *Proprietà di Piazzamento* (fascia fissa/variabile,
+      già fuori scope); `Cours isolés` = **criterio**, non vincolo; `Interclasse` =
+      **intervallo**, falso amico, ma vincolo hard. → `docs/edt/vincoli.md`
+- [x] L'**intervallo è un separatore**, non una `Place`; lo **spostamento fra sedi**
+      è per **coppia orientata**. → `docs/edt/tempo-e-calendario.md`
+
 **Ancora aperto:**
 
 - [ ] ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`):
       `data/liceo-fermi/aule.md` è progetto, non osservazione. → `docs/edt/aule.md`
 - [ ] La **cascata di default** oltre `Al./Rid.`: il candidato **Statuto → Mh/s**
       resta non confermato. → `docs/edt/docenti.md`
-- [ ] Il significato dei **`punti`** nella finestra degli alleggerimenti: l'unico
-      indizio di un punteggio in un motore che altrove usa solo quote.
-      → `docs/edt/motore-risoluzione.md`
-- [ ] La **scala dei pesi didattici** e i valori di default. → `docs/edt/vincoli.md`
-- [ ] Se `Amenagement` (eccezione per settimana) e **sostituzione** siano la stessa
-      tabella. → `docs/edt/tempo-e-calendario.md`
-- [ ] `Fractionnable` (P.P./P.F.), `Cours isolés`, `Interclasse`: colonne che
-      potrebbero essere vincoli non censiti. → `docs/edt/risorse.md`
 - [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
       `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
       CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
@@ -240,6 +272,7 @@ motivazioni in [docs/decisioni.md](docs/decisioni.md).
 | ✅ | **Peso didattico** delle materie | [ADR-011](docs/decisioni.md) |
 | ❌ | **Collocazione per periodo** (`fascia variabile`) — si **rigenera** a ogni periodo | [ADR-010](docs/decisioni.md) |
 | ❌ | **`Partenaire_Index`** come formato di import | [ADR-012](docs/decisioni.md) |
+| ✅ | **Una sola entità attività** con maschera temporale: la sostituzione **non** è un'entità a parte | [ADR-014](docs/decisioni.md) |
 
 Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
 
@@ -249,6 +282,84 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-07-26 (sera)** — **Il motore visto girare, e la scoperta che tocca il
+  SaaS.** Ultima passata su EDT: chiusi tutti i punti aperti tranne due, e
+  l'osservazione del prodotto si può considerare **conclusa**.
+  **1) Il motore all'opera.** Esperimento sulla base di esempio: sospese le **27
+  attività di una classe intera** da un orario per il resto pieno — l'istanza
+  difficile, non quella facile — e rilanciato il calcolo. **27/27, zero scarti, in
+  ~10–15 secondi**; una singola attività, ~2 s. Le **quattro fasi sono dichiarate
+  mentre girano** (`Fase calcolo (n / 4)` più percentuale interna), la prima passata
+  piazza circa metà e si ferma, il grosso lo fa la seconda; `Lancia il calcolo`
+  diventa **`Interrompi`** e ciò che è già piazzato resta.
+  **2) 🔑 EDT espone la dimensione del dominio.** Le colonne `S.P.` e `Nr G.` — che
+  a orario pieno valgono quasi sempre `1` — si accendono appena si sospende
+  qualcosa. Tooltip letterale: *«numero di **fasce orarie possibili** per il
+  piazzamento dell'attività **nel rispetto di tutti i vincoli**»*. È il dominio
+  residuo della variabile, **ricalcolato contro lo stato corrente** (sospendendo una
+  lezione salgono i vicini, richiudendo il buco riscendono), messo in una colonna
+  ordinabile. Sui dati: l'ora singola a 21 collocazioni, il blocco da 3h00 a 6, la
+  religione in compresenza a 4, le ore `Q1`/`Q2` a 34 perché vivono in due
+  quadrimestri. **Per noi è gratis** — il solver quel numero lo calcola comunque — e
+  ordinando per `S.P.` crescente si ottiene *prima* del calcolo la lista di cosa sta
+  per diventare impiazzabile.
+  **3) 🔑 Il risolutore passo-passo, end-to-end.** Tre pannelli affiancati: la
+  scheda dell'attività (con il conto di **tutte e cinque** le risorse), la griglia
+  annotata astratta, e **l'orario reale del docente** accanto — la mappa delle
+  decisioni vicino al contesto che le rende comprensibili. Cliccando una cella
+  grigia, il costo è dichiarato **per nome**: non «3 conflitti» ma le tre lezioni con
+  giorno, ora, materia, docente e classe — e fra queste la MATEMATICA di un altro
+  docente, perché il conflitto passa dalla **classe**, non dal docente. Intanto **le
+  risorse in conflitto diventano rosse** nel pannello di sinistra: la finestra dice
+  anche *su quale* delle cinque si sta consumando. Premuto `Piazza`, le tre scacciate
+  diventano una **coda di lavoro con cursore** e tutta la finestra si riconfigura
+  attorno alla prima (cambia perfino l'orario mostrato a destra), con `[1° step]`,
+  `Indietro` e commit finale `Conferma tutti gli step`. La scoperta non è
+  l'algoritmo — quello si sapeva — ma che **è esibibile**: una ricerca a catena si
+  mostra a un umano un nodo per volta, perché a ogni nodo il costo è espresso in
+  entità che l'utente conosce.
+  **4) 🔑🔑 `Amenagement` e sostituzione sono la stessa cosa.** Il byte a offset 8
+  di `COURS` è la **natura** dell'attività: 0 = annuale (1001), 1 = **consigli di
+  classe** (62, e `NBCONSEILS = 62`), 2 = **141** che è esattamente
+  `NBAMENAGEMENTS`, 4 = 20. Le 141 sono le attività con **un solo bit** nella
+  maschera settimane. Quindi l'`Amenagement` **non è una tabella**: è una riga di
+  `COURS` con la maschera ridotta. E i 161 record di `RELATIONCOURSSUBSTITUT` lo
+  confermano: i sostituti sono **esattamente** le nature 2+4, gli originali
+  **161/161 annuali**, e **159/161 cambiano solo il docente** a parità di classe
+  (161/161) e aula (161/161). **Sostituire un docente e spostare un'ora per una
+  settimana sono lo stesso atto sul modello dati** → [ADR-014](docs/decisioni.md).
+  Riguarda direttamente il **SaaS di sostituzioni già in produzione**: adottando
+  questo modello i due sistemi condividono l'entità invece di scambiarsi dati.
+  ⚠ Trappola evitata: le quattro tabelle `*AMENAGEMENT*` sono di **PRONOTE** (PDP/PEI)
+  e tutte a zero record.
+  **5) I «punti» non erano un punteggio.** Chiuso da due ricerche indipendenti e
+  convergenti: sono i suffissi singolare/plurale di uno spinner, e la traduzione IT
+  di `points` è **`pesi`** — punti di *peso didattico*. Cade l'ultima riserva: **in
+  EDT non esiste alcuna funzione di costo numerica.** Il nostro modello dev'essere
+  lessicografico.
+  **6) Peso didattico, i numeri veri.** Osservato in UI: default **`1`** (non 0),
+  `Totale = Peso × Durata`, e **quattro** tetti d'istituto — mattino, pomeriggio,
+  giornata, settimana — **tutti a `nessuno`**. ⚠ Cioè in una base completa, risolta
+  e messa a punto a mano, la funzione **è spenta**: ridimensiona
+  [ADR-011](docs/decisioni.md), che l'ha messa in v1. 🔑 E un dettaglio non cercato:
+  il totale di classe (33) è **1 in meno** della somma delle materie (34), e la
+  differenza è `ALTERNATIVA` — **il peso si misura per alunno, non per classe**, il
+  che conferma sui dati il modello `_REL`/`_ALT` di `gruppi.md`.
+  **7) Tre colonne che sembravano vincoli e non lo erano.** `P.P.` = *Proprietà di
+  Piazzamento* (⚠ e `P.F.` non è una seconda colonna: è la stessa in inglese) =
+  fascia fissa/variabile, già fuori scope; `Cours isolés` = **criterio di
+  ottimizzazione**, con definizione operativa esatta e prova negativa solida (non
+  compare in nessuna causale di diagnostica); `Interclasse` = **falso amico**,
+  significa *intervallo*, ed è un vincolo hard a tre entità. Chiusi anche:
+  l'**intervallo è un separatore, non una `Place`** (prova: i ranghi 2 e 4 sono fra
+  i più occupati), lo **spostamento fra sedi è per coppia orientata**, e `Aree
+  mobile` è il portale mobile di PRONOTE.
+  **⛔ Una traduzione italiana dice il contrario.** `Memorizza le attività che
+  saranno spostate` in francese è `Réinitialiser la famille des cours déplacés`.
+  Avevo documentato la casella come opzione di tracciabilità: **sbagliato**,
+  corretto. Nuova regola operativa: **quando IT e FR divergono, vince il francese**.
+  → `docs/edt/glossario-it-fr.md`
 
 - **2026-07-26** — **Il motore, il tempo e le risorse mancanti.** Fino a qui
   avevamo documentato bene **cosa EDT sa rappresentare** (dati e vincoli) e quasi

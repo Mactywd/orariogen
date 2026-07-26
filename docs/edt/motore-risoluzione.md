@@ -39,13 +39,33 @@ Analisi
     Lancia l'analisi dei vincoli
 Piazzamento
     Lancia un piazzamento automatico            Ctrl+G
+    Passa alla modalità diagnostica
+    Trova una collocazione
+    Cerca un'altra collocazione                    (grigia)
+    Sospendi                                          ▸
+    Metti in attesa le attività selezionate
 Risoluzione
     Piazza le attività scartate
     Trova una soluzione...                            ▸
+        ... spostando 1 attività          Ctrl+Shift+1
+        ... spostando 2 attività          Ctrl+Shift+2
+        ... spostando 3 attività          Ctrl+Shift+3
 Ottimizzazione
     Ottimizza gli orari dei docenti
     Ottimizza gli orari delle classi
 ```
+
+*(Trascrizione completata il 2026-07-26 su un secondo passaggio: la prima
+osservazione aveva colto solo le voci di intestazione.)* Le voci aggiunte dicono
+qualcosa sul modello:
+
+- **`Trova una collocazione`** / **`Cerca un'altra collocazione`** sono due comandi
+  distinti: il secondo è grigio finché l'attività non è già piazzata. Cioè *«dammi
+  un posto»* e *«dammene un altro»* sono operazioni diverse.
+- **`Metti in attesa`** materializza in un comando lo stato `In attesa`, uno dei
+  quattro stati dell'attività ([diagnostica.md](diagnostica.md)).
+- Il sottomenu di `Trova una soluzione...` è **la profondità della catena**:
+  1, 2 o 3 spostamenti, con scorciatoia dedicata a ciascuna.
 
 Cosa aggiunge l'osservazione rispetto alla ricostruzione dalle stringhe:
 
@@ -159,6 +179,67 @@ letterale che indica il passo successivo:
 > le attività scartate». EDT cercherà delle soluzioni alle attività scartate
 > attraverso calcoli più approfonditi."*
 
+### 🔑 Il calcolo osservato mentre gira (2026-07-26)
+
+Esperimento sulla base di esempio (984 attività tutte piazzate): **sospese le 27
+attività della classe `1 A/R`** — cioè una classe intera tolta da un orario per il
+resto pieno — ed estratte solo quelle. È l'istanza difficile, non quella facile:
+reinserire in uno spazio saturo.
+
+| Momento | Estratte piazzate | Totale base |
+|---|---|---|
+| `Fase calcolo (1 / 4)` | 13 / 27 | 962 |
+| `Fase calcolo (2 / 4)` — 18% | 25 / 27 | 974 |
+| fine | **27 / 27**, 0 scartate | 976 + 8 bloccate = 984 |
+
+**Risultato: nessuno scarto, ~10–15 secondi.** Un secondo esperimento con **una
+sola** attività da reinserire: ~2 secondi.
+
+Tre cose da imitare:
+
+1. **Le quattro fasi sono dichiarate mentre girano** (`Fase calcolo (n / 4)`), con
+   percentuale *dentro* la fase e la ciambella dei conteggi aggiornata dal vivo.
+   L'utente vede il progresso parziale, non una barra indeterminata.
+2. **La prima passata piazza circa metà** e si ferma; il grosso lo fa la seconda.
+   Non è un solver monolitico che parla solo alla fine.
+3. `Lancia il calcolo` si trasforma in **`Interrompi`** e le opzioni si
+   disabilitano: **il calcolo è interrompibile e ciò che ha già piazzato resta**.
+
+Il conteggio `Bloccate 8` su 984 dice anche quanto si usa davvero il blocco in una
+base reale: pochissimo, ma non zero.
+
+### 🔑 `S.P.` e `Nr G.` — EDT espone la dimensione del dominio
+
+Scoperta di rimbalzo dallo stesso esperimento, e vale più dell'esperimento. Due
+colonne della lista attività, con tooltip letterale
+(`UtilitairesEdt_ColonnesCours_RS_HintNbPlacesPossibles` /
+`…HintNbJoursPossibles`):
+
+| Colonna | FR | Tooltip |
+|---|---|---|
+| **`S.P.`** | `Nb. P.` | *«Numero di **fasce orarie possibili** per il piazzamento dell'attività **nel rispetto di tutti i vincoli**»* |
+| **`Nr G.`** | `Nb. J.` | *«Numero di **giorni possibili** per l'attività nel rispetto di tutti i vincoli»* |
+
+È **il dominio residuo della variabile**, calcolato per propagazione, messo in una
+colonna ordinabile. Osservato sui dati:
+
+- l'ora singola di LETTERE su `1 A/R`: `S.P. 21`, `Nr G. 5`;
+- il blocco da **3h00** della stessa materia: `S.P. 6`, `Nr G. 3` — la durata
+  stritola il dominio;
+- la RELIGIONE **in compresenza**: `S.P. 4`, `Nr G. 2`, la più incastrata delle 27;
+- le due ore con periodicità `Q1`/`Q2`: `S.P. 34`, `Nr G. 10`, perché vivono in due
+  quadrimestri distinti.
+
+**Ed è ricalcolato contro lo stato corrente**, non statico: con l'orario pieno e
+una sola attività sospesa, quel blocco da 3h00 scendeva a **`S.P. 1`** — una sola
+collocazione legale in tutta la settimana; e le altre attività dello stesso docente,
+che a orario pieno stavano a `1`, salivano a `4` finché il buco restava aperto.
+
+**Per noi.** Questa colonna è **gratuita**: è esattamente ciò che il solver calcola
+comunque durante la propagazione. Esporla dà all'utente, *prima* di lanciare il
+calcolo, la lista di cosa sta per diventare impiazzabile — basta ordinare per `S.P.`
+crescente. Diagnostica preventiva a costo zero.
+
 ### Le opzioni e i parametri — osservati in UI
 
 Tre indicatori di stato in chiaro, allineati: `Mensa attiva` · `Intervalli attivi` ·
@@ -182,8 +263,21 @@ Questo spiega il messaggio già noto: *"Questo comando interrompe il piazzamento
 delle attività scartate (l'attività resterà scartata). Volete anche interrompere
 tutto il piazzamento automatico?"* — due processi annidati, due comandi di stop.
 
-`Memorizza le attività che saranno spostate` è un'opzione di tracciabilità: si tiene
-l'elenco di ciò che il calcolo ha mosso.
+⚠ **Correzione (2026-07-26).** Avevo letto `Memorizza le attività che saranno
+spostate` come un'opzione di tracciabilità — *«si tiene l'elenco di ciò che il
+calcolo ha mosso»*. **È sbagliato, ed è colpa della traduzione italiana.** La stessa
+chiave (`FicEDT_ResoluteurPasAPas_RS_CheckInit`) in francese dice:
+
+> `Réinitialiser la famille des cours déplacés` — *reinizializza* la famiglia delle
+> attività spostate.
+
+Significato opposto: non memorizza, **azzera**. EDT tiene traccia di una «famiglia»
+di attività già mosse (verosimilmente per non ri-muovere sempre le stesse), e questa
+casella la resetta prima di ricominciare.
+
+Promemoria di metodo: su questo prodotto **il francese è la lingua di riferimento**
+e l'italiano è una traduzione che in qualche punto sbaglia. Quando IT e FR
+divergono, vince FR. Vedi [glossario-it-fr.md](glossario-it-fr.md).
 
 **`Parametri di calcolo`** — due voci, ciascuna con il proprio valore corrente:
 
@@ -484,6 +578,79 @@ B, che sposta C, fino a profondità N. È una tecnica classica di ricerca locale
 EDT la espone **all'utente** come strumento interattivo, mostrando il costo di ogni
 mossa prima di eseguirla.
 
+### 🔑🔑 Osservato in UI, end-to-end (2026-07-26)
+
+Finestra `Trova una soluzione al massimo in 3 step`, lanciata su un blocco da
+**3h00 di LETTERE** sospeso da un orario per il resto pieno.
+
+**Tre pannelli affiancati**, e il layout è la cosa da rubare:
+
+| Pannello | Contenuto |
+|---|---|
+| `Attività da piazzare` | la scheda della lezione: durata, materia, docente, classe — e il conto di **tutte e cinque le risorse** (`Personale 0`, `Aule 0`, `Materiali 0`, `Gruppi 0`, `Raggruppamenti 0`) |
+| `Seleziona una fascia oraria` | la **griglia annotata**, astratta: solo colori, nessun testo |
+| `Visualizzazione dell'orario di <docente>` | la settimana **reale** del docente, con le lezioni vere |
+
+Cioè: la mappa delle decisioni **accanto** al contesto che le rende comprensibili.
+Il prodotto lo dice pure, per non lasciare equivoci:
+
+> *«L'orario è visualizzato a titolo indicativo, utilizzate la piccola griglia a
+> sinistra per selezionare la collocazione desiderata»*
+
+**La predizione del dominio ha tenuto.** L'attività aveva `S.P. = 1`, e la griglia
+mostrava **una sola cella bianca** e tutto il resto grigio.
+
+#### Il costo è dichiarato per nome, non per numero
+
+Cliccando una cella grigia (venerdì 08h00–11h00), il riquadro `Attività che creano
+problemi` si è popolato così:
+
+```
+Venerdì 08h00-09h00 - S MATEMATICA / RUBBIA C. / 1 A/R
+Venerdì 09h00-10h00 - S LETTERE    / ARIOSTO L. / 1 A/R
+Venerdì 10h00-11h00 - S LETTERE    / ARIOSTO L. / 1 A/R
+```
+
+Non «3 conflitti», non `INFEASIBLE`: **le tre lezioni con giorno, ora, materia,
+docente e classe**. E fra queste una MATEMATICA di un *altro* docente — perché il
+conflitto non passa dal docente ma dalla **classe**, che è occupata. La catena
+attraversa le risorse.
+
+Contemporaneamente, nel pannello di sinistra, **le risorse in conflitto diventano
+rosse** (lì: il docente e la classe), mentre `Personale`, `Aule`, `Materiali`
+restano nere. La finestra non dice solo *quanto* costa: dice **su quale delle cinque
+risorse** si sta consumando.
+
+#### La catena, confermata
+
+Premuto `Piazza`, la finestra si è **riconfigurata attorno al passo successivo**:
+
+```
+Attività piazzata / ricollocata
+    Venerdì 08h00-11h00 - S LETTERE / ARIOSTO L. / 1 A/R
+
+Attività che creano problemi [1° step]
+    Nessuna
+
+Attività sospesa da piazzare
+  ▶ Venerdì 08h00-09h00 - S MATEMATICA / RUBBIA C. / 1 A/R
+    Venerdì 10h00-11h00 - S LETTERE    / ARIOSTO L. / 1 A/R
+    Venerdì 09h00-10h00 - S LETTERE    / ARIOSTO L. / 1 A/R
+```
+
+Le tre scacciate sono diventate una **coda di lavoro con un cursore** (`▶`). Il
+pannello di sinistra descrive ora `1h00 · MATEMATICA · RUBBIA Carlo`, la griglia
+mostra **i suoi** slot possibili, e il pannello di destra è passato da solo a
+`Visualizzazione dell'orario di RUBBIA C.`. Il titolo del riquadro porta ora
+`[1° step]`: ogni passo resta etichettato, `Indietro` lo disfa, e il commit avviene
+solo alla fine con `Conferma tutti gli step`.
+
+**Il punto di prodotto.** L'algoritmo lo conoscevamo; la scoperta è che **è
+esibibile**. Una ricerca a catena si può mostrare a un umano un nodo per volta e
+resta comprensibile, perché a ogni nodo il costo è espresso in entità che l'utente
+conosce — non in unità del solver. EDT non decide la catena: la propone, la costeggia
+di nomi, e lascia scegliere, con ogni passo reversibile.
+
 **Implicazione per noi, la più importante di questo documento.** Questa è la
 funzione che rende usabile un generatore di orari nel mondo reale, perché nessun
 orario esce perfetto dal calcolo di massa: il vicepreside vuole spostare *quella*
@@ -627,10 +794,30 @@ per periodo). Nel modello CP-SAT questo si esprime con variabili di violazione
 vincolate in somma, non con penalità nell'obiettivo. È una differenza sostanziale
 di formulazione.
 
-⚠ **Una riserva onesta.** La finestra contiene anche le stringhe `punto` / `pesi`
-(FR `point` / `points`), che suggeriscono l'esistenza di un punteggio da qualche
-parte. Non sappiamo dove compaia né su cosa agisca: potrebbe essere un residuo, o
-un meccanismo interno al calcolo. **Da verificare in UI.**
+### 🔑 Chiuso: i «punti» non sono un punteggio
+
+Era la riserva più seria su tutta questa lettura del motore. La finestra degli
+alleggerimenti contiene le stringhe `punto` / `pesi` (FR `point` / `points`), unico
+indizio di un punteggio numerico in un motore che altrove ragiona solo a quote.
+
+**Chiuso da due ricerche indipendenti**, convergenti:
+
+1. `FicAssouplissements_RS_Point` / `…_RS_Points` sono i **suffissi singolare e
+   plurale di uno spinner**, fratelli di `Fois` / `Foiss` nella stessa famiglia di
+   chiavi. Non sono un campo: sono l'unità di misura scritta accanto a un numero.
+2. **La traduzione italiana di `points` è `pesi`.** Sono i punti di **peso
+   didattico** — l'unica riga alleggeribile che non si misura né in ore né in
+   occorrenze ([vincoli.md](vincoli.md)).
+
+Il tetto globale della finestra lo conferma, ed è testuale: *«Numero massimo di
+**vincoli** da alleggerire **per risorsa**»*. Su 69 888 stringhe, `punto/punti` in
+contesto motore compare **solo qui** (l'altra occorrenza è «punto di ripristino», un
+backup).
+
+**Conclusione, ora senza riserve: in EDT non esiste alcuna funzione di costo
+numerica.** I compromessi si governano su tre livelli — quote di violazione, criteri
+ordinati lessicograficamente, priorità di ottimizzazione con perdita tollerata — e
+nessuno dei tre è una somma pesata. Il nostro modello deve essere lessicografico.
 
 ## Le indisponibilità hanno un modello a tre enum
 
@@ -752,7 +939,8 @@ descrive presumibilmente un'altra edizione o una restrizione rimossa.
 - L'**algoritmo** vero: sappiamo le fasi, i metodi e le euristiche per nome
   (`optHeuristiqueSolutionEchec`, `optIncNiveau1/2`), non cosa fanno. In
   particolare non sappiamo cosa distingua i tre `livelli di approfondimento`.
-- Il significato dei `punti` nella finestra degli alleggerimenti.
+- ~~Il significato dei `punti` nella finestra degli alleggerimenti.~~ → chiuso: sono
+  punti di **peso didattico**, non un punteggio del motore (vedi sopra).
 - Se queste funzionalità siano tutte **attive nella distribuzione italiana**:
   `EDT Monoposto.distrib` contiene `PaysDistribution=ITALIE`, quindi esiste un
   filtro per paese che non è stato ispezionato.

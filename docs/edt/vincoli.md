@@ -349,6 +349,59 @@ Cinque finestre di applicazione, quindi — le stesse su cui ragionano gli altri
 vincoli di quantità. E la cascata di default ([ADR-003](../decisioni.md)) vale anche
 qui: limiti d'istituto che la classe può ridefinire.
 
+### 🔑 Osservato in UI (2026-07-26) — e la feature è spenta di serie
+
+Vista `Orario → Materie → Peso didattico`, base di esempio, classe `1 B/R`.
+
+**Il default del peso è `1`, non `0`.** Tutte e 11 le materie stanno a 1. E la
+colonna `Totale` mostra la formula in chiaro:
+
+| Materia | Peso | Durata | Totale |
+|---|---|---|---|
+| LETTERE | 1 | 10h00 | **10.0** |
+| MATEMATICA | 1 | 6h00 | **6.0** |
+| INGLESE | 1 | 4h00 | **4.0** |
+| RELIGIONE | 1 | 1h00 | **1.0** |
+
+`Totale = Peso × Durata`: confermata l'unitarietà «per materia **e per ora**».
+Portare ARTE a 3 significa che ogni ora di arte pesa come tre.
+
+**I tetti osservati sono quattro, non cinque** — `Limite del mattino`,
+`Limite del pomeriggio`, `Limite della giornata`, `Limite della settimana` — sotto
+l'intestazione `Peso didattico massimo per l'istituto:`. Nessun limite di ciclo
+nella base osservata (che non usa cicli). E **tutti e quattro valgono `nessuno`**.
+
+⚠ Quindi in una base completa, risolta e messa a punto a mano, **la funzione è
+attiva ma inutilizzata**: i pesi ci sono tutti a 1, nessun tetto li vincola. È un
+dato da tenere presente rispetto a [ADR-011](../decisioni.md), che l'ha messa in v1:
+è una feature che esiste da anni e che il produttore stesso non esercita nella
+propria base dimostrativa.
+
+### 🔑 Il totale è per **alunno**, non per classe
+
+Dettaglio non cercato, e vale da solo. La lista delle classi porta una colonna
+`Peso` che per `1 B/R` dà **33**. Ma la somma dei `Totale` delle materie fa **34**.
+
+La differenza è esattamente **1**, ed è `ALTERNATIVA`. La vista elenca sia
+`RELIGIONE` sia `ALTERNATIVA` perché entrambe si insegnano alla classe, ma **nessuno
+studente segue tutte e due**: il totale della parte `1 B/R` conta REL e scarta ALT,
+quello di `1 B/A` farà il contrario — ed entrambe infatti valgono 33.
+
+È la conferma **sui dati** del modello `_REL` / `_ALT` documentato in
+[gruppi.md](gruppi.md): due **parti** della stessa classe, non due gruppi. E dice
+che il carico cognitivo si misura **sulla testa dello studente**, non sull'aggregato
+di classe — l'unico modo in cui il vincolo abbia senso.
+
+⚠ Resta ambiguo se quel `33` sia un **totale calcolato** o un **tetto per classe**
+impostabile. Propendo per il calcolato (le colonne di tetto si chiamano tutte
+`Limite` e valgono `nessuno`), ma non è verificato.
+
+### La scala 📖
+
+**0–10 per materia**, ma **solo dalla guida ufficiale** — fra le 69 888 stringhe
+non esiste alcun messaggio di validazione che dichiari l'intervallo, e la base di
+esempio è tutta a 1, quindi non c'è distribuzione reale da leggere.
+
 ### Dove riappare
 
 - **In griglia**: `Totale dei pesi didattici della mattinata / del pomeriggio /
@@ -372,7 +425,41 @@ matematica, fisica e latino tutte lo stesso giorno"*. Oggi lo si ottiene a fatic
 con incompatibilità fra materie, che è lo strumento sbagliato — dichiara relazioni
 a coppie invece di un budget.
 
-⚠ Da verificare in UI: la scala dei pesi (interi? 1–10?) e i valori di default.
+*(La scala e i default erano segnati come aperti: chiusi in UI, vedi sopra.)*
+
+## Due colonne che non sono vincoli — chiarito 📦
+
+Due colonne della lista attività sembravano vincoli non censiti. Non lo sono, ma
+la verifica ha prodotto risultati utili lo stesso.
+
+**`Interclasse` (`Int.`) è un falso amico: significa *intervallo*.**
+`InterclasseLong` → IT `Intervallo` / FR `Récréation` / EN `Recess`. Niente a che
+vedere con «trasversale alle classi». Ed è un **vincolo hard** a tre pezzi:
+
+1. la ricreazione è un **oggetto d'istituto** con durata e rango (tabella
+   `RECREATION`, due record nella base demo: *Intervallo del mattino* rango 2,
+   *Intervallo del pomeriggio* rango 4);
+2. si applica a **un insieme di classi** scelto (`NONRESPECTCLASSERECREATION`);
+3. ogni attività porta il booleano **`Rispetta gli intervalli`** — se spuntato,
+   l'attività non può stare **a cavallo** dell'intervallo.
+
+Compare nella legenda dei vincoli, nella diagnostica (*«Intervallo non
+rispettato»*), fra le 11 ragioni di rifiuto dell'allineamento, ed è disattivabile
+in blocco nel solver (`Ignora gli intervalli`). Vincola anche i **cambi di sede**,
+ammessi solo durante un intervallo — vedi
+[tempo-e-calendario.md](tempo-e-calendario.md).
+
+**`Cours isolés` è un criterio di ottimizzazione, non un vincolo.** Definizione
+letterale del prodotto:
+
+> *«attività isolata in una mezza giornata **e** di durata inferiore a due fasce
+> orarie»*
+
+È una delle cinque voci dei parametri di ottimizzazione (`tcoIsoles`) e un
+contatore per docente/classe/gruppo (colonna `A.iso.`). Prova negativa solida:
+**non compare né nella legenda `Type_Contrainte` né in alcuna causale di
+diagnostica**, e non esiste alcun parametro «massimo di attività isolate». Termine
+della funzione obiettivo, con una definizione operativa esatta da riusare.
 
 ## Vincoli fra attività (`TNetContrainteCoursACours`) — osservati in UI
 

@@ -467,17 +467,27 @@ costringere l'utente a mentire al sistema.
 Nella lista estratta, le 21 attività irregolari hanno **`S.P.` = 0** e
 **`Nr G.` = 0**, mentre le attività regolari mostrano `1` e `1`.
 
-[INFERENZA, da confermare] `S.P.` è plausibilmente **«spazi possibili»**: il numero
-di collocazioni ammissibili per quell'attività. Zero significa *«non esiste nessuno
-slot legale»* — esattamente ciò che ci si aspetta da un'attività in violazione. Se
-è così, è un contatore **precalcolato e mostrato in lista**, cioè EDT tiene
-aggiornato per ogni attività quante collocazioni le restano. Sarebbe la stessa
-quantità che alimenta il risolutore passo-passo.
+**✅ Confermato il 2026-07-26, e l'inferenza era esatta.** I tooltip letterali:
 
-⚠ Da confermare in UI: passare il mouse sull'intestazione `S.P.` per il tooltip.
+| Colonna | FR | Tooltip |
+|---|---|---|
+| `S.P.` | `Nb. P.` | *«Numero di **fasce orarie possibili** per il piazzamento dell'attività **nel rispetto di tutti i vincoli**»* |
+| `Nr G.` | `Nb. J.` | *«Numero di **giorni possibili** per l'attività nel rispetto di tutti i vincoli»* |
 
-Altre colonne lette nella stessa schermata: `P.P.` vale `F` su tutte le righe
-(plausibilmente **fascia fissa**, vedi [tempo-e-calendario.md](tempo-e-calendario.md));
+È **la dimensione del dominio residuo**, ricalcolata contro lo stato corrente
+dell'orario: sospendendo una singola attività da un orario pieno, i valori delle
+attività vicine si alzano, e si riabbassano appena il buco si richiude. Dettaglio,
+misure e implicazioni in [motore-risoluzione.md](motore-risoluzione.md).
+
+**Per la diagnostica**, il punto è questo: ordinando la lista per `S.P.` crescente
+si ottiene, *prima* di lanciare qualunque calcolo, l'elenco di **cosa sta per
+diventare impiazzabile**. È diagnostica preventiva che non costa nulla, perché il
+solver quel numero lo calcola comunque durante la propagazione.
+
+Altre colonne lette nella stessa schermata: `P.P.` vale `F` su tutte le righe —
+confermato **`Fascia fissa`**, la colonna è `Fractionnable` = *Proprietà di
+Piazzamento* (vedi [moduli-e-scope.md](moduli-e-scope.md) e
+[tempo-e-calendario.md](tempo-e-calendario.md));
 `Freq.` vale `S`, cioè il codice di periodicità **settimanale** confermato dalla
 tabella delle alternanze; `Sede` assume i tre valori `Principale`, `Succ. 1`,
 `Succ. 2`, coerenti con `NBSITES = 3`.
