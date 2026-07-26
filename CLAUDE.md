@@ -58,6 +58,9 @@ scripts/
   genera_orario.py     prototipo solver CP-SAT — parcheggiato, vedi sotto
 results.md             output dell'ultima esecuzione del prototipo
 requirements.txt       ortools (serve solo al prototipo)
+config/                progetto Django minimale (solo settings, niente view)
+domain/                l'app Django del modello di dominio v1
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -122,11 +125,13 @@ Coperto finora (una scuola di esempio inserita in EDT):
   (`docs/edt/motore-risoluzione.md`).
 
 > **L'osservazione di EDT è conclusa** (2026-07-26), e la decisione è stata presa
-> esplicitamente con [ADR-016](docs/decisioni.md): la fase attuale è la
-> **progettazione del modello di dominio**, il cui design approvato sta in
-> [docs/modello-dominio.md](docs/modello-dominio.md). Restano due punti aperti,
-> entrambi marginali e non bloccanti: le aule mai inserite nella base del Fermi, e
-> l'estensione della cascata di default.
+> esplicitamente con [ADR-016](docs/decisioni.md): il design del modello di
+> dominio è approvato in [docs/modello-dominio.md](docs/modello-dominio.md). Lo
+> schema **è implementato** e il dataset Fermi **è interamente rappresentato**
+> (39 test verdi); i piani successivi sono predicati/analisi di capienza e
+> modello CP-SAT. Restano due punti aperti, entrambi marginali e non bloccanti:
+> le aule mai inserite nella base del Fermi, e l'estensione della cascata di
+> default.
 
 ### Prototipo solver — parcheggiato
 
@@ -286,6 +291,18 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-07-26 (notte, seguito)** — **Lo schema del dominio, implementato.** Per
+  TDD dal design approvato in [docs/modello-dominio.md](docs/modello-dominio.md):
+  progetto Django minimale `config/`, app `domain/` (modelli su istituto, risorse,
+  curriculum, classi, docenti, tempo, attività, vincoli, più `domain/weeks.py`) e
+  la suite in `tests/` — **39 test, tutti verdi**. `tests/fermi.py` è il dataset
+  Fermi come fixture: primo test di rappresentazione, con la quadratura verificata
+  sui dati reali (284 attività / 288h, 18 docenti a quadratura zero, copertura per
+  ogni coppia (classe, materia)). Aggiunti anche i casi **oltre-Fermi** che il
+  dataset da solo non esercita: parti IRC/ALT, raggruppamenti trasversali (2A-2B),
+  sedi, sostituzione come maschera a un bit. I piani successivi: predicati e
+  analisi di capienza, poi il modello CP-SAT.
 
 - **2026-07-26 (notte)** — **Cambio di fase: da analisi a progettazione.**
   [ADR-016](docs/decisioni.md) chiude formalmente la condizione di ADR-008:
