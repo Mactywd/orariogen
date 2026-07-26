@@ -87,3 +87,66 @@ def test_firme_di_settimana():
     sigs = week_signatures(env["schedule"])
     reps = sorted(wks for _, wks in sigs)
     assert reps == [(0, 1, 3), (2,)]
+
+
+# --- Task 4: griglia e sedi ---
+import datetime as dt
+
+from domain.models import Break, Holiday, Site
+
+
+def test_blocco_a_cavallo_dell_intervallo():
+    env = mini_school()
+    Break.objects.create(grid=env["grid"], boundary_slot=2)
+    rispetta = make_activity(env["subject"], classes=[env["klass"]], slots=2,
+                             respects_breaks=True)
+    ignora = make_activity(env["subject"], classes=[env["klass"]], slots=2)
+    place(env["schedule"], rispetta, day=0, slot=1)   # fasce 1-2: a cavallo
+    place(env["schedule"], ignora, day=1, slot=1)
+    codes = [f.code for f in check_schedule(env["schedule"])]
+    assert codes == ["break_straddled"]
+
+
+def test_fuori_griglia():
+    env = mini_school()
+    a = make_activity(env["subject"], classes=[env["klass"]], slots=3)
+    place(env["schedule"], a, day=0, slot=4)  # 4+3 > 6 fasce
+    assert [f.code for f in check_schedule(env["schedule"])] == ["slot_out_of_grid"]
+
+
+def test_giorno_festivo():
+    env = mini_school()
+    Holiday.objects.create(school_year=env["year"], date=dt.date(2026, 9, 16))  # mer, sett. 0
+    a = make_activity(env["subject"], classes=[env["klass"]])
+    place(env["schedule"], a, day=2, slot=0)
+    findings = check_schedule(env["schedule"])
+    assert [f.code for f in findings] == ["holiday"]
+    assert findings[0].weeks == (0,)  # solo la settimana del festivo
+
+
+def test_transizione_di_sede_troppo_stretta():
+    env = mini_school()
+    sede_a = Site.objects.create(name="Centrale")
+    sede_b = Site.objects.create(name="Succursale")
+    a = make_activity(env["subject"], teachers=[env["teacher"]])
+    b = make_activity(env["subject"], teachers=[env["teacher"]])
+    a.site, b.site = sede_a, sede_b
+    a.save(); b.save()
+    place(env["schedule"], a, day=0, slot=0)
+    place(env["schedule"], b, day=0, slot=1)  # nessuna fascia libera fra le due
+    findings = check_schedule(env["schedule"])
+    assert [f.code for f in findings] == ["site_transition"]
+    assert findings[0].resources == (env["teacher"].pk,)
+
+
+def test_transizione_di_sede_con_fascia_libera_ok():
+    env = mini_school()
+    sede_a = Site.objects.create(name="Centrale")
+    sede_b = Site.objects.create(name="Succursale")
+    a = make_activity(env["subject"], teachers=[env["teacher"]])
+    b = make_activity(env["subject"], teachers=[env["teacher"]])
+    a.site, b.site = sede_a, sede_b
+    a.save(); b.save()
+    place(env["schedule"], a, day=0, slot=0)
+    place(env["schedule"], b, day=0, slot=2)  # una fascia libera = default
+    assert check_schedule(env["schedule"]) == []

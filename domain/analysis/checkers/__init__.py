@@ -1,2 +1,2 @@
 """L'import registra i checker nel REGISTRY. Esteso dai task successivi."""
-from . import occupation, unavailability  # noqa: F401
+from . import grid, occupation, sites, unavailability  # noqa: F401
