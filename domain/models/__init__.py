@@ -4,6 +4,7 @@ from .curriculum import CompetitionClass, Discipline, Service, StudyPlan, Subjec
 from .classes import ClassPart, ClassPartition, Group, SchoolClass
 from .teachers import Teacher, TeachingAssignment
 from .time import Break, Holiday, Period, Schedule, SchoolYear, TimeGrid
+from .activities import Activity, ActivityMaterialRequirement, Placement
 
 __all__ = [
     "InstituteSettings", "Site",
@@ -12,4 +13,5 @@ __all__ = [
     "ClassPart", "ClassPartition", "Group", "SchoolClass",
     "Teacher", "TeachingAssignment",
     "Break", "Holiday", "Period", "Schedule", "SchoolYear", "TimeGrid",
+    "Activity", "ActivityMaterialRequirement", "Placement",
 ]
