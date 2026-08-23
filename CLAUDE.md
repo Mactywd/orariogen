@@ -62,7 +62,7 @@ config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza
   solver/               lo spike CP-SAT: registro dei builder, contesto, modello, cinque vincoli
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder, contesto, il modello, i pre-filtri, l'occupazione, il D.T.B., l'incompatibilità di materia, l'oracolo)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -157,10 +157,14 @@ buchi, gruppi/sdoppiamenti — cioè quasi tutti i conflitti di
 OPTIMAL quindi **non dice nulla** sulla risolvibilità dell'istanza reale: è la
 risposta a un problema più facile.
 
-**Il solver resta fermo** finché il modello di dominio approvato
-([docs/modello-dominio.md](docs/modello-dominio.md)) non è tradotto in codice:
-prima la forma dei dati, poi il modello CP-SAT. Vedi [ADR-008](docs/decisioni.md)
-e [ADR-016](docs/decisioni.md).
+Questo script **resta parcheggiato ed è superato**: il codice vivo del solver
+è `domain/solver/` (vedi la nota di stato sopra), che ne riprende l'idea sullo
+schema del dominio approvato invece che sui dati grezzi. Ciò che manca ancora
+non è "il modello CP-SAT" in generale — è tradotto, ma **solo** per cinque
+vincoli su ventisette. Manca il **modello completo**: i ventidue vincoli
+restanti, gli alleggerimenti a quota, l'ottimizzazione lessicografica,
+l'assegnazione delle aule e il violatore di Hall. Vedi
+[ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md).
 
 ### Aperto / da verificare
 
@@ -335,7 +339,9 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   colpo — sulla scuola giocattolo, sul Fermi ristretto a una classe e sul
   Fermi intero. E che potesse fallire è stato **verificato**: corrompendo
   deliberatamente i piazzamenti, tutte le famiglie provate hanno prodotto il
-  finding atteso.
+  finding atteso (`test_oracolo_puo_fallire` in
+  `tests/test_solver_oracle.py` — un test della suite, non un esperimento una
+  tantum: la prova resta nel repo, non solo nella sessione di review).
   **Le misure sul Fermi intero**: 284 attività (288h00), **tutte libere**
   (nessuna congelata dai pre-filtri strutturali), **8140 variabili**, **1082
   constraint**, `OPTIMAL` in **meno di un secondo** (~0,55s). ⚠ Come già una

@@ -6,8 +6,9 @@ import pytest
 from domain.analysis.conformity import check_schedule
 from domain.analysis.findings import Severity
 from domain.models import (
-    Break, ClassPart, ClassPartition, Extraction, ResourceTimeConstraint,
-    ResourceUnavailability, SchoolClass, Subject, SubjectConstraint, Teacher,
+    Break, ClassPart, ClassPartition, Extraction, Placement,
+    ResourceTimeConstraint, ResourceUnavailability, SchoolClass, Subject,
+    SubjectConstraint, Teacher,
 )
 from domain.solver.model import apply, solve
 from tests import fermi
@@ -60,10 +61,13 @@ def _scuola_media():
     ing = ClassPart.objects.create(name="1A_ING", partition=lingua)
     ClassPart.objects.create(name="1A_TED", partition=lingua)
 
+    ita_activities = []
     for classe in classi:
         for codice, materia in (("ITA", italiano), ("MAT", matematica), ("STO", storia)):
             for _ in range(2):
-                make_activity(materia, teachers=[docenti[codice]], classes=[classe])
+                att = make_activity(materia, teachers=[docenti[codice]], classes=[classe])
+                if codice == "ITA":
+                    ita_activities.append(att)
     make_activity(matematica, teachers=[docenti["MAT"]], classes=[classi[1]],
                   slots=2, respects_breaks=True)
     make_activity(italiano, parts=[rel])
@@ -81,6 +85,8 @@ def _scuola_media():
     SubjectConstraint.objects.create(
         subject_a=italiano, subject_b=italiano, school_class=env["klass"],
         type=SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE)
+    env["docenti"] = docenti
+    env["ita_activities"] = ita_activities
     return env
 
 
@@ -104,6 +110,51 @@ def test_oracolo_sul_fermi_per_una_classe():
     assert len(soluzione.placements) == classe.activities.count()
     apply(soluzione, dataset["schedule"])
     assert violazioni(dataset["schedule"]) == []
+
+
+def test_oracolo_puo_fallire():
+    """L'oracolo deve poter fallire, non solo passare sempre. Senza questo
+    test, un oracolo diventato vacuo — per esempio perche' l'insieme CODICI
+    perde un codice, o un checker smette di essere registrato — passerebbe
+    silenziosamente per sempre: gli altri test dell'oracolo continuerebbero a
+    dare 'violazioni() == []' anche se non stessero piu' verificando niente.
+    Qui corrompiamo deliberatamente due Placement dopo un solve+apply andato a
+    buon fine, e verifichiamo che violazioni() veda ciascuna corruzione con il
+    codice atteso, in due famiglie diverse: occupazione (due attivita' dello
+    stesso docente sulla stessa cella) e indisponibilita' (un'attivita'
+    spostata su una fascia rossa)."""
+    env = _scuola_media()
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    apply(soluzione, env["schedule"])
+    assert violazioni(env["schedule"]) == []
+
+    ita = env["ita_activities"]  # [1A×2, 1B×2, 1C×2], stesso docente per tutte
+    docente_ita = env["docenti"]["ITA"]
+
+    # Famiglia "occupazione": due attivita' dello stesso docente (classi
+    # diverse, 1A e 1B) forzate sulla stessa cella.
+    p_a = Placement.objects.get(schedule=env["schedule"], activity=ita[0])
+    p_b = Placement.objects.get(schedule=env["schedule"], activity=ita[2])
+    giorno_orig, fascia_orig = p_b.day, p_b.start_slot
+    p_b.day, p_b.start_slot = p_a.day, p_a.start_slot
+    p_b.save()
+    codici = {f.code for f in violazioni(env["schedule"])}
+    assert "resource_occupied" in codici
+
+    # Ripristino: la corruzione precedente non deve contaminare la successiva.
+    p_b.day, p_b.start_slot = giorno_orig, fascia_orig
+    p_b.save()
+    assert violazioni(env["schedule"]) == []
+
+    # Famiglia "indisponibilita'": un'attivita' del docente ITA spostata sulla
+    # fascia (giorno=0, fascia=1), dichiarata indisponibile hard per lui.
+    assert ResourceUnavailability.objects.filter(
+        resource=docente_ita, day=0, slot=1, level="hard").exists()
+    p_a.day, p_a.start_slot = 0, 1
+    p_a.save()
+    codici = {f.code for f in violazioni(env["schedule"])}
+    assert "unavailability" in codici
 
 
 def test_fermi_intero_misurato():
