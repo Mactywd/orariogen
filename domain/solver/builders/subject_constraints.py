@@ -24,14 +24,14 @@ class SameDayBuilder(Builder):
                 continue
             for day in range(ctx.grid.days_per_cycle):
                 a = self._literals(ctx, keys, row.subject_a_id, day)
-                if not any(aid in ctx.free for aid, _ in a):
-                    continue
                 if row.subject_a_id == row.subject_b_id:
-                    if len(a) > 1:
+                    if len(a) > 1 and any(aid in ctx.free for aid, _ in a):
                         model.Add(sum(lit for _, lit in a) <= 1)
                     continue
                 b = self._literals(ctx, keys, row.subject_b_id, day)
-                if not b:
+                if not a or not b:
+                    continue
+                if not any(aid in ctx.free for aid, _ in a + b):
                     continue
                 ha_a = model.NewBoolVar(f"ha_{row.subject_a_id}_{row.pk}_{day}")
                 model.AddMaxEquality(ha_a, [lit for _, lit in a])

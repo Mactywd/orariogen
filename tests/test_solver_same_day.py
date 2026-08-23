@@ -71,3 +71,18 @@ def test_il_vincolo_non_si_posta_se_nulla_e_libero():
     place(env["schedule"], b, day=0, slot=1)
     _riga(env["subject"], env["subject"], school_class=env["klass"])
     assert solve(env["schedule"]).status in ("OPTIMAL", "FEASIBLE")
+
+
+def test_il_vincolo_asimmetrico_quando_a_e_congelata_e_b_libera():
+    """Materia A fissa al giorno 0, materia B libera. Il vincolo A != B deve
+    vincolare B a non stare al giorno 0, anche se A e' congelata."""
+    env = mini_school()
+    matematica = Subject.objects.create(
+        code="MAT", name="Matematica", discipline=env["discipline"])
+    a = make_activity(env["subject"], classes=[env["klass"]], immobility="fixed")
+    b = make_activity(matematica, classes=[env["klass"]])
+    place(env["schedule"], a, day=0, slot=0)
+    _riga(env["subject"], matematica, school_class=env["klass"])
+    soluzione = solve(env["schedule"])
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE")
+    assert soluzione.placements[b.id][0] != 0
