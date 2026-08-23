@@ -12,6 +12,20 @@ from domain.models import Activity, Holiday, ResourceUnavailability
 _RANK = {Severity.HARD: 0, Severity.OPTIONAL: 1, Severity.PREFERENCE: 2}
 
 
+def _resource_sort_key(res):
+    """Ordina le risorse gestendo miste int/str. Le risorse intere vengono
+    prima delle stringhe."""
+    if isinstance(res, int):
+        return (0, res)
+    else:
+        return (1, res)
+
+
+def _finding_sort_key(f):
+    """Chiave di ordinamento per i findings che gestisce risorse miste int/str."""
+    return (_RANK[f.severity], f.code, tuple(_resource_sort_key(r) for r in f.resources), f.activities)
+
+
 def week_signatures(schedule):
     """[(settimana rappresentante, tutte le settimane con la stessa firma)].
     La firma include attività attive, indisponibilità datate e festivi."""
@@ -50,5 +64,4 @@ def check_schedule(schedule):
                     merged[f.key] = replace(merged[f.key], weeks=combined)
                 else:
                     merged[f.key] = replace(f, weeks=wks)
-    return sorted(merged.values(),
-                  key=lambda f: (_RANK[f.severity], f.code, f.resources, f.activities))
+    return sorted(merged.values(), key=_finding_sort_key)

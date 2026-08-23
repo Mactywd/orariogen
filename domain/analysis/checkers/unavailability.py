@@ -11,11 +11,20 @@ _SEV = {"hard": Severity.HARD, "optional": Severity.OPTIONAL,
 _ORDER = ["hard", "optional", "preference"]
 
 
+def _key_sort_key(key):
+    """Ordina le chiavi gestendo miste int/str. Le chiavi intere vengono
+    prima delle stringhe."""
+    if isinstance(key, int):
+        return (0, key)
+    else:
+        return (1, key)
+
+
 @register("structural:unavailability")
 class UnavailabilityChecker(Checker):
     def check(self, state, resources=None):
         for aid, pl in sorted(state.placed.items()):
-            for key in sorted(state.tokens[aid]):
+            for key in sorted(state.tokens[aid], key=_key_sort_key):
                 if resources is not None and key not in resources:
                     continue
                 hit = [state.unavailability[(key, pl.day, s)]

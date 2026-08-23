@@ -5,10 +5,11 @@ checker in millisecondi. Le chiavi di occupazione sono pk di Resource
 
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import product
 
 from domain import weeks
 from domain.models import (
-    Activity, ClassPart, Holiday, InstituteSettings, Resource,
+    Activity, ClassPart, ClassPartition, Holiday, InstituteSettings, Resource,
     ResourceTimeConstraint, ResourceUnavailability, SchoolClass, Service,
     Subject, SubjectConstraint, TimeGrid,
 )
@@ -16,12 +17,57 @@ from domain.models import (
 _SEVERITY_ORDER = {"hard": 0, "optional": 1, "preference": 2}
 
 
-def activity_tokens(activity, assigned_room_id=None):
+@dataclass(frozen=True)
+class AtomMap:
+    """ADR-017. Due partizioni della stessa classe sono due modi di dividere
+    gli stessi studenti: una parte dell'una e una parte dell'altra hanno
+    studenti in comune. Gli atomi sono le celle del prodotto delle partizioni,
+    così le parti della stessa partizione restano disgiunte (lo sdoppiamento)
+    e quelle di partizioni diverse si intersecano.
+
+    Costruito solo per le classi con almeno due partizioni non vuote: altrove
+    le mappe restano vuote e le chiavi di occupazione non cambiano di un bit."""
+
+    part: dict    # ClassPart pk → frozenset di atomi
+    klass: dict   # SchoolClass pk → frozenset di atomi
+    names: dict   # atomo → nome leggibile, per le causali
+
+    @classmethod
+    def build(cls):
+        by_class = defaultdict(lambda: defaultdict(list))
+        for pk, partition_id, class_id in ClassPart.objects.values_list(
+                "pk", "partition_id", "partition__school_class_id"):
+            by_class[class_id][partition_id].append(pk)
+        class_names = dict(SchoolClass.objects.values_list("pk", "name"))
+        part, klass, names = {}, {}, {}
+        for class_id, partitions in by_class.items():
+            blocks = [sorted(parts) for _, parts in sorted(partitions.items()) if parts]
+            if len(blocks) < 2:
+                continue
+            label = f"{class_names.get(class_id, class_id)} (studenti in comune fra partizioni)"
+            keys = []
+            for combo in product(*blocks):
+                key = "atom:{}:{}".format(class_id, "-".join(str(p) for p in combo))
+                keys.append(key)
+                names[key] = label
+                for part_pk in combo:
+                    part.setdefault(part_pk, set()).add(key)
+            klass[class_id] = frozenset(keys)
+        return cls({p: frozenset(v) for p, v in part.items()}, klass, names)
+
+
+EMPTY_ATOMS = AtomMap({}, {}, {})
+
+
+def activity_tokens(activity, assigned_room_id=None, atoms=None):
     """Chiavi di occupazione e quantità dei materiali di un'attività.
-    Regola dei conflitti sulle unità (v1): la classe intera occupa sé stessa
-    e tutte le sue parti; la parte occupa solo sé stessa; il raggruppamento
-    occupa le parti membre. Parti di partizioni diverse non confliggono (v1)
-    — regola provvisoria, da superare con ADR-017 (piano 3)."""
+    Regola dei conflitti sulle unità: la classe intera occupa sé stessa, tutte
+    le sue parti e tutti i suoi atomi; la parte occupa sé stessa e i propri
+    atomi; il raggruppamento occupa le parti membre e i loro atomi. Parti di
+    partizioni diverse della stessa classe condividono un atomo, quindi
+    confliggono (ADR-017); parti della stessa partizione no."""
+    if atoms is None:
+        atoms = AtomMap.build()
     keys, materials = set(), {}
     for t in activity.teachers.all():
         keys.add(t.pk)
@@ -29,10 +75,14 @@ def activity_tokens(activity, assigned_room_id=None):
         keys.add(c.pk)
         keys.update(ClassPart.objects.filter(
             partition__school_class=c).values_list("pk", flat=True))
+        keys |= atoms.klass.get(c.pk, frozenset())
     for p in activity.parts.all():
         keys.add(p.pk)
+        keys |= atoms.part.get(p.pk, frozenset())
     for g in activity.groups.all():
-        keys.update(g.parts.values_list("pk", flat=True))
+        for part_pk in g.parts.values_list("pk", flat=True):
+            keys.add(part_pk)
+            keys |= atoms.part.get(part_pk, frozenset())
     if assigned_room_id is not None:
         keys.add(assigned_room_id)
     else:
@@ -106,6 +156,9 @@ class ScheduleState:
             state.kinds[r["id"]] = r["kind"]
             state.capacity[r["id"]] = r["simultaneous_capacity"]
 
+        atoms = AtomMap.build()
+        state.resource_names.update(atoms.names)
+
         placements = {p.activity_id: p for p in schedule.placements.all()}
         acts = (Activity.objects
                 .exclude(immobility=Activity.Immobility.SUSPENDED)
@@ -118,7 +171,8 @@ class ScheduleState:
             state.activities[a.id] = a
             pl = placements.get(a.id)
             keys, materials = activity_tokens(
-                a, assigned_room_id=pl.assigned_room_id if pl else None)
+                a, assigned_room_id=pl.assigned_room_id if pl else None,
+                atoms=atoms)
             state.tokens[a.id] = keys
             for k, q in materials.items():
                 state.material_quantity[(a.id, k)] = q
