@@ -39,3 +39,15 @@ def test_ogni_builder_implementa_almeno_un_hook():
     for chiave, cls in BUILDERS.items():
         assert (cls.restrict is not Builder.restrict
                 or cls.build is not Builder.build), chiave
+
+
+def test_i_cinque_builder_dello_spike():
+    from domain.models import ResourceTimeConstraint, SubjectConstraint
+    all_builders()
+    assert set(BUILDERS) == {
+        "structural:grid",
+        "structural:unavailability",
+        "structural:occupation",
+        ResourceTimeConstraint.Type.MAX_GAP_HOURS,
+        SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE,
+    }
