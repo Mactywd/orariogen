@@ -6,24 +6,16 @@ from dataclasses import replace
 from domain import weeks
 from domain.analysis.findings import Severity
 from domain.analysis.registry import all_checkers
-from domain.analysis.state import ScheduleState
+from domain.analysis.state import ScheduleState, resource_sort_key
 from domain.models import Activity, Holiday, ResourceUnavailability
 
 _RANK = {Severity.HARD: 0, Severity.OPTIONAL: 1, Severity.PREFERENCE: 2}
 
 
-def _resource_sort_key(res):
-    """Ordina le risorse gestendo miste int/str. Le risorse intere vengono
-    prima delle stringhe."""
-    if isinstance(res, int):
-        return (0, res)
-    else:
-        return (1, res)
-
-
 def _finding_sort_key(f):
-    """Chiave di ordinamento per i findings che gestisce risorse miste int/str."""
-    return (_RANK[f.severity], f.code, tuple(_resource_sort_key(r) for r in f.resources), f.activities)
+    """Chiave di ordinamento per i findings che gestisce risorse miste int/str.
+    Applica resource_sort_key elemento per elemento sulla tupla resources."""
+    return (_RANK[f.severity], f.code, tuple(resource_sort_key(r) for r in f.resources), f.activities)
 
 
 def week_signatures(schedule):

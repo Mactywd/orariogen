@@ -17,6 +17,17 @@ from domain.models import (
 _SEVERITY_ORDER = {"hard": 0, "optional": 1, "preference": 2}
 
 
+def resource_sort_key(key):
+    """Ordina le chiavi di occupazione gestendo miste int/str.
+    Necessario da ADR-017: gli atomi sono chiavi stringa ('atom:...') affiancate
+    ai pk interi (Resource, SchoolClass, ClassPart). Python 3 non confronta
+    direttamente int e str, quindi servono tuple (tipo, valore) per sortare."""
+    if isinstance(key, int):
+        return (0, key)
+    else:
+        return (1, key)
+
+
 @dataclass(frozen=True)
 class AtomMap:
     """ADR-017. Due partizioni della stessa classe sono due modi di dividere

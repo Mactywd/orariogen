@@ -4,19 +4,16 @@ Qtà > 1 e materiali con quantità (una risorsa cumulativa sola)."""
 from domain.analysis import causali
 from domain.analysis.findings import Finding, Severity
 from domain.analysis.registry import Checker, register
+from domain.analysis.state import resource_sort_key
 from domain.models import Activity
 
 _LOCKED = (Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE)
 
 
 def _occupancy_sort_key(item):
-    """Ordina le tuple (chiave, giorno, fascia) gestendo chiavi miste int/str.
-    Le chiavi intere vengono prima delle stringhe."""
+    """Ordina le tuple (chiave, giorno, fascia) gestendo chiavi miste int/str."""
     (key, day, slot), _ = item
-    if isinstance(key, int):
-        return (0, key, day, slot)
-    else:
-        return (1, key, day, slot)
+    return (*resource_sort_key(key), day, slot)
 
 
 @register("structural:occupation")
