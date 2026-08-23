@@ -85,7 +85,9 @@ def solve(schedule, extraction=None, time_limit=None):
 
 def apply(solution, schedule):
     """Scrive i piazzamenti. Il piazzamento è output, mai un campo
-    dell'attività: si sovrascrive la riga, non si duplica."""
+    dell'attività: si sovrascrive la riga, non si duplica. Se `placements` è
+    vuoto (stato INFEASIBLE o UNKNOWN) non fa nulla: nessun Placement scritto
+    né toccato."""
     for aid, (day, slot) in solution.placements.items():
         Placement.objects.update_or_create(
             schedule=schedule, activity_id=aid,

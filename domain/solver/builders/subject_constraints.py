@@ -25,7 +25,8 @@ class SameDayBuilder(Builder):
             for day in range(ctx.grid.days_per_cycle):
                 a = self._literals(ctx, keys, row.subject_a_id, day)
                 if row.subject_a_id == row.subject_b_id:
-                    if len(a) > 1 and any(aid in ctx.free for aid, _ in a):
+                    if (len({aid for aid, _ in a}) > 1
+                            and any(aid in ctx.free for aid, _ in a)):
                         model.Add(sum(lit for _, lit in a) <= 1)
                     continue
                 b = self._literals(ctx, keys, row.subject_b_id, day)

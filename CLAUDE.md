@@ -283,6 +283,23 @@ l'assegnazione delle aule e il violatore di Hall. Vedi
 - [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
       `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
       CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
+- [ ] ⚠ **Come si comporta un builder quando un constraint mescola attività
+      congelate già in violazione e attività libere nello stesso vincolo?** La
+      regola attuale — «un constraint i cui letterali provengono tutti da
+      attività congelate non si posta» — è coerente ma non basta su input
+      sporco: se fra le congelate c'è già una violazione e c'è anche
+      un'attività libera nello stesso constraint, il modello diventa
+      `INFEASIBLE` per colpa di una violazione preesistente; se l'attività
+      libera è altrove, l'oracolo rifiuta una soluzione corretta perché
+      `check_schedule` non distingue i finding preesistenti da quelli causati
+      dal solver. Tre strade in gioco, da decidere nella spec del modello
+      completo prima di scrivere gli altri ventidue builder: **capacità
+      residua** clampata sui soli letterali liberi (il constraint conta solo
+      ciò che è ancora in gioco); **oracolo differenziale** che confronta i
+      finding prima e dopo il solve, invece che il totale; oppure dichiarare
+      le violazioni preesistenti **fuori dal criterio di riuscita**
+      dell'oracolo. Emersa dalla review finale dello spike CP-SAT (2026-08-24),
+      non risolta lì. → `domain/solver/`
 
 ## Scope di v1 — deciso il 2026-07-26
 
@@ -305,6 +322,63 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-24** — **La review finale falsifica l'oracolo, e lo ripara.**
+  L'oracolo dichiarato "tenuto" il 2026-08-09 aveva un limite non notato:
+  scuola giocattolo, Fermi per una classe e Fermi intero condividono tutti
+  **un'unica firma di settimana** (tutte le attività sono annuali), quindi la
+  dimensione «settimane» di `domain/analysis/conformity.week_signatures` non
+  era mai stata esercitata. La review finale l'ha trovato lì: `MaxGapBuilder`
+  (il D.T.B.) dichiarava **conservativo** trattare tutte le attività come
+  co-attive, ignorando le firme. **Non lo è.** Il buco è
+  `ultima − prima + 1 − conteggio`: un'occupazione che cade *dentro* il buco
+  ma viene da un'attività di un'**altra** firma alza il conteggio senza
+  toccare `prima` né `ultima` — riempie il buco nel modello unione, mentre
+  nelle settimane reali quel buco resta scoperto. Trattare tutto come
+  co-attivo vincola quindi **di meno**, non di più: l'opposto di quanto
+  dichiarato. Dimostrato con un'istanza a due firme costruita apposta
+  (indisponibilità **datate**, non ricorrenti, su un docente con D.T.B. = 0):
+  il solver rispondeva `OPTIMAL` piazzando una terza attività a riempire un
+  buco che, settimana per settimana, nessuna attività attiva poteva colmare —
+  e `check_schedule` bocciava il piazzamento con un `max_gap` `HARD`.
+  Esattamente il fallimento che il criterio di riuscita dello spike dichiara
+  inaccettabile.
+  **Corretto**: `MaxGapBuilder` ora posta un budget **per firma di
+  settimana** — un `model.Add(...)` per ogni `(rep, _)` di `ctx.signatures`,
+  con i letterali `occ` filtrati alle sole attività attive in quella firma
+  (`SolverContext.occupied` guadagna un parametro `signature` opzionale,
+  memoizzato per `(firma, chiave, giorno, fascia)`; senza firma si comporta
+  come prima). Firme diverse con lo stesso insieme di attività attive
+  producono lo stesso vincolo: deduplicate con `posted`, come già fa
+  `OccupationBuilder`. Nuovo test in `tests/test_solver_oracle.py` —
+  `test_oracolo_su_istanza_multi_firma` — che nessuno dei banchi di prova
+  esistenti poteva scrivere, perché il Fermi non ha la varietà di firme per
+  farlo scattare.
+  ⚠ **La stessa semplificazione in `subject_constraints.py` resta corretta**,
+  e non è stata toccata: lì più letterali significano una somma più
+  vincolata, mai il contrario — il caso pessimo è perdere qualche soluzione,
+  mai accettarne di illegali.
+  **Non è un errore di chi ha implementato: è il piano, la terza volta.** La
+  semplificazione era scritta nei vincoli globali del piano con quella
+  giustificazione. Sullo stesso branch: prima il D.T.B. tradotto come soglia
+  per singolo buco invece che come budget settimanale (intercettato in fase
+  di design, prima del commit); poi il modello dei token che non sapeva
+  distinguere parti della stessa partizione da parti di partizioni diverse
+  (ADR-017); ora questo. Tre volte lo stesso pattern: il piano dichiara una
+  proprietà — soglia singola, insieme di chiavi sufficiente, semplificazione
+  conservativa — che si rivela falsa solo quando la si controlla contro il
+  checker o contro i dati, mai a colpo d'occhio sul piano stesso.
+  **Rifiniture minori nello stesso giro**: `EMPTY_ATOMS` (dead code, zero
+  riferimenti) rimosso da `domain/analysis/state.py`; in
+  `subject_constraints.py` il ramo `A = B` ora conta attività distinte, non
+  letterali, prima di postare il vincolo ridondante; `apply()` documenta di
+  non fare nulla su `placements` vuoto; `test_fermi_intero_misurato` non può
+  più spegnersi in silenzio se lo stato è feasible ma `placements` è vuoto;
+  aggiunto un test di `AtomMap` con tre partizioni sulla stessa classe.
+  **Questione aperta, non risolta qui**: cosa fare quando un constraint
+  mescola attività congelate già in violazione e attività libere nello stesso
+  vincolo — va deciso nella spec del modello completo, prima degli altri
+  ventidue builder. Aggiunta all'elenco **«Ancora aperto»**.
 
 - **2026-08-09** — **Lo spike CP-SAT, e ADR-017 chiuso.** `domain/solver/`,
   package separato da `domain/analysis/` perché quest'ultimo resti senza
@@ -342,6 +416,9 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   finding atteso (`test_oracolo_puo_fallire` in
   `tests/test_solver_oracle.py` — un test della suite, non un esperimento una
   tantum: la prova resta nel repo, non solo nella sessione di review).
+  ⚠ **Falsificato il 2026-08-24**: nessuno di quei tre banchi di prova
+  esercita più di una firma di settimana, e proprio lì si annidava il
+  difetto. Vedi la voce corrispondente più sopra.
   **Le misure sul Fermi intero**: 284 attività (288h00), **tutte libere**
   (nessuna congelata dai pre-filtri strutturali), **8140 variabili**, **1082
   constraint**, `OPTIMAL` in **meno di un secondo** (~0,55s). ⚠ Come già una

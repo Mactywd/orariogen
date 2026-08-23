@@ -1,14 +1,18 @@
 """Il criterio di riuscita: solve → apply → check_schedule → zero HARD nelle
 cinque famiglie modellate. Il registro dei predicati e' l'oracolo del solver:
 le due facce sono state scritte dai lati opposti dello stesso dato."""
+import datetime as dt
+
 import pytest
 
+from domain import weeks
 from domain.analysis.conformity import check_schedule
 from domain.analysis.findings import Severity
 from domain.models import (
-    Break, ClassPart, ClassPartition, Extraction, Placement,
-    ResourceTimeConstraint, ResourceUnavailability, SchoolClass, Subject,
-    SubjectConstraint, Teacher,
+    Break, ClassPart, ClassPartition, Discipline, Extraction, Period,
+    Placement, ResourceTimeConstraint, ResourceUnavailability, Schedule,
+    SchoolClass, SchoolYear, StudyPlan, Subject, SubjectConstraint, Teacher,
+    TimeGrid,
 )
 from domain.solver.model import apply, solve
 from tests import fermi
@@ -157,6 +161,75 @@ def test_oracolo_puo_fallire():
     assert "unavailability" in codici
 
 
+def _scuola_multi_firma():
+    """Due settimane con firme diverse, per disciplinare la dimensione che il
+    Fermi non esercita (una sola firma, tutto annuale). Un docente con
+    D.T.B. = 0 sulla classe; due attivita' della prima settimana forzate da
+    indisponibilita' **datate** su (giorno 0, fascia 0) e (giorno 0, fascia
+    2); una terza attivita', libera, attiva solo nella seconda settimana.
+
+    Per settimana l'istanza e' infattibile: il buco alla fascia 1 non e'
+    colmabile da nessuna attivita' attiva in quella settimana (la terza
+    attivita' non c'e' ancora). Un builder che trattasse tutte le attivita'
+    come co-attive vedrebbe invece la terza attivita' come disponibile a
+    riempire il buco, e dichiarerebbe OPTIMAL una soluzione che
+    check_schedule rifiuta per la prima settimana — esattamente il difetto
+    dimostrato in time_constraints.py."""
+    grid = TimeGrid.objects.create(
+        days_per_cycle=1, slots_per_day=3, slot_minutes=60, morning_end_slot=3)
+    year = SchoolYear.objects.create(
+        start_date=dt.date(2026, 9, 14), end_date=dt.date(2026, 9, 27),
+        first_week_monday=dt.date(2026, 9, 14),
+    )
+    period = Period.objects.create(
+        school_year=year, name="P1", start_date=year.start_date, end_date=year.end_date)
+    schedule = Schedule.objects.create(period=period)
+    disc = Discipline.objects.create(code="LET", name="Lettere")
+    subject = Subject.objects.create(code="ITA", name="Italiano", discipline=disc)
+    plan = StudyPlan.objects.create(code="P1", name="Piano", year=1)
+    klass = SchoolClass.objects.create(name="1A", study_plan=plan, year=1)
+    t1 = Teacher.objects.create(name="Uno Aldo", last_name="Uno", first_name="Aldo")
+    t2 = Teacher.objects.create(name="Due Bice", last_name="Due", first_name="Bice")
+    t3 = Teacher.objects.create(name="Tre Ciro", last_name="Tre", first_name="Ciro")
+
+    prima_settimana = weeks.single_week(0)
+    seconda_settimana = weeks.single_week(1)
+    make_activity(subject, teachers=[t1], classes=[klass], mask=prima_settimana)
+    make_activity(subject, teachers=[t2], classes=[klass], mask=prima_settimana)
+    make_activity(subject, teachers=[t3], classes=[klass], mask=seconda_settimana)
+
+    lunedi_prima_settimana = year.first_week_monday
+    for fascia in (1, 2):
+        ResourceUnavailability.objects.create(
+            resource=t1, day=0, slot=fascia, level="hard", date=lunedi_prima_settimana)
+    for fascia in (0, 1):
+        ResourceUnavailability.objects.create(
+            resource=t2, day=0, slot=fascia, level="hard", date=lunedi_prima_settimana)
+
+    ResourceTimeConstraint.objects.create(
+        resource=klass, type=ResourceTimeConstraint.Type.MAX_GAP_HOURS,
+        params={"max_gap_minutes": 0})
+
+    return {"schedule": schedule}
+
+
+def test_oracolo_su_istanza_multi_firma():
+    """Il dataset Fermi ha un'unica firma di settimana (tutto annuale): questo
+    test e' l'unico a esercitare davvero la dimensione «settimane». L'istanza
+    e' costruita apposta per essere infattibile **per settimana** (il buco
+    alla fascia 1 della prima settimana non e' colmabile da nessuna attivita'
+    attiva in quella settimana): un builder corretto deve dichiararlo, non
+    nasconderlo dietro un OPTIMAL che check_schedule rifiuterebbe.
+
+    Prima della correzione, trattare tutte le attivita' come co-attive faceva
+    apparire colmabile il buco con l'attivita' della seconda settimana: il
+    solver rispondeva OPTIMAL, e check_schedule bocciava il piazzamento con
+    un HARD max_gap — il fallimento che questo test scopre."""
+    env = _scuola_multi_firma()
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status == "INFEASIBLE", soluzione.stats
+
+
 def test_fermi_intero_misurato():
     """Il Fermi ha le classi del triennio a 30 ore su una griglia di 30 fasce:
     non e' noto se sia fattibile. Qualunque cosa il solver restituisca, deve
@@ -165,6 +238,7 @@ def test_fermi_intero_misurato():
     soluzione = solve(dataset["schedule"], time_limit=120)
     print("\nFermi intero:", soluzione.status, soluzione.stats)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNKNOWN")
-    if soluzione.placements:
+    if soluzione.status in ("OPTIMAL", "FEASIBLE"):
+        assert soluzione.placements
         apply(soluzione, dataset["schedule"])
         assert violazioni(dataset["schedule"]) == []

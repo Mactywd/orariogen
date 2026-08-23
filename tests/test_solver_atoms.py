@@ -84,3 +84,21 @@ def test_l_atomo_ha_un_nome_leggibile():
     atoms = AtomMap.build()
     assert len(atoms.klass[env["klass"].pk]) == 4          # prodotto 2 x 2
     assert set(atoms.names.values()) == {"1A (studenti in comune fra partizioni)"}
+
+
+def test_tre_partizioni_sulla_stessa_classe():
+    """L'encoding regge per costruzione anche oltre due partizioni: il
+    prodotto cresce a tre fattori, e parti di partizioni non adiacenti
+    (prima e terza) confliggono comunque, non solo le coppie viste finora."""
+    env = mini_school()
+    rel, alt = _partition(env["klass"], "IRC", "1A_REL", "1A_ALT")
+    _partition(env["klass"], "LINGUA", "1A_ING", "1A_TED")
+    art, mus = _partition(env["klass"], "OPZIONE", "1A_ART", "1A_MUS")
+    atoms = AtomMap.build()
+    assert len(atoms.klass[env["klass"].pk]) == 8          # prodotto 2 x 2 x 2
+
+    a = make_activity(env["subject"], parts=[rel])
+    b = make_activity(env["subject"], parts=[art])
+    place(env["schedule"], a, day=0, slot=0)
+    place(env["schedule"], b, day=0, slot=0)
+    assert "resource_occupied" in _codici(env["schedule"])

@@ -11,10 +11,25 @@ fascia sta fra la prima e l'ultima occupata, e i minuti di buco sono
 I buchi non si contano mai a cavallo del pranzo: le due mezze giornate sono
 separate, come in `_halves` del checker.
 
-Semplificazione dichiarata: questo builder non distingue le firme di settimana
-e tratta tutte le attività come co-attive. È conservativo — può vincolare di
-più, mai di meno — quindi non può produrre una soluzione che l'oracolo
-rifiuta."""
+⚠ Questo builder **distingue le firme di settimana**: posta un budget per
+ogni `(rep, _)` di `ctx.signatures`, con i letterali `occ` filtrati alle sole
+attività attive in quella firma. La semplificazione «tutte le attività
+co-attive» — usata altrove nello spike (`subject_constraints.py`) — qui
+**non è conservativa**, ed è il difetto trovato in review: il buco è
+`ultima − prima + 1 − conteggio`. Un'occupazione che cade *dentro* il buco ma
+viene da un'attività di un'**altra** firma di settimana alza il `conteggio`
+senza toccare `prima` né `ultima` — quindi **riempie** il buco nel modello
+unione, mentre nelle settimane reali quel buco resta scoperto. Trattare tutto
+come co-attivo vincola quindi **di meno**, non di più: può accettare
+piazzamenti che il checker, valutando ogni firma per conto proprio, rifiuta.
+(Per `subject_constraints.py` la stessa semplificazione resta genuinamente
+conservativa: più letterali significano una somma più vincolata, mai il
+contrario — lì il caso pessimo è perdere qualche soluzione, mai accettarne di
+illegali.)
+
+Le firme diverse con lo stesso insieme di attività attive sulla risorsa
+producono lo stesso vincolo: deduplicate con `posted`, come fa
+`OccupationBuilder`."""
 
 from domain.models import ResourceTimeConstraint
 from domain.solver.registry import Builder, register
@@ -32,22 +47,34 @@ class MaxGapBuilder(Builder):
             if row.type != T.MAX_GAP_HOURS:
                 continue
             key = row.resource_id
-            if not any(ctx.has_free(key, day, slot)
-                       for day in range(grid.days_per_cycle)
-                       for slot in range(grid.slots_per_day)):
-                continue   # nessuna decisione da prendere su questa risorsa
-            terms = []
-            for day in range(grid.days_per_cycle):
-                for half in halves:
-                    occ = {s: ctx.occupied(model, key, day, s) for s in half}
-                    for s in half:
-                        before = model.NewBoolVar(f"before_{key}_{day}_{s}")
-                        model.AddMaxEquality(before, [occ[i] for i in half if i <= s])
-                        after = model.NewBoolVar(f"after_{key}_{day}_{s}")
-                        model.AddMaxEquality(after, [occ[j] for j in half if j >= s])
-                        covered = model.NewBoolVar(f"covered_{key}_{day}_{s}")
-                        model.AddMinEquality(covered, [before, after])
-                        terms.append(covered - occ[s])
-            if terms:
-                model.Add(grid.slot_minutes * sum(terms)
-                          <= row.params["max_gap_minutes"])
+            posted = set()
+            for rep, _ in ctx.signatures:
+                active = ctx.states[rep].activities
+                touching = frozenset(
+                    aid
+                    for day in range(grid.days_per_cycle)
+                    for slot in range(grid.slots_per_day)
+                    for aid, _ in ctx.by_cell.get((key, day, slot), ())
+                    if aid in active
+                )
+                if not any(aid in ctx.free for aid in touching):
+                    continue   # nessuna decisione da prendere in questa firma
+                if touching in posted:
+                    continue   # firma diversa, stesso insieme di attivita' attive
+                posted.add(touching)
+                terms = []
+                for day in range(grid.days_per_cycle):
+                    for half in halves:
+                        occ = {s: ctx.occupied(model, key, day, s, signature=rep)
+                               for s in half}
+                        for s in half:
+                            before = model.NewBoolVar(f"before_{key}_{rep}_{day}_{s}")
+                            model.AddMaxEquality(before, [occ[i] for i in half if i <= s])
+                            after = model.NewBoolVar(f"after_{key}_{rep}_{day}_{s}")
+                            model.AddMaxEquality(after, [occ[j] for j in half if j >= s])
+                            covered = model.NewBoolVar(f"covered_{key}_{rep}_{day}_{s}")
+                            model.AddMinEquality(covered, [before, after])
+                            terms.append(covered - occ[s])
+                if terms:
+                    model.Add(grid.slot_minutes * sum(terms)
+                              <= row.params["max_gap_minutes"])

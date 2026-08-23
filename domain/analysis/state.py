@@ -67,9 +67,6 @@ class AtomMap:
         return cls({p: frozenset(v) for p, v in part.items()}, klass, names)
 
 
-EMPTY_ATOMS = AtomMap({}, {}, {})
-
-
 def activity_tokens(activity, assigned_room_id=None, atoms=None):
     """Chiavi di occupazione e quantità dei materiali di un'attività.
     Regola dei conflitti sulle unità: la classe intera occupa sé stessa, tutte
