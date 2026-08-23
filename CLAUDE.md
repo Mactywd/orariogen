@@ -61,6 +61,7 @@ requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza
+  solver/               lo spike CP-SAT: registro dei builder, contesto, modello, cinque vincoli
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze)
 ```
 
@@ -131,7 +132,13 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
 > predicati e l'analisi di capienza **sono anch'essi implementati**
 > (`domain/analysis/`, 116 test verdi a suite completa, misurati con
-> `venv/bin/pytest`); il piano successivo è il **modello CP-SAT** (piano 3).
+> `venv/bin/pytest`); lo **spike CP-SAT è implementato** (`domain/solver/`):
+> cinque vincoli su ventisette, scelti per attraversare i tre pattern di
+> traduzione, e l'oracolo tiene — una soluzione del solver riletta da
+> `check_schedule` non produce alcun finding `HARD` nelle famiglie modellate.
+> Il passo successivo è la spec del **modello completo**: i ventidue vincoli
+> restanti, gli alleggerimenti a quota, l'ottimizzazione lessicografica,
+> l'assegnazione delle aule e il violatore di Hall.
 > Restano due punti aperti, entrambi marginali e non bloccanti:
 > le aule mai inserite nella base del Fermi, e l'estensione della cascata di
 > default.
@@ -294,6 +301,51 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-09** — **Lo spike CP-SAT, e ADR-017 chiuso.** `domain/solver/`,
+  package separato da `domain/analysis/` perché quest'ultimo resti senza
+  `ortools`. Cinque vincoli tradotti, scelti per attraversare i **tre pattern
+  di traduzione** dal predicato al modello CP-SAT: **pre-filtro strutturale**
+  (`structural:grid`, `structural:unavailability` — le celle inammissibili non
+  diventano nemmeno variabili), **cardinalità sulla risorsa**
+  (`structural:occupation` come conflitto e capienza cumulativa,
+  `MAX_GAP_HOURS`) e **relazione fra materie** (`SAME_DAY_INCOMPATIBLE`). I
+  builder sono registrati sotto le **stesse chiavi** dei checker di
+  `domain/analysis`.
+  **ADR-017 chiuso.** Il problema che lo teneva aperto: un insieme di token
+  non sa dire «parti della stessa partizione sono disgiunte, parti di
+  partizioni diverse si sovrappongono» sulla stessa coppia di oggetti — sono
+  due affermazioni opposte sulla stessa relazione. Gli **atomi** (`AtomMap` in
+  `domain/analysis/state.py`), le celle del prodotto delle partizioni, la
+  esprimono senza toccare l'architettura a intersezione di insiemi: aggiunti
+  per tutte e tre le vie con cui una parte entra nelle chiavi (parte diretta,
+  via raggruppamento, via espansione della classe intera), e **solo** per le
+  classi con almeno due partizioni — altrove nulla cambia. Nessun campo nuovo,
+  nessuna migrazione.
+  **La correzione sul `D.T.B.`** Il vincolo era stato tradotto come soglia per
+  **singolo** buco. Non lo è: il checker somma i minuti di buco su **tutte le
+  mezze giornate della settimana** e confronta una volta sola — è un budget
+  settimanale, dove due buchi da un'ora sforano un budget di un'ora e mezza.
+  L'errore è stato intercettato in fase di design, rileggendo il checker
+  invece del proprio ricordo di cosa facesse: è esattamente il tipo di svista
+  che l'oracolo esiste per intercettare.
+  **L'oracolo tiene.** Il criterio di riuscita è uno solo: una soluzione del
+  solver, riscritta nei `Placement` e riletta da `check_schedule`, non produce
+  alcun finding `HARD` nelle cinque famiglie modellate. Ha tenuto al primo
+  colpo — sulla scuola giocattolo, sul Fermi ristretto a una classe e sul
+  Fermi intero. E che potesse fallire è stato **verificato**: corrompendo
+  deliberatamente i piazzamenti, tutte le famiglie provate hanno prodotto il
+  finding atteso.
+  **Le misure sul Fermi intero**: 284 attività (288h00), **tutte libere**
+  (nessuna congelata dai pre-filtri strutturali), **8140 variabili**, **1082
+  constraint**, `OPTIMAL` in **meno di un secondo** (~0,55s). ⚠ Come già una
+  volta con `scripts/genera_orario.py`, quel risultato **non dice nulla**
+  sulla risolvibilità dell'istanza reale: è la risposta a un problema con
+  **cinque vincoli su ventisette**, non ai ventisette.
+  **Cosa resta fuori**, esplicitamente: gli altri ventidue vincoli del
+  registro, gli alleggerimenti a quota, l'ottimizzazione lessicografica,
+  l'assegnazione delle aule, il violatore di Hall, un comando `manage.py
+  solve`.
 
 - **2026-07-26 (notte, analisi)** — **L'analisi dei vincoli, implementata:
   `domain/analysis/`.** Chiude il piano 2 (dodici task) sopra lo schema

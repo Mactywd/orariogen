@@ -554,8 +554,12 @@ parallelo). Non lo modelliamo ancora.
 
 **Conseguenze.** Implementare correttamente questa regola richiede una codifica
 dei token di occupazione più fine (per alunno, o per legame dichiarato) e il
-relativo constraint nel solver CP-SAT: apre il **piano 3**. Fino a quel
-momento, la regola v1 resta in vigore nel codice ed è **marcata come
-provvisoria** (docstring di `activity_tokens` e la spec del piano 2).
+relativo constraint nel solver CP-SAT.
+
+**Implementato** il 2026-08-09 nello spike CP-SAT: gli **atomi**, cioè le celle
+del prodotto delle partizioni, calcolate in `domain/analysis/state.py`
+(`AtomMap`). Le parti della stessa partizione restano disgiunte, quelle di
+partizioni diverse condividono almeno un atomo. Nessun campo nuovo, nessuna
+migrazione, e nessun effetto sulle classi con meno di due partizioni.
 
 **Data.** 2026-07-26
