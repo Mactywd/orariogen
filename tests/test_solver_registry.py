@@ -43,10 +43,10 @@ def test_ogni_builder_implementa_almeno_un_hook():
 
 def test_i_builder_tradotti_finora():
     """Non piu' i cinque dello spike: il modello completo li accresce task
-    dopo task. Qui si fissa lo stato corrente — dopo il Task 6, i cinque
-    dello spike piu' MAX_HOURS e MAX_HALF_DAYS — cosi' una registrazione
-    dimenticata o una di troppo si vede subito, invece di dipendere dalla
-    memoria di chi legge."""
+    dopo task. Qui si fissa lo stato corrente — dopo il Task 7, i sette del
+    Task 6 piu' i tre minimi garantiti (MIN_DISTRIBUTION, ARRIVAL_DEPARTURE,
+    FREE_GUARANTEED) — cosi' una registrazione dimenticata o una di troppo si
+    vede subito, invece di dipendere dalla memoria di chi legge."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
     assert set(BUILDERS) == {
@@ -56,5 +56,8 @@ def test_i_builder_tradotti_finora():
         ResourceTimeConstraint.Type.MAX_GAP_HOURS,
         ResourceTimeConstraint.Type.MAX_HOURS,
         ResourceTimeConstraint.Type.MAX_HALF_DAYS,
+        ResourceTimeConstraint.Type.MIN_DISTRIBUTION,
+        ResourceTimeConstraint.Type.ARRIVAL_DEPARTURE,
+        ResourceTimeConstraint.Type.FREE_GUARANTEED,
         SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE,
     }

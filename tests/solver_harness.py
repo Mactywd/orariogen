@@ -441,3 +441,80 @@ def _derive_same_day(w):
                 type=ST.SAME_DAY_INCOMPATIBLE)
             creata += 1
     return creata
+
+
+@deriver(RT.MIN_DISTRIBUTION, {"min_distribution"})
+def _derive_min_distribution(w):
+    """Chiede i giorni effettivamente lavorati nella firma **peggiore**: e'
+    il massimo che il testimone garantisce in tutte le settimane. Vacua
+    (ritorna 0) se la classe scelta a caso non lavora in nessuna firma —
+    stessa convenzione di _derive_max_half_days."""
+    klass = w.rng.choice(w.env["classes"])
+    peggiore = min(len(w.resource_days(klass.pk, rep)) for rep, _ in w.signatures)
+    if peggiore == 0:
+        return 0
+    ResourceTimeConstraint.objects.create(
+        resource=klass, type=RT.MIN_DISTRIBUTION,
+        params={"min_minutes_per_day": w.env["grid"].slot_minutes,
+                "min_days": peggiore})
+    return 1
+
+
+@deriver(RT.ARRIVAL_DEPARTURE, {"arrival_departure"})
+def _derive_arrival_departure(w):
+    """La finestra osservata: la prima fascia usata e l'ultima piu' uno.
+    Chiede che **tutti** i giorni siano conformi, e nel testimone lo sono.
+
+    Vacua (ritorna 0) se la finestra risultante non vieta nessuna fascia —
+    `prima == 0` e `ultima == slots_per_day - 1`, cioe' il docente scelto a
+    caso non compare in nessuna firma (fallback alla griglia intera) o vi
+    occupa gia' sia la prima sia l'ultima fascia: in entrambi i casi
+    `proibite` nel builder e' vuoto, il vincolo `>= days` e' banalmente vero
+    per qualunque piazzamento, e un builder vacuo non potrebbe farlo fallire
+    (stessa convenzione di _derive_unavailability)."""
+    grid = w.env["grid"]
+    docente = w.rng.choice(w.env["teachers"])
+    prima, ultima = grid.slots_per_day, 0
+    for rep, _ in w.signatures:
+        for _day, fasce in w.resource_days(docente.pk, rep).items():
+            prima, ultima = min(prima, fasce[0]), max(ultima, fasce[-1])
+    if prima > ultima:
+        prima, ultima = 0, grid.slots_per_day - 1
+    if prima == 0 and ultima == grid.slots_per_day - 1:
+        return 0
+    ResourceTimeConstraint.objects.create(
+        resource=docente, type=RT.ARRIVAL_DEPARTURE,
+        params={"not_before_slot": prima, "not_after_slot": ultima + 1,
+                "days": grid.days_per_cycle})
+    return 1
+
+
+@deriver(RT.FREE_GUARANTEED, {"free_guaranteed"})
+def _derive_free_guaranteed(w):
+    """I giorni e le mezze giornate libere osservati nella firma peggiore.
+    ⚠ Le mezze giornate si contano **solo sui giorni con attivita'**, come fa
+    il checker: derivare altrimenti produrrebbe un testimone che il checker
+    stesso boccia, e run_family lo direbbe al punto 1.
+
+    Vacua (ritorna 0) se entrambe le soglie derivate sono zero: il builder
+    posta `sum(...) >= minimo` solo quando `minimo` e' vero (`if
+    minimo_giorni:` / `if minimo_mezze and mezze_libere:`), quindi a
+    zero-zero non posterebbe nulla — non c'e' nulla da far fallire se fosse
+    vacuo."""
+    grid = w.env["grid"]
+    docente = w.rng.choice(w.env["teachers"])
+    min_giorni, min_mezze = grid.days_per_cycle, grid.days_per_cycle * 2
+    for rep, _ in w.signatures:
+        giorni = w.resource_days(docente.pk, rep)
+        liberi = grid.days_per_cycle - len(giorni)
+        mezze = 0
+        for _day, fasce in giorni.items():
+            mezze += not any(f < grid.morning_end_slot for f in fasce)
+            mezze += not any(f >= grid.morning_end_slot for f in fasce)
+        min_giorni, min_mezze = min(min_giorni, liberi), min(min_mezze, mezze)
+    if not min_giorni and not min_mezze:
+        return 0
+    ResourceTimeConstraint.objects.create(
+        resource=docente, type=RT.FREE_GUARANTEED,
+        params={"free_days": min_giorni, "free_half_days": min_mezze})
+    return 1
