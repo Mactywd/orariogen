@@ -30,9 +30,20 @@ CODICI = {
 }
 
 
-def violazioni(schedule):
-    return [f for f in check_schedule(schedule)
-            if f.severity == Severity.HARD and f.code in CODICI]
+def violazioni(schedule, codici=CODICI):
+    """L'insieme delle chiavi dei finding HARD nelle famiglie modellate.
+    Un insieme, non una lista: il criterio di riuscita e' il **contenimento**
+    (ADR-018), non l'uguaglianza."""
+    return {f.key for f in check_schedule(schedule)
+            if f.severity == Severity.HARD and f.code in codici}
+
+
+def nuove(schedule, prima, codici=CODICI):
+    """I finding HARD comparsi **dopo** il solve. Il solver puo' anche
+    riparare una violazione preesistente spostando un'attivita' libera: quello
+    e' un successo, non una discrepanza, ed e' per questo che il criterio e'
+    il contenimento e non l'uguaglianza."""
+    return violazioni(schedule, codici) - prima
 
 
 def _scuola_media():
@@ -99,7 +110,7 @@ def test_oracolo_sulla_scuola_media():
     soluzione = solve(env["schedule"], time_limit=30)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     apply(soluzione, env["schedule"])
-    assert violazioni(env["schedule"]) == []
+    assert violazioni(env["schedule"]) == set()
 
 
 def test_oracolo_sul_fermi_per_una_classe():
@@ -113,7 +124,7 @@ def test_oracolo_sul_fermi_per_una_classe():
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     assert len(soluzione.placements) == classe.activities.count()
     apply(soluzione, dataset["schedule"])
-    assert violazioni(dataset["schedule"]) == []
+    assert violazioni(dataset["schedule"]) == set()
 
 
 def test_oracolo_puo_fallire():
@@ -121,7 +132,7 @@ def test_oracolo_puo_fallire():
     test, un oracolo diventato vacuo — per esempio perche' l'insieme CODICI
     perde un codice, o un checker smette di essere registrato — passerebbe
     silenziosamente per sempre: gli altri test dell'oracolo continuerebbero a
-    dare 'violazioni() == []' anche se non stessero piu' verificando niente.
+    dare 'violazioni() == set()' anche se non stessero piu' verificando niente.
     Qui corrompiamo deliberatamente due Placement dopo un solve+apply andato a
     buon fine, e verifichiamo che violazioni() veda ciascuna corruzione con il
     codice atteso, in due famiglie diverse: occupazione (due attivita' dello
@@ -131,7 +142,7 @@ def test_oracolo_puo_fallire():
     soluzione = solve(env["schedule"], time_limit=30)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     apply(soluzione, env["schedule"])
-    assert violazioni(env["schedule"]) == []
+    assert violazioni(env["schedule"]) == set()
 
     ita = env["ita_activities"]  # [1A×2, 1B×2, 1C×2], stesso docente per tutte
     docente_ita = env["docenti"]["ITA"]
@@ -143,13 +154,13 @@ def test_oracolo_puo_fallire():
     giorno_orig, fascia_orig = p_b.day, p_b.start_slot
     p_b.day, p_b.start_slot = p_a.day, p_a.start_slot
     p_b.save()
-    codici = {f.code for f in violazioni(env["schedule"])}
+    codici = {codice for codice, *_ in violazioni(env["schedule"])}
     assert "resource_occupied" in codici
 
     # Ripristino: la corruzione precedente non deve contaminare la successiva.
     p_b.day, p_b.start_slot = giorno_orig, fascia_orig
     p_b.save()
-    assert violazioni(env["schedule"]) == []
+    assert violazioni(env["schedule"]) == set()
 
     # Famiglia "indisponibilita'": un'attivita' del docente ITA spostata sulla
     # fascia (giorno=0, fascia=1), dichiarata indisponibile hard per lui.
@@ -157,7 +168,7 @@ def test_oracolo_puo_fallire():
         resource=docente_ita, day=0, slot=1, level="hard").exists()
     p_a.day, p_a.start_slot = 0, 1
     p_a.save()
-    codici = {f.code for f in violazioni(env["schedule"])}
+    codici = {codice for codice, *_ in violazioni(env["schedule"])}
     assert "unavailability" in codici
 
 
@@ -303,7 +314,7 @@ def _scuola_multi_firma_fattibile():
 def test_oracolo_su_istanza_multi_firma_fattibile():
     """L'altra meta' della dimensione «settimane»: non l'istanza infattibile
     che il solver deve rifiutare, ma una **fattibile** portata per intero lungo
-    la catena solve -> apply -> check_schedule -> violazioni() == [].
+    la catena solve -> apply -> check_schedule -> violazioni() == set().
 
     E' il caso che il criterio di riuscita dello spike descrive davvero, e che
     prima di questo test nessun banco di prova copriva: la scuola giocattolo,
@@ -318,7 +329,7 @@ def test_oracolo_su_istanza_multi_firma_fattibile():
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     assert len(soluzione.placements) == len(env["attivita"])
     apply(soluzione, env["schedule"])
-    assert violazioni(env["schedule"]) == []
+    assert violazioni(env["schedule"]) == set()
 
     # la prova diretta che le due firme non sono state fuse: due attivita' di
     # settimane diverse condividono docente, classe e collocazione
@@ -344,4 +355,4 @@ def test_fermi_intero_misurato():
     if soluzione.status in ("OPTIMAL", "FEASIBLE"):
         assert soluzione.placements
         apply(soluzione, dataset["schedule"])
-        assert violazioni(dataset["schedule"]) == []
+        assert violazioni(dataset["schedule"]) == set()
