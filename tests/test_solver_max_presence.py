@@ -17,15 +17,19 @@ pytestmark = pytest.mark.django_db
 T = ResourceTimeConstraint.Type
 
 
-def test_la_presenza_include_i_buchi_e_attraversa_il_pranzo():
-    """Due attivita' della stessa classe, presenza massima due ore. Su una
-    griglia 5x6 con meta' giornata a 4, il solver non puo' metterle alle fasce
-    0 e 5 (presenza sei ore) ne' alle fasce 3 e 4 (presenza due ore ma **a
-    cavallo del pranzo**, che per la presenza non conta come separazione).
+def test_la_presenza_include_i_buchi():
+    """Due attivita' della stessa classe, presenza massima due ore: il solver
+    non puo' metterle alle fasce 0 e 5, perche' la presenza include i buchi e
+    varrebbe sei ore.
 
-    Se il builder usasse la mezza giornata come span, 3 e 4 risulterebbero due
-    presenze da un'ora ciascuna e passerebbero: e' il modo esatto in cui questo
-    vincolo si confonde con il D.T.B."""
+    ⚠ Il nome e la docstring che questo test aveva nel piano promettevano di
+    piu' di quanto mantenessero (Minor 1 della review Task 8): dicevano che il
+    solver non puo' nemmeno usare le fasce 3 e 4 «a cavallo del pranzo». E'
+    **falso** — con `morning_end_slot = 4` le fasce 3 e 4 danno `4 - 3 + 1 = 2`
+    fasce, cioe' 120', che un tetto di 120' ammette, e il checker e'
+    d'accordo. Cio' che questo test cattura sotto mutazione e' lo `span` in
+    generale (l'asserzione che salta e' quella sulle fasce 0 e 5), non il
+    pranzo. La dimensione del pranzo e' esercitata dal test qui sotto."""
     env = mini_school()
     for _ in range(2):
         make_activity(env["subject"], teachers=[env["teacher"]],
@@ -39,6 +43,60 @@ def test_la_presenza_include_i_buchi_e_attraversa_il_pranzo():
         per_giorno.setdefault(day, []).append(slot)
     for _day, fasce in per_giorno.items():
         assert (max(fasce) - min(fasce) + 1) * 60 <= 120
+
+
+def test_la_presenza_non_si_spezza_a_cavallo_del_pranzo():
+    """La dimensione che il test sopra prometteva e non esercitava (Minor 1
+    della review Task 8). Due attivita' costrette alle fasce **3 e 4** — le
+    due che stanno a cavallo del confine mattina/pomeriggio — con un tetto di
+    **60'**.
+
+    `MaxPresenceChecker._presence_minutes` misura `ultima - prima + 1` sulla
+    giornata intera e non passa mai da `_halves`: vede una sola presenza di
+    120' e boccia. Un builder che usasse la mezza giornata come `span`
+    vedrebbe due presenze da 60' ciascuna, entrambe sotto il tetto, e
+    accetterebbe — che e' il modo esatto in cui MAX_PRESENCE si confonde col
+    D.T.B., il quale invece a cavallo del pranzo non conta mai nulla.
+
+    Attesa: INFEASIBLE. Col builder mutato a `v.halves()` diventa OPTIMAL."""
+    from domain.models import ResourceUnavailability
+
+    env = mini_school()
+    docente = env["teacher"]
+    for day in range(5):
+        for slot in range(6):
+            if day == 0 and slot in (3, 4):
+                continue
+            ResourceUnavailability.objects.create(
+                resource=docente, day=day, slot=slot, level="hard")
+    for _ in range(2):
+        make_activity(env["subject"], teachers=[docente], classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.MAX_PRESENCE, params={"max_minutes": 60})
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status == "INFEASIBLE", soluzione.stats
+
+
+def test_la_presenza_a_cavallo_del_pranzo_e_ammessa_se_ci_sta_nel_tetto():
+    """Caso di controllo del test sopra, perche' quell'INFEASIBLE non sia
+    scambiato per «le fasce 3 e 4 sono vietate in quanto tali»: la stessa
+    istanza con una sola attivita' (presenza 60') e' risolvibile. Cio' che
+    boccia e' la misura della presenza, non la posizione."""
+    from domain.models import ResourceUnavailability
+
+    env = mini_school()
+    docente = env["teacher"]
+    for day in range(5):
+        for slot in range(6):
+            if day == 0 and slot in (3, 4):
+                continue
+            ResourceUnavailability.objects.create(
+                resource=docente, day=day, slot=slot, level="hard")
+    make_activity(env["subject"], teachers=[docente], classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.MAX_PRESENCE, params={"max_minutes": 60})
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
 
 
 def test_adr018_presenza_gia_sforata_dalle_congelate_non_blocca():
@@ -132,11 +190,49 @@ def test_max_presence_giorni_morde():
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 
+def test_adr018_giorni_gia_consumati_dalle_congelate_non_bloccano():
+    """Il clamp `max(0, max_days - consumo)` del ramo `days` — portante ma
+    scoperto da tutti i test consegnati col Task 8 (Minor 2 della review).
+    Nessuno di quelli metteva insieme attivita' congelate **e** una riga con
+    `days`, quindi il caso `consumo > max_days` non veniva mai costruito: la
+    mutazione `max_days - consumo` (senza il clamp a zero) lasciava la suite
+    intera verde.
+
+    L'istanza: tre congelate su tre giorni distinti, tetto **due** giorni.
+    Il passato ha gia' consumato tre giorni su due, quindi il residuo grezzo
+    e' `2 - 3 = -1` e senza clamp il vincolo diventa `sum(giorni liberi) <=
+    -1`, insoddisfacibile: il modello sarebbe INFEASIBLE **per colpa del
+    passato**, cio' che ADR-018 vieta. Col clamp il residuo e' 0 — nessun
+    giorno *nuovo* puo' essere aperto — e l'attivita' libera si piazza in uno
+    dei tre giorni gia' consumati."""
+    env = mini_school()
+    for day in range(3):
+        act = make_activity(env["subject"], teachers=[env["teacher"]],
+                            classes=[env["klass"]],
+                            immobility=Activity.Immobility.LOCKED_IN_PLACE)
+        Placement.objects.create(schedule=env["schedule"], activity=act,
+                                 day=day, start_slot=0)
+    libera = make_activity(env["subject"], teachers=[env["teacher"]],
+                           classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.MAX_PRESENCE, params={"days": 2})
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    giorno, _fascia = soluzione.placements[libera.id]
+    assert giorno in (0, 1, 2)
+
+
 def test_il_vincolo_non_si_posta_se_nulla_e_libero():
-    """Rete di sicurezza di ResourceBuilder: entrambi i tetti sono gia'
-    sforati dalle sole congelate, ma la classe non ha nulla da piazzare —
-    e' un fatto, non una decisione, e il solver non deve nemmeno accorgersi
-    del vincolo."""
+    """⚠ Questo test **documenta**, non verifica (Minor 3 della review Task
+    8): passa anche disattivando la rete di sicurezza che dice di provare.
+    Il motivo e' che il clamp lo rende innocuo comunque — `cap_effettivo` si
+    ferma alla presenza delle congelate e il ramo `days` azzera solo giornate
+    che nessuna libera puo' toccare, quindi il modello resta risolvibile sia
+    postando il vincolo sia saltandolo. E' tenuto perche' esibisce la
+    situazione («entrambi i tetti gia' sforati dalle sole congelate, e niente
+    da piazzare per quella classe») ed e' un caso limite che deve continuare a
+    risolversi; la rete di sicurezza di `ResourceBuilder` e' invece verificata
+    davvero dai test che la review del Task 6 ha imposto."""
     env = mini_school()
     congelate = [
         make_activity(env["subject"], teachers=[env["teacher"]],
