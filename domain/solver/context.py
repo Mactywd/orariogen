@@ -28,7 +28,7 @@ class SolverContext:
     subject_rows: list        # [(riga SubjectConstraint, unit_keys precalcolate)]
     x: dict = field(default_factory=dict)        # (id, giorno, fascia) → BoolVar
     by_cell: dict = field(default_factory=dict)  # (chiave, giorno, fascia) → [(id, letterale)]
-    _occupied: dict = field(default_factory=dict)
+    vocab: object = None      # Vocabulary, assegnato da build_model
 
     @classmethod
     def build(cls, schedule, extraction=None):
@@ -98,29 +98,3 @@ class SolverContext:
         return any(aid in self.free
                    for aid, _ in self.by_cell.get((key, day, slot), ()))
 
-    def occupied(self, model, key, day, slot, signature=None):
-        """Letterale canalizzato: la chiave è occupata in quella cella. Creato
-        su richiesta, così esistono solo le canalizzazioni che un vincolo di
-        cardinalità chiede davvero.
-
-        `signature`, se dato, è il rappresentante di una firma di settimana
-        (una chiave di `self.signatures`/`self.states`): il letterale conta
-        solo le attività attive in quella firma, esattamente come farebbe
-        `ScheduleState.build(schedule, week=rep)` per il checker. Omesso,
-        conta tutte le attività che toccano la cella indipendentemente dalla
-        settimana — comportamento invariato per chi già chiamava `occupied`
-        senza distinguere le firme."""
-        cell = (signature, key, day, slot)
-        if cell not in self._occupied:
-            var = model.NewBoolVar(f"occ_{key}_{day}_{slot}_{signature}")
-            entries = self.by_cell.get((key, day, slot), ())
-            if signature is not None:
-                active = self.states[signature].activities
-                entries = [(aid, lit) for aid, lit in entries if aid in active]
-            lits = [lit for _, lit in entries]
-            if lits:
-                model.AddMaxEquality(var, lits)
-            else:
-                model.Add(var == 0)
-            self._occupied[cell] = var
-        return self._occupied[cell]

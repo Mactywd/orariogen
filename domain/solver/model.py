@@ -10,6 +10,7 @@ from ortools.sat.python import cp_model
 from domain.models import Placement
 from domain.solver.context import SolverContext
 from domain.solver.registry import all_builders
+from domain.solver.vocabulary import Vocabulary
 
 _STATUS = {
     cp_model.OPTIMAL: "OPTIMAL",
@@ -50,6 +51,7 @@ def build_model(schedule, extraction=None):
             model.Add(vuoto == 0)
 
     ctx.index_cells()
+    ctx.vocab = Vocabulary(ctx, model)
     for builder in builders:
         builder.build(ctx, model)
     return model, ctx

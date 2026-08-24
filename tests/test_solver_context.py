@@ -4,6 +4,7 @@ from ortools.sat.python import cp_model
 
 from domain.models import Extraction
 from domain.solver.context import SolverContext
+from domain.solver.vocabulary import Vocabulary
 from tests.analysis_helpers import make_activity, mini_school, place
 
 pytestmark = pytest.mark.django_db
@@ -69,5 +70,6 @@ def test_indice_per_cella_e_canalizzazione():
     assert (a.id, ctx.x[(a.id, 0, 0)]) in ctx.by_cell[(key, 0, 1)]
     assert ctx.has_free(key, 0, 1) is True
     assert ctx.has_free(key, 0, 99) is False
-    occ = ctx.occupied(model, key, 0, 0)
-    assert ctx.occupied(model, key, 0, 0) is occ   # memoizzato
+    vocab = Vocabulary(ctx, model)
+    occ = vocab.occupied(key, 0, 0)
+    assert vocab.occupied(key, 0, 0) is occ   # memoizzato

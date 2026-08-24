@@ -41,8 +41,6 @@ T = ResourceTimeConstraint.Type
 class MaxGapBuilder(Builder):
     def build(self, ctx, model):
         grid = ctx.grid
-        halves = [range(0, grid.morning_end_slot),
-                  range(grid.morning_end_slot, grid.slots_per_day)]
         for row in ctx.time_rows:
             if row.type != T.MAX_GAP_HOURS:
                 continue
@@ -64,17 +62,13 @@ class MaxGapBuilder(Builder):
                 posted.add(touching)
                 terms = []
                 for day in range(grid.days_per_cycle):
-                    for half in halves:
-                        occ = {s: ctx.occupied(model, key, day, s, signature=rep)
-                               for s in half}
+                    for half in ctx.vocab.halves():
+                        if not len(half):
+                            continue
+                        cov = ctx.vocab.covered(key, day, half, signature=rep)
                         for s in half:
-                            before = model.NewBoolVar(f"before_{key}_{rep}_{day}_{s}")
-                            model.AddMaxEquality(before, [occ[i] for i in half if i <= s])
-                            after = model.NewBoolVar(f"after_{key}_{rep}_{day}_{s}")
-                            model.AddMaxEquality(after, [occ[j] for j in half if j >= s])
-                            covered = model.NewBoolVar(f"covered_{key}_{rep}_{day}_{s}")
-                            model.AddMinEquality(covered, [before, after])
-                            terms.append(covered - occ[s])
+                            terms.append(
+                                cov[s] - ctx.vocab.occupied(key, day, s, signature=rep))
                 if terms:
                     model.Add(grid.slot_minutes * sum(terms)
                               <= row.params["max_gap_minutes"])
