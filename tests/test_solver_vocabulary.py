@@ -130,3 +130,69 @@ def test_day_active_distingue_le_firme():
     assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     assert solver.Value(con_firma) == 0     # A non e' al giorno 0: nella sua firma, non e' attivo
     assert solver.Value(senza_firma) == 1   # B occupa il giorno 0, e senza firma conta comunque
+
+
+def test_subject_bucket_usa_la_fascia_di_partenza():
+    """Un'attivita' di due fasce che inizia alle 3, con la linea di meta'
+    giornata a 4, appartiene alla MATTINA per intero: i vincoli di materia
+    attribuiscono l'attivita' al secchio della fascia di partenza."""
+    env = mini_school()
+    a = make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]], slots=2)
+    ctx, model, vocab = _vocab(env)
+    model.Add(ctx.x[(a.id, 0, 3)] == 1)
+    keys = frozenset({env["klass"].pk})
+    mattina = vocab.subject_bucket(keys, env["subject"].pk, "half", 0 * 2 + 0)
+    pomeriggio = vocab.subject_bucket(keys, env["subject"].pk, "half", 0 * 2 + 1)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(mattina) == 1
+    assert solver.Value(pomeriggio) == 0
+
+
+def test_subject_bucket_ignora_le_altre_materie_e_le_altre_unita():
+    env = mini_school()
+    from domain.models import SchoolClass, Subject
+    altra_materia = Subject.objects.create(
+        code="MAT", name="Matematica", discipline=env["discipline"])
+    altra_classe = SchoolClass.objects.create(
+        name="1B", study_plan=env["plan"], year=1)
+    a = make_activity(altra_materia, teachers=[env["teacher"]], classes=[env["klass"]])
+    b = make_activity(env["subject"], classes=[altra_classe])
+    ctx, model, vocab = _vocab(env)
+    model.Add(ctx.x[(a.id, 0, 0)] == 1)
+    model.Add(ctx.x[(b.id, 0, 0)] == 1)
+    giorno = vocab.subject_bucket(
+        frozenset({env["klass"].pk}), env["subject"].pk, "day", 0)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(giorno) == 0
+
+
+def test_pos_canalizza_giorno_e_fascia():
+    env = mini_school()
+    a = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    ctx, model, vocab = _vocab(env)
+    model.Add(ctx.x[(a.id, 2, 3)] == 1)
+    p = vocab.pos(a.id)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(p) == 2 * env["grid"].slots_per_day + 3
+
+
+def test_site_occupied_distingue_le_sedi():
+    env = mini_school()
+    from domain.models import Site
+    centrale = Site.objects.create(name="Centrale")
+    succursale = Site.objects.create(name="Succursale")
+    a = make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]], site=centrale)
+    ctx, model, vocab = _vocab(env)
+    model.Add(ctx.x[(a.id, 0, 0)] == 1)
+    key = env["klass"].pk
+    qui = vocab.site_occupied(key, 0, 0, centrale.pk)
+    altrove = vocab.site_occupied(key, 0, 0, succursale.pk)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(qui) == 1
+    assert solver.Value(altrove) == 0

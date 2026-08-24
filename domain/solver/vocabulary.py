@@ -129,3 +129,80 @@ class Vocabulary:
                     for s in self.halves()[half]]
             return self._max_or_zero(var, lits)
         return self._memo("half_active", (signature, key, day, half), make)
+
+    # --- materia in un secchio -------------------------------------------
+
+    def bucket_of(self, kind, day, slot):
+        """Il secchio di una collocazione. ⚠ Si usa la fascia di **partenza**
+        dell'attivita', non tutte quelle che occupa: e' la regola dichiarata
+        in testa a domain/analysis/checkers/subject_constraints.py."""
+        return day if kind == "day" else day * 2 + self.half_of(slot)
+
+    def subject_bucket(self, keys, subject_id, kind, bucket, signature=None):
+        """La materia `subject_id` occorre in quel secchio, sull'unita' `keys`.
+        `keys` e' l'espansione dell'unita' della riga di vincolo, gia'
+        precalcolata in ctx.subject_rows."""
+        keys = frozenset(keys)
+        def make():
+            var = self.model.NewBoolVar(
+                f"subj_{subject_id}_{kind}_{bucket}_{signature}_{id(keys)}")
+            active = (None if signature is None
+                      else self.ctx.states[signature].activities)
+            lits = []
+            for aid, act in self.ctx.activities.items():
+                if act.subject_id != subject_id:
+                    continue
+                if not (self.ctx.tokens[aid] & keys):
+                    continue
+                if active is not None and aid not in active:
+                    continue
+                for (day, slot) in self.ctx.cells[aid]:
+                    if self.bucket_of(kind, day, slot) == bucket:
+                        lits.append(self.ctx.x[(aid, day, slot)])
+            return self._max_or_zero(var, lits)
+        return self._memo("subj", (signature, keys, subject_id, kind, bucket), make)
+
+    def subject_activities(self, keys, subject_id, signature=None):
+        """Gli id delle attivita' di quella materia su quell'unita'. Serve ai
+        builder per la regola dell'implicazione di ADR-018 (`any_free`) e per
+        sapere staticamente se una materia e' assente."""
+        keys = frozenset(keys)
+        active = (None if signature is None
+                  else self.ctx.states[signature].activities)
+        return sorted(
+            aid for aid, act in self.ctx.activities.items()
+            if act.subject_id == subject_id
+            and self.ctx.tokens[aid] & keys
+            and (active is None or aid in active))
+
+    # --- posizione e sede -------------------------------------------------
+
+    def pos(self, aid):
+        """giorno * slots_per_day + fascia di inizio, canalizzato da x."""
+        def make():
+            cells = sorted(self.ctx.cells[aid])
+            width = self.ctx.grid.slots_per_day
+            if not cells:
+                # dominio vuoto: build_model ha gia' reso il modello
+                # infattibile in modo esplicito, qui basta non rompere
+                return self.model.NewIntVar(0, 0, f"pos_{aid}")
+            values = [day * width + slot for (day, slot) in cells]
+            var = self.model.NewIntVar(min(values), max(values), f"pos_{aid}")
+            self.model.Add(var == sum(
+                (day * width + slot) * self.ctx.x[(aid, day, slot)]
+                for (day, slot) in cells))
+            return var
+        return self._memo("pos", aid, make)
+
+    def site_occupied(self, key, day, slot, site_id, signature=None):
+        """Un'attivita' di sede `site_id` occupa quella cella."""
+        def make():
+            var = self.model.NewBoolVar(
+                f"site_{site_id}_{key}_{day}_{slot}_{signature}")
+            active = (None if signature is None
+                      else self.ctx.states[signature].activities)
+            lits = [lit for aid, lit in self.ctx.by_cell.get((key, day, slot), ())
+                    if self.ctx.activities[aid].site_id == site_id
+                    and (active is None or aid in active)]
+            return self._max_or_zero(var, lits)
+        return self._memo("site", (signature, key, day, slot, site_id), make)
