@@ -41,13 +41,26 @@ solo il corpo del vincolo, come `post`.
 ⚠ **ADR-018, esteso al D.T.B.** Il budget e' un aggregato non lineare (min/max
 via `covered`), quindi il residuo non si separa in «costante + libere» come
 sui tetti lineari (`residual_cap`): non si puo' sottrarre il contributo delle
-congelate dalla somma. Il guardiano qui e' percio' diverso — non un residuo,
-ma un **fatto**: si calcola il buco che le sole attivita' congelate
-produrrebbero (`_frozen_gap_minutes`, a posizioni fisse e note a build time),
-e se quello da solo supera gia' il tetto, il vincolo per quella firma non si
-posta affatto. E' esattamente il caso di ADR-018 — un ingresso sporco non deve
-rendere INFEASIBLE un modello per colpa del passato — applicato a un vincolo
-che non e' una somma pesata."""
+congelate dalla somma. Qui il guardiano non e' un residuo sottratto dal
+letterale, ma un **clamp sul tetto stesso**: si calcola il buco che le sole
+attivita' congelate produrrebbero (`_frozen_gap_minutes`, a posizioni fisse e
+note a build time), e il tetto effettivamente postato e'
+`max(cap, _frozen_gap_minutes(...))` — mai sotto al debito gia' contratto dal
+passato.
+
+⚠ **Non saltare il vincolo quando le congelate sforano da sole** (era l'errore
+della prima versione, corretto in review Task 6, Important 2): il vincolo
+resta postato su **tutti** i giorni della firma, solo con un tetto piu' alto.
+Il D.T.B. e' un budget settimanale che comprende giorni **mai toccati dalle
+congelate**: se il vincolo sparisse del tutto, le attivita' libere potrebbero
+aprire buchi illimitati anche li', e potrebbero perfino *richiudere* un buco
+delle congelate — quindi il debito non e' irrecuperabile, ed «e' un fatto, non
+una decisione» non vale. Il clamp concede esattamente il debito gia' contratto
+e nulla di piu': mai infattibile per colpa del passato, ma vincolante ovunque
+le libere abbiano ancora voce in capitolo — l'analogo esatto di
+`max(0, cap - consumo)` in `residual_cap`, qui scritto come
+`max(cap, consumo)` perche' il tetto e il consumo vivono sulla stessa scala
+(entrambi minuti di buco), non sottratti l'uno dall'altro."""
 
 from domain.models import ResourceTimeConstraint
 from domain.solver.builders.base import ResourceBuilder
@@ -85,9 +98,10 @@ class MaxGapBuilder(ResourceBuilder):
     def post(self, ctx, model, row, rep):
         grid, v = ctx.grid, ctx.vocab
         key = row.resource_id
-        cap = row.params["max_gap_minutes"]
-        if _frozen_gap_minutes(ctx, key, rep) > cap:
-            return   # ADR-018: il passato ha gia' perso da solo, non si posta
+        # ADR-018: il tetto effettivo non scende mai sotto il debito gia'
+        # contratto dalle sole congelate — clamp, non spegnimento del
+        # vincolo (review Task 6, Important 2).
+        cap = max(row.params["max_gap_minutes"], _frozen_gap_minutes(ctx, key, rep))
         terms = []
         for day in range(grid.days_per_cycle):
             for half in v.halves():

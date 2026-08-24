@@ -73,6 +73,15 @@ class MaxHalfDaysBuilder(ResourceBuilder):
             mattina, pomeriggio = v.halves()
             if len(mattina) and len(pomeriggio):
                 for day in range(ctx.grid.days_per_cycle):
+                    # ADR-018 (review Task 6, Important 1): se le sole
+                    # congelate occupano gia' entrambe le meta' di questo
+                    # giorno, AddAtMostOne([1, 1]) sarebbe insoddisfacibile —
+                    # colpa del passato, non della libera. Con una sola meta'
+                    # congelata il vincolo degrada correttamente a «l'altra
+                    # deve restare a 0», ed e' il residuo giusto: si posta.
+                    if (frozen_occupies(ctx, key, day, mattina, rep)
+                            and frozen_occupies(ctx, key, day, pomeriggio, rep)):
+                        continue
                     model.AddAtMostOne([
                         v.half_active(key, day, 0, signature=rep),
                         v.half_active(key, day, 1, signature=rep)])

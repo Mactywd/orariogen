@@ -15,6 +15,12 @@ class ResourceBuilder(Builder):
     TYPE = None
 
     def build(self, ctx, model):
+        # Rete di sicurezza: una sottoclasse che eredita build() supera
+        # sempre test_ogni_builder_implementa_almeno_un_hook (l'eredita'),
+        # quindi dimenticare TYPE la renderebbe silenziosamente vacua — non
+        # fa mai match con nessuna riga, e nessun test se ne accorgerebbe
+        # (review Task 6, requisito del controller).
+        assert self.TYPE is not None, type(self).__name__
         for row in ctx.time_rows:
             if row.type != self.TYPE:
                 continue
