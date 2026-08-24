@@ -5,6 +5,7 @@ codice avrebbero perso."""
 import pytest
 from ortools.sat.python import cp_model
 
+from domain import weeks
 from domain.solver.context import SolverContext
 from domain.solver.vocabulary import Vocabulary
 from tests.analysis_helpers import make_activity, mini_school
@@ -81,3 +82,51 @@ def test_day_active_e_memoizzazione():
     assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     assert solver.Value(attivo) == 1
     assert solver.Value(vuoto) == 0
+
+
+def test_half_active_caso_positivo_in_mattina():
+    """Il test della meta' vuota (sopra) copre solo il caso a zero. Manca il
+    caso simmetrico: un'attivita' piazzata in mattina deve accendere
+    half_active(..., 0)."""
+    env = mini_school()
+    a = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    ctx, model, vocab = _vocab(env)
+    model.Add(ctx.x[(a.id, 0, 1)] == 1)   # fascia 1 < morning_end_slot (4): mattina
+    key = env["klass"].pk
+    var = vocab.half_active(key, 0, 0)
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(var) == 1
+
+
+def test_day_active_distingue_le_firme():
+    """Due attivita' su firme di settimana diverse (maschere a un solo bit,
+    settimane 0 e 1): A e' attiva solo nella firma della settimana 0, B solo
+    in quella della settimana 1. A e' piazzata al giorno 1, B al giorno 0.
+
+    Con la firma passata, day_active(giorno 0, signature=rep_di_A) non deve
+    essere alzata dall'occupazione di B — B non e' fra le attivita' attive in
+    quella firma, anche se occupa una cella quel giorno. Senza firma, invece,
+    la stessa interrogazione conta anche B: e' esattamente il modo in cui
+    ometterla e' anti-conservativo su un aggregato per risorsa (il difetto
+    gia' trovato in MaxGapBuilder, 2026-08-24)."""
+    env = mini_school()
+    a = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]],
+                       mask=weeks.single_week(0))
+    b = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]],
+                       mask=weeks.single_week(1))
+    ctx, model, vocab = _vocab(env)
+    model.Add(ctx.x[(a.id, 1, 0)] == 1)   # A: giorno 1, non il giorno 0
+    model.Add(ctx.x[(b.id, 0, 4)] == 1)   # B: giorno 0
+
+    rep_a = next(rep for rep, _ in ctx.signatures if a.id in ctx.states[rep].activities)
+    assert b.id not in ctx.states[rep_a].activities   # la firma di A esclude B
+
+    key = env["klass"].pk
+    con_firma = vocab.day_active(key, 0, signature=rep_a)
+    senza_firma = vocab.day_active(key, 0)
+
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+    assert solver.Value(con_firma) == 0     # A non e' al giorno 0: nella sua firma, non e' attivo
+    assert solver.Value(senza_firma) == 1   # B occupa il giorno 0, e senza firma conta comunque

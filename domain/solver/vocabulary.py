@@ -50,7 +50,14 @@ class Vocabulary:
 
         `signature`, se dato, e' il rappresentante di una firma di settimana:
         il letterale conta solo le attivita' attive in quella firma, come
-        farebbe ScheduleState.build(schedule, week=rep) per il checker."""
+        farebbe ScheduleState.build(schedule, week=rep) per il checker.
+
+        Omesso (`None`), conta tutte le attivita' che toccano la cella
+        indipendentemente dalla settimana. Per un vincolo di **cardinalita'
+        sulla singola cella** questo e' conservativo: piu' letterali vuol dire
+        un vincolo piu' stretto, mai piu' lasco. Non e' piu' vero appena questo
+        letterale entra in un aggregato per risorsa — vedi `covered`,
+        `day_active`, `half_active`."""
         def make():
             var = self.model.NewBoolVar(f"occ_{key}_{day}_{slot}_{signature}")
             entries = self.ctx.by_cell.get((key, day, slot), ())
@@ -68,7 +75,16 @@ class Vocabulary:
         (non conta mai buchi a cavallo del pranzo), MAX_PRESENCE sulla giornata
         intera (`_presence_minutes` non passa da `_halves`). Sono due cose
         diverse che si somigliano: qui la differenza e' un argomento visibile
-        alla chiamata."""
+        alla chiamata.
+
+        ⚠ `signature` va passato quando il chiamante distingue le settimane:
+        qui, a differenza di `occupied` da sola, ometterlo **non** e'
+        conservativo. Un'occupazione che cade dentro il buco ma viene da
+        un'attivita' di un'**altra** firma alza il conteggio senza spostare
+        prima/ultima occupata — chiude nel modello unione un buco che,
+        settimana per settimana, resta aperto. E' esattamente il difetto che
+        MaxGapBuilder aveva prima della correzione del 2026-08-24 (vedi
+        CLAUDE.md, changelog di quella data)."""
         span = tuple(span)
         def make():
             occ = {s: self.occupied(key, day, s, signature) for s in span}
@@ -88,6 +104,12 @@ class Vocabulary:
     # --- presenza per giornata e mezza giornata --------------------------
 
     def day_active(self, key, day, signature=None):
+        """Vero se la chiave e' occupata in almeno una fascia della giornata.
+
+        ⚠ Stesso avvertimento di `covered`: e' un aggregato per risorsa, non
+        una singola cella. Omettere la firma non e' conservativo — un'attivita'
+        di un'altra firma di settimana puo' far risultare 'attiva' una
+        giornata che, per quella firma, non lo e'."""
         def make():
             var = self.model.NewBoolVar(f"dayact_{key}_{signature}_{day}")
             lits = [self.occupied(key, day, s, signature)
@@ -96,7 +118,11 @@ class Vocabulary:
         return self._memo("day_active", (signature, key, day), make)
 
     def half_active(self, key, day, half, signature=None):
-        """`half`: 0 mattina, 1 pomeriggio."""
+        """`half`: 0 mattina, 1 pomeriggio.
+
+        ⚠ Stesso avvertimento di `covered` e `day_active`: e' un aggregato
+        per risorsa. Omettere la firma non e' conservativo, per lo stesso
+        motivo."""
         def make():
             var = self.model.NewBoolVar(f"halfact_{key}_{signature}_{day}_{half}")
             lits = [self.occupied(key, day, s, signature)
