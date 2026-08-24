@@ -375,6 +375,22 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   non fare nulla su `placements` vuoto; `test_fermi_intero_misurato` non può
   più spegnersi in silenzio se lo stato è feasible ma `placements` è vuoto;
   aggiunto un test di `AtomMap` con tre partizioni sulla stessa classe.
+  **Chiusa la lacuna che restava**: il test multi-firma aggiunto qui sopra
+  dimostra la correzione con un `INFEASIBLE`, ma nessun banco di prova
+  portava una soluzione multi-firma **fattibile** lungo l'intera catena
+  `solve → apply → check_schedule → violazioni() == []` — cioè il caso che il
+  criterio di riuscita dello spike descrive davvero. Aggiunto
+  `test_oracolo_su_istanza_multi_firma_fattibile`: due giorni per quattro
+  fasce, due settimane, cinque attività. Il giorno 0 porta la dimensione
+  D.T.B. (un buco che si chiude per firma e non si chiude nell'unione), il
+  giorno 1 quella dell'occupazione (due attività di settimane diverse con
+  docente, classe e unica collocazione ammissibile in comune: co-attive
+  sarebbero un conflitto, e non lo sono mai). **Verificato che discrimina**,
+  non solo che passa: rompendo `OccupationBuilder` (tutte le attività
+  co-attive) e, separatamente, `MaxGapBuilder` (letterali `occ` senza firma),
+  il test risponde `INFEASIBLE` in entrambi i casi. Suite completa a **173
+  test verdi**.
+
   **Questione aperta, non risolta qui**: cosa fare quando un constraint
   mescola attività congelate già in violazione e attività libere nello stesso
   vincolo — va deciso nella spec del modello completo, prima degli altri

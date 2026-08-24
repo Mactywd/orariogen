@@ -6,7 +6,7 @@ import datetime as dt
 import pytest
 
 from domain import weeks
-from domain.analysis.conformity import check_schedule
+from domain.analysis.conformity import check_schedule, week_signatures
 from domain.analysis.findings import Severity
 from domain.models import (
     Break, ClassPart, ClassPartition, Discipline, Extraction, Period,
@@ -228,6 +228,109 @@ def test_oracolo_su_istanza_multi_firma():
     env = _scuola_multi_firma()
     soluzione = solve(env["schedule"], time_limit=30)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
+
+
+def _scuola_multi_firma_fattibile():
+    """Due firme di settimana, e un'istanza che ha una soluzione **solo** se il
+    modello le distingue. Griglia 2 giorni x 4 fasce, anno di due settimane.
+
+    Il giorno 0 porta la dimensione D.T.B.: la classe non tollera buchi. Nella
+    settimana 0 ci sono A2 — inchiodata alla fascia 0 dalle indisponibilita'
+    del suo docente — e A1, libera; nella settimana 1 c'e' la sola A3,
+    inchiodata alla fascia 3. Prese insieme, le tre occuperebbero {0, 3} piu'
+    una fascia: un buco incolmabile su quattro fasce. Prese per firma, la
+    settimana 0 chiude il buco mettendo A1 alla fascia 1, e la settimana 1 ha
+    una fascia sola, che un buco non ce l'ha.
+
+    Il giorno 1 porta la dimensione occupazione: A5 (settimana 0) e A6
+    (settimana 1) condividono docente e classe e hanno entrambe una sola
+    collocazione ammissibile, la stessa. Co-attive sarebbero un conflitto; non
+    lo sono mai.
+
+    Un modello che trattasse tutte le attivita' come co-attive risponderebbe
+    quindi INFEASIBLE a un'istanza che una soluzione ce l'ha."""
+    grid = TimeGrid.objects.create(
+        days_per_cycle=2, slots_per_day=4, slot_minutes=60, morning_end_slot=4)
+    year = SchoolYear.objects.create(
+        start_date=dt.date(2026, 9, 14), end_date=dt.date(2026, 9, 27),
+        first_week_monday=dt.date(2026, 9, 14),
+    )
+    period = Period.objects.create(
+        school_year=year, name="P1", start_date=year.start_date, end_date=year.end_date)
+    schedule = Schedule.objects.create(period=period)
+    disc = Discipline.objects.create(code="LET", name="Lettere")
+    subject = Subject.objects.create(code="ITA", name="Italiano", discipline=disc)
+    plan = StudyPlan.objects.create(code="P1", name="Piano", year=1)
+    klass = SchoolClass.objects.create(name="1A", study_plan=plan, year=1)
+
+    docenti = {}
+    for sigla, cognome, nome in (("T1", "Uno", "Aldo"), ("T2", "Due", "Bice"),
+                                 ("T3", "Tre", "Ciro"), ("T5", "Cinque", "Ebe")):
+        docenti[sigla] = Teacher.objects.create(
+            name=f"{cognome} {nome}", last_name=cognome, first_name=nome)
+
+    def solo_su(docente, cella):
+        """Indisponibilita' ovunque tranne una cella: l'attivita' di quel
+        docente ha un dominio di cardinalita' uno. **Ricorrenti**, non datate,
+        cosi' le firme di settimana restano due e a distinguerle e' soltanto
+        la maschera delle attivita'."""
+        for d in range(grid.days_per_cycle):
+            for s in range(grid.slots_per_day):
+                if (d, s) != cella:
+                    ResourceUnavailability.objects.create(
+                        resource=docente, day=d, slot=s, level="hard")
+
+    solo_su(docenti["T2"], (0, 0))
+    solo_su(docenti["T3"], (0, 3))
+    solo_su(docenti["T5"], (1, 0))
+
+    prima, seconda = weeks.single_week(0), weeks.single_week(1)
+    attivita = {
+        "A1": make_activity(subject, teachers=[docenti["T1"]], classes=[klass], mask=prima),
+        "A2": make_activity(subject, teachers=[docenti["T2"]], classes=[klass], mask=prima),
+        "A3": make_activity(subject, teachers=[docenti["T3"]], classes=[klass], mask=seconda),
+        "A5": make_activity(subject, teachers=[docenti["T5"]], classes=[klass], mask=prima),
+        "A6": make_activity(subject, teachers=[docenti["T5"]], classes=[klass], mask=seconda),
+    }
+
+    ResourceTimeConstraint.objects.create(
+        resource=klass, type=ResourceTimeConstraint.Type.MAX_GAP_HOURS,
+        params={"max_gap_minutes": 0})
+
+    return {"schedule": schedule, "attivita": attivita}
+
+
+def test_oracolo_su_istanza_multi_firma_fattibile():
+    """L'altra meta' della dimensione «settimane»: non l'istanza infattibile
+    che il solver deve rifiutare, ma una **fattibile** portata per intero lungo
+    la catena solve -> apply -> check_schedule -> violazioni() == [].
+
+    E' il caso che il criterio di riuscita dello spike descrive davvero, e che
+    prima di questo test nessun banco di prova copriva: la scuola giocattolo,
+    il Fermi per una classe e il Fermi intero hanno tutti **una sola** firma di
+    settimana, perche' al Fermi ogni attivita' e' annuale. Da li' e' passato il
+    difetto del D.T.B. trovato il 2026-08-24."""
+    env = _scuola_multi_firma_fattibile()
+    # se la fixture smettesse di avere due firme il test diventerebbe vacuo
+    assert len(week_signatures(env["schedule"])) == 2
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    assert len(soluzione.placements) == len(env["attivita"])
+    apply(soluzione, env["schedule"])
+    assert violazioni(env["schedule"]) == []
+
+    # la prova diretta che le due firme non sono state fuse: due attivita' di
+    # settimane diverse condividono docente, classe e collocazione
+    celle = {
+        nome: (p.day, p.start_slot)
+        for nome, att in env["attivita"].items()
+        for p in [Placement.objects.get(schedule=env["schedule"], activity=att)]
+    }
+    assert celle["A5"] == (1, 0)
+    assert celle["A6"] == (1, 0)
+    # e A1 ha dovuto chiudere il buco della settimana 0, non aprirne uno
+    assert celle["A1"] in {(0, 1), (1, 1)}
 
 
 def test_fermi_intero_misurato():
