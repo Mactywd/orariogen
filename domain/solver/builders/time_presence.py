@@ -1,4 +1,9 @@
-"""MAX_GAP_HOURS — il D.T.B., «durata tollerata dei buchi».
+"""Presenza e buchi: i vincoli che ragionano sulla **prima e sull'ultima**
+fascia occupata, e non sul semplice conteggio. Entrambi passano da
+`vocab.covered`, con `span` diverso — mezza giornata per il D.T.B., giornata
+intera per MAX_PRESENCE.
+
+MAX_GAP_HOURS — il D.T.B., «durata tollerata dei buchi».
 
 ⚠ È un **budget settimanale**, non una soglia per singolo buco: il checker
 somma i minuti di buco su tutte le mezze giornate della settimana e confronta

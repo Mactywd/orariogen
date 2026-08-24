@@ -1,4 +1,8 @@
-"""SAME_DAY_INCOMPATIBLE — l'incompatibilità nella giornata.
+"""I vincoli di materia che si esprimono come cardinalita' su un **secchio**
+(giornata o mezza giornata). L'attivita' si attribuisce al secchio della sua
+fascia di **partenza**.
+
+SAME_DAY_INCOMPATIBLE — l'incompatibilità nella giornata.
 
 Con A = B (il caso dominante osservato nei dati reali di EDT: non due ore
 della stessa materia nello stesso giorno) è «al più un'occorrenza per unità e
