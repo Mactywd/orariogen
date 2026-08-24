@@ -41,7 +41,12 @@ def test_ogni_builder_implementa_almeno_un_hook():
                 or cls.build is not Builder.build), chiave
 
 
-def test_i_cinque_builder_dello_spike():
+def test_i_builder_tradotti_finora():
+    """Non piu' i cinque dello spike: il modello completo li accresce task
+    dopo task. Qui si fissa lo stato corrente — dopo il Task 6, i cinque
+    dello spike piu' MAX_HOURS e MAX_HALF_DAYS — cosi' una registrazione
+    dimenticata o una di troppo si vede subito, invece di dipendere dalla
+    memoria di chi legge."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
     assert set(BUILDERS) == {
@@ -49,5 +54,7 @@ def test_i_cinque_builder_dello_spike():
         "structural:unavailability",
         "structural:occupation",
         ResourceTimeConstraint.Type.MAX_GAP_HOURS,
+        ResourceTimeConstraint.Type.MAX_HOURS,
+        ResourceTimeConstraint.Type.MAX_HALF_DAYS,
         SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE,
     }

@@ -46,3 +46,19 @@ def any_free(ctx, activity_ids):
     """La regola dell'implicazione: un vincolo i cui letterali vengono tutti da
     attivita' congelate non si posta — e' un fatto, non una decisione."""
     return any(aid in ctx.free for aid in activity_ids)
+
+
+def frozen_occupies(ctx, key, day, slots, rep=None):
+    """Un'attivita' **congelata** occupa quella chiave in una di quelle fasce?
+
+    Serve alle cardinalita' su **variabili derivate** (day_active,
+    half_active), dove il contributo delle congelate non e' separabile come
+    termine: se una congelata forza la variabile a 1, quella variabile e' una
+    costante e va nel consumo; se nessuna la tocca, dipende solo da letterali
+    liberi e resta un termine della somma."""
+    active = None if rep is None else ctx.states[rep].activities
+    for slot in slots:
+        for aid, _lit in ctx.by_cell.get((key, day, slot), ()):
+            if aid not in ctx.free and (active is None or aid in active):
+                return True
+    return False

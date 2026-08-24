@@ -369,6 +369,52 @@ def _derive_max_gap(w):
     return 1
 
 
+@deriver(RT.MAX_HOURS, {"max_hours_day", "max_hours_morning", "max_hours_afternoon"})
+def _derive_max_hours(w):
+    """I tetti osservati nel testimone, per la firma peggiore. Con
+    l'uguaglianza il vincolo e' soddisfatto e stretto. Crea sempre una riga
+    e non e' mai vacua: ogni classe della fixture ha almeno due attivita'
+    piazzate (_make_activities), quindi il picco di day_minutes e' sempre
+    positivo su almeno una firma."""
+    grid = w.env["grid"]
+    klass = w.rng.choice(w.env["classes"])
+    picchi = {"day_minutes": 0, "morning_minutes": 0, "afternoon_minutes": 0}
+    for rep, _ in w.signatures:
+        for _day, fasce in w.resource_days(klass.pk, rep).items():
+            mattina = [f for f in fasce if f < grid.morning_end_slot]
+            sera = [f for f in fasce if f >= grid.morning_end_slot]
+            picchi["day_minutes"] = max(picchi["day_minutes"], len(fasce))
+            picchi["morning_minutes"] = max(picchi["morning_minutes"], len(mattina))
+            picchi["afternoon_minutes"] = max(picchi["afternoon_minutes"], len(sera))
+    ResourceTimeConstraint.objects.create(
+        resource=klass, type=RT.MAX_HOURS,
+        params={k: v * grid.slot_minutes for k, v in picchi.items()})
+    return 1
+
+
+@deriver(RT.MAX_HALF_DAYS, {"max_half_days", "only_half_day"})
+def _derive_max_half_days(w):
+    """Il numero di mezze giornate lavorate dal docente scelto, per la firma
+    peggiore. Vacua (ritorna 0) se il docente scelto a caso non compare in
+    nessuna attivita' del testimone: in quel caso il vincolo, per quanto
+    creato, non tocca mai una cella e ResourceBuilder non lo posta — non
+    c'e' nulla da violare (Important 2, review Task 5, stessa convenzione di
+    _derive_unavailability)."""
+    grid = w.env["grid"]
+    docente = w.rng.choice(w.env["teachers"])
+    peggiore = 0
+    for rep, _ in w.signatures:
+        lavorate = 0
+        for _day, fasce in w.resource_days(docente.pk, rep).items():
+            lavorate += any(f < grid.morning_end_slot for f in fasce)
+            lavorate += any(f >= grid.morning_end_slot for f in fasce)
+        peggiore = max(peggiore, lavorate)
+    ResourceTimeConstraint.objects.create(
+        resource=docente, type=RT.MAX_HALF_DAYS,
+        params={"max_half_days": peggiore})
+    return 1 if peggiore > 0 else 0
+
+
 @deriver(ST.SAME_DAY_INCOMPATIBLE, {"subject_same_day"})
 def _derive_same_day(w):
     """Crea una riga per ogni coppia (classe, materia) del testimone con

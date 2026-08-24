@@ -4,14 +4,22 @@ libera». Sui tetti il residuo puo' essere negativo e va clampato a zero; sui
 minimi garantiti no."""
 import pytest
 
-from domain.solver.residual import any_free, residual_cap, residual_floor, split
+from domain.solver.residual import (any_free, frozen_occupies, residual_cap,
+                                    residual_floor, split)
 
 pytestmark = pytest.mark.django_db
 
 
 class _Ctx:
-    def __init__(self, free):
+    def __init__(self, free, by_cell=None, states=None):
         self.free = set(free)
+        self.by_cell = by_cell or {}
+        self.states = states or {}
+
+
+class _State:
+    def __init__(self, activities):
+        self.activities = activities
 
 
 def test_split_separa_libere_e_congelate():
@@ -57,3 +65,33 @@ def test_any_free_e_la_regola_dell_implicazione():
     assert any_free(ctx, [7, 8]) is True
     assert any_free(ctx, [8, 9]) is False
     assert any_free(ctx, []) is False
+
+
+def test_frozen_occupies_vero_se_una_congelata_tocca_la_cella():
+    """Una variabile derivata (half_active, day_active) che una congelata
+    forza a 1 e' essa stessa una costante — e' il caso positivo."""
+    ctx = _Ctx(free={2}, by_cell={("k", 0, 1): [(1, "x1")]})
+    assert frozen_occupies(ctx, "k", 0, [0, 1, 2]) is True
+
+
+def test_frozen_occupies_falso_se_solo_libere_toccano_la_cella():
+    """Nessuna congelata: la variabile dipende solo da letterali liberi e
+    resta un termine della somma, non un consumo."""
+    ctx = _Ctx(free={2}, by_cell={("k", 0, 1): [(2, "x2")]})
+    assert frozen_occupies(ctx, "k", 0, [0, 1, 2]) is False
+
+
+def test_frozen_occupies_falso_se_la_cella_e_vuota():
+    ctx = _Ctx(free=set(), by_cell={})
+    assert frozen_occupies(ctx, "k", 0, [0, 1, 2]) is False
+
+
+def test_frozen_occupies_rispetta_la_firma():
+    """Con `rep` dato, una congelata di un'altra firma non conta: la
+    congelata deve essere attiva nella firma richiesta, come fa
+    ScheduleState.build(schedule, week=rep) per il checker."""
+    ctx = _Ctx(free=set(), by_cell={("k", 0, 1): [(1, "x1")]},
+              states={"rep": _State(activities={2: object()})})
+    assert frozen_occupies(ctx, "k", 0, [1], rep="rep") is False
+    ctx.states["rep"].activities[1] = object()
+    assert frozen_occupies(ctx, "k", 0, [1], rep="rep") is True

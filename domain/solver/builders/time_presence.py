@@ -34,46 +34,67 @@ illegali.)
 
 Le firme diverse con lo stesso insieme di attività attive sulla risorsa
 producono lo stesso vincolo: deduplicate con `posted`, come fa
-`OccupationBuilder`."""
+`OccupationBuilder`. Il ciclo sulle firme e la deduplicazione sono ora nella
+classe base `ResourceBuilder` (`domain/solver/builders/base.py`): qui resta
+solo il corpo del vincolo, come `post`.
+
+⚠ **ADR-018, esteso al D.T.B.** Il budget e' un aggregato non lineare (min/max
+via `covered`), quindi il residuo non si separa in «costante + libere» come
+sui tetti lineari (`residual_cap`): non si puo' sottrarre il contributo delle
+congelate dalla somma. Il guardiano qui e' percio' diverso — non un residuo,
+ma un **fatto**: si calcola il buco che le sole attivita' congelate
+produrrebbero (`_frozen_gap_minutes`, a posizioni fisse e note a build time),
+e se quello da solo supera gia' il tetto, il vincolo per quella firma non si
+posta affatto. E' esattamente il caso di ADR-018 — un ingresso sporco non deve
+rendere INFEASIBLE un modello per colpa del passato — applicato a un vincolo
+che non e' una somma pesata."""
 
 from domain.models import ResourceTimeConstraint
-from domain.solver.registry import Builder, register
+from domain.solver.builders.base import ResourceBuilder
+from domain.solver.registry import register
 
 T = ResourceTimeConstraint.Type
 
 
-@register(T.MAX_GAP_HOURS)
-class MaxGapBuilder(Builder):
-    def build(self, ctx, model):
-        grid = ctx.grid
-        for row in ctx.time_rows:
-            if row.type != T.MAX_GAP_HOURS:
+def _frozen_gap_minutes(ctx, key, rep):
+    """Il buco settimanale (in minuti) indotto dalle sole attivita'
+    **congelate** su `key`, per la firma `rep`. Le celle delle congelate sono
+    fisse e note a build time (`ctx.cells[aid]`), quindi il calcolo e' lo
+    stesso del checker (`MaxGapChecker`) ristretto alle sole congelate."""
+    grid, active = ctx.grid, ctx.states[rep].activities
+    total = 0
+    for day in range(grid.days_per_cycle):
+        for half in ctx.vocab.halves():
+            if not len(half):
                 continue
-            key = row.resource_id
-            posted = set()
-            for rep, _ in ctx.signatures:
-                active = ctx.states[rep].activities
-                touching = frozenset(
-                    aid
-                    for day in range(grid.days_per_cycle)
-                    for slot in range(grid.slots_per_day)
-                    for aid, _ in ctx.by_cell.get((key, day, slot), ())
-                    if aid in active
-                )
-                if not any(aid in ctx.free for aid in touching):
-                    continue   # nessuna decisione da prendere in questa firma
-                if touching in posted:
-                    continue   # firma diversa, stesso insieme di attivita' attive
-                posted.add(touching)
-                terms = []
-                for day in range(grid.days_per_cycle):
-                    for half in ctx.vocab.halves():
-                        if not len(half):
-                            continue
-                        cov = ctx.vocab.covered(key, day, half, signature=rep)
-                        for s in half:
-                            terms.append(
-                                cov[s] - ctx.vocab.occupied(key, day, s, signature=rep))
-                if terms:
-                    model.Add(grid.slot_minutes * sum(terms)
-                              <= row.params["max_gap_minutes"])
+            occupate = sorted({
+                s for s in half
+                for aid, _ in ctx.by_cell.get((key, day, s), ())
+                if aid not in ctx.free and aid in active
+            })
+            if len(occupate) >= 2:
+                total += (occupate[-1] - occupate[0] + 1
+                          - len(occupate)) * grid.slot_minutes
+    return total
+
+
+@register(T.MAX_GAP_HOURS)
+class MaxGapBuilder(ResourceBuilder):
+    TYPE = T.MAX_GAP_HOURS
+
+    def post(self, ctx, model, row, rep):
+        grid, v = ctx.grid, ctx.vocab
+        key = row.resource_id
+        cap = row.params["max_gap_minutes"]
+        if _frozen_gap_minutes(ctx, key, rep) > cap:
+            return   # ADR-018: il passato ha gia' perso da solo, non si posta
+        terms = []
+        for day in range(grid.days_per_cycle):
+            for half in v.halves():
+                if not len(half):
+                    continue
+                cov = v.covered(key, day, half, signature=rep)
+                for s in half:
+                    terms.append(cov[s] - v.occupied(key, day, s, signature=rep))
+        if terms:
+            model.Add(grid.slot_minutes * sum(terms) <= cap)
