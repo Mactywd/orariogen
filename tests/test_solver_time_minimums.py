@@ -7,15 +7,52 @@ contasse su tutti i giorni accetterebbe orari che il checker boccia.
 tests/test_solver_witness.py, parametrizzato su `sorted(DERIVERS) x [1..5]`)
 li copre gia' la sola registrazione dei tre derivatori sotto: non li si
 riscrive qui."""
+import datetime as dt
+
 import pytest
 
-from domain.models import ResourceTimeConstraint
+from domain.models import (
+    Activity, Discipline, Period, ResourceTimeConstraint, Schedule,
+    SchoolClass, SchoolYear, StudyPlan, Subject, Teacher, TimeGrid,
+)
 from domain.solver.model import apply, solve
-from tests.analysis_helpers import make_activity, mini_school
+from tests.analysis_helpers import make_activity, mini_school, place
 from tests.test_solver_oracle import violazioni
 
 pytestmark = pytest.mark.django_db
 T = ResourceTimeConstraint.Type
+
+
+def _scuola_senza_pomeriggio():
+    """Come mini_school(), ma con `morning_end_slot == slots_per_day`: la
+    mezza giornata pomeridiana e' vuota per costruzione (griglia 5x4). Serve
+    a riprodurre Important 1 della review Task 7 — `v.halves()` restituisce
+    uno `span` vuoto per il pomeriggio, e il vecchio `if not len(span):
+    continue` saltava quella meta' del tutto invece di lasciarla contribuire
+    come costante scarica."""
+    grid = TimeGrid.objects.create(
+        days_per_cycle=5, slots_per_day=4, slot_minutes=60, morning_end_slot=4
+    )
+    year = SchoolYear.objects.create(
+        start_date=dt.date(2026, 9, 14), end_date=dt.date(2026, 10, 11),
+        first_week_monday=dt.date(2026, 9, 14),
+    )
+    period = Period.objects.create(
+        school_year=year, name="P1",
+        start_date=year.start_date, end_date=year.end_date,
+    )
+    schedule = Schedule.objects.create(period=period)
+    disc = Discipline.objects.create(code="LET", name="Lettere")
+    subject = Subject.objects.create(code="ITA", name="Italiano", discipline=disc)
+    plan = StudyPlan.objects.create(code="P1", name="Piano", year=1)
+    klass = SchoolClass.objects.create(name="1A", study_plan=plan, year=1)
+    teacher = Teacher.objects.create(name="Rossi Anna", last_name="Rossi",
+                                     first_name="Anna")
+    return {
+        "grid": grid, "year": year, "period": period, "schedule": schedule,
+        "discipline": disc, "subject": subject, "plan": plan,
+        "klass": klass, "teacher": teacher,
+    }
 
 
 def test_min_distribution_morde():
@@ -103,3 +140,115 @@ def test_arrival_departure_soddisfacibile_resta_soddisfacibile():
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     apply(soluzione, env["schedule"])
     assert violazioni(env["schedule"], {"arrival_departure"}) == set()
+
+
+def test_arrival_departure_giorno_vuoto_conta_come_conforme():
+    """Requisito aggiunto dal controller dopo la review Task 7 (Minor
+    promossa): ArrivalDepartureChecker legge `if not slots: compliant += 1`
+    (`checkers/time_constraints.py`) — un giorno senza alcuna attivita' e'
+    conforme, non violato. Un'unica attivita' su cinque giorni richiesti
+    (`days=5`) lascia quattro giorni **completamente vuoti**: un builder che
+    trattasse "nessuna attivita'" come "non conforme" renderebbe la soglia
+    irraggiungibile (al massimo un giorno puo' mai essere popolato), quindi
+    INFEASIBLE. Il comportamento corretto e' FEASIBLE: i quattro giorni vuoti
+    contano gratis, resta solo da piazzare l'unica attivita' fuori dalla
+    fascia vietata."""
+    env = mini_school()
+    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.ARRIVAL_DEPARTURE,
+        params={"not_before_slot": 1, "days": 5})
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    apply(soluzione, env["schedule"])
+    assert violazioni(env["schedule"], {"arrival_departure"}) == set()
+
+
+def test_adr018_arrival_departure_congelata_in_zona_vietata_non_blocca_il_solver():
+    """Important 2 della review Task 7. Un'attivita' congelata occupa lo
+    slot 0 (vietato da `not_before_slot=1`) il giorno 0: quel giorno e' gia'
+    reso non conforme dal solo passato, e nessuna libera puo' recuperarlo. Con
+    `days=5` (tutti i 5 giorni devono essere conformi) il vincolo, letto alla
+    lettera, sarebbe insoddisfacibile per colpa del passato — esattamente
+    l'errore che ADR-018 esiste per evitare. Una seconda attivita', libera,
+    dello stesso docente deve poter comunque essere piazzata: la soglia
+    residua e' `min(5, 5 - 1) = 4`, raggiungibile sui quattro giorni ancora
+    liberi."""
+    env = mini_school()
+    congelata = make_activity(env["subject"], teachers=[env["teacher"]],
+                              classes=[env["klass"]],
+                              immobility=Activity.Immobility.LOCKED_IN_PLACE)
+    place(env["schedule"], congelata, day=0, slot=0)
+    libera = make_activity(env["subject"], teachers=[env["teacher"]],
+                           classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.ARRIVAL_DEPARTURE,
+        params={"not_before_slot": 1, "days": 5})
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    assert soluzione.placements[libera.id] is not None
+
+
+def test_adr018_free_guaranteed_congelate_non_bloccano_il_solver():
+    """Important 2 della review Task 7, sull'altra famiglia. Cinque
+    attivita' congelate, una per giorno (nessun giorno resta libero): la
+    soglia `free_days=1` e' gia' irraggiungibile dal solo passato. Una
+    sesta attivita', libera, dello stesso docente non deve rendere il
+    modello infattibile: la soglia residua e' `min(1, 5 - 5) = 0`, vacua."""
+    env = mini_school()
+    congelate = [
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]],
+                      immobility=Activity.Immobility.LOCKED_IN_PLACE)
+        for _ in range(5)
+    ]
+    for day, act in enumerate(congelate):
+        place(env["schedule"], act, day=day, slot=0)
+    libera = make_activity(env["subject"], teachers=[env["teacher"]],
+                           classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED,
+        params={"free_days": 1})
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    assert soluzione.placements[libera.id] is not None
+
+
+def test_free_guaranteed_meta_pomeriggio_vuota_non_blocca_una_sola_mezza():
+    """Important 1 della review Task 7. Griglia 5x4 con
+    `morning_end_slot == slots_per_day`: il pomeriggio e' vuoto per ogni
+    giorno. `FreeGuaranteedChecker` conta `(not morning) + (not afternoon)`
+    per ciascun giorno **con attivita'** — con `afternoon == []` quel
+    termine vale 1 su ogni giorno lavorato, gratis. Il vecchio
+    `if not len(span): continue` saltava del tutto la meta' pomeridiana:
+    zero letterali generati, quindi la mattina (l'unica meta' rimasta)
+    finiva per essere `attivo AND NOT attivo == 0` sempre, e qualunque
+    `free_half_days >= 1` diventava insoddisfacibile. Con una sola
+    attivita' e `free_half_days=1` dev'essere FEASIBLE: il pomeriggio vuoto
+    del giorno lavorato basta da solo."""
+    env = _scuola_senza_pomeriggio()
+    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED,
+        params={"free_half_days": 1})
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    apply(soluzione, env["schedule"])
+    assert violazioni(env["schedule"], {"free_guaranteed"}) == set()
+
+
+def test_free_guaranteed_meta_pomeriggio_vuota_normale_sulla_griglia_6():
+    """Controprova indicata dal revisore: la stessa richiesta
+    (`free_half_days=1`) sulla griglia normale di `mini_school()`
+    (`slots_per_day=6`, pomeriggio non vuoto) era gia' FEASIBLE prima della
+    correzione — il difetto e' specifico alla griglia con pomeriggio vuoto,
+    non una regressione generale."""
+    env = mini_school()
+    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED,
+        params={"free_half_days": 1})
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats

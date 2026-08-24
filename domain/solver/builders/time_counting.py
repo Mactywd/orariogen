@@ -98,7 +98,20 @@ class MinDistributionBuilder(ResourceBuilder):
     `residual_cap`. Le attivita' congelate contribuiscono alla somma dentro
     `occupied` come qualunque altra — se da sole bastano gia' a soddisfare
     `min_days`, il vincolo `sum(qualificati) >= min_days` e' vacuo per
-    costruzione, mai infattibile."""
+    costruzione, mai infattibile.
+
+    ⚠ Qui, e **solo qui** fra i tre minimi di questo file, l'affermazione
+    regge senza eccezioni (review Task 7, Important 2): una congelata puo'
+    solo *aumentare* `sum(occ)` per il giorno che occupa, mai renderlo non
+    qualificante — non esiste un modo per una congelata di far scendere
+    `sm * sum(occ)` sotto la soglia per un giorno che altrimenti l'avrebbe
+    superata. `ArrivalDepartureBuilder` e `FreeGuaranteedBuilder` non hanno
+    questa proprieta': li' una congelata puo' *consumare* il minimo
+    (occupare una fascia vietata, o un giorno/meta' che doveva restare
+    libero), e serve il residuo per forzatura. La differenza e' nella forma
+    del predicato: qui e' una soglia di **presenza cumulativa** (piu'
+    occupazione aiuta sempre), la' una soglia di **assenza** (piu'
+    occupazione puo' sempre nuocere)."""
     TYPE = T.MIN_DISTRIBUTION
 
     def post(self, ctx, model, row, rep):
@@ -131,19 +144,35 @@ class ArrivalDepartureBuilder(ResourceBuilder):
     `compliant += 1` del giorno vuoto, senza doverlo trattare come caso a
     parte.
 
-    Minimo garantito: niente `residual_cap`. Se i giorni gia' conformi per
-    via delle congelate bastano a `days`, `sum(conformi) >= days` e' vacuo."""
+    ⚠ Minimo garantito, **ma non immune al passato** (review Task 7,
+    Important 2 — la spec del brief affermava il contrario, ed era falsa).
+    Una congelata piazzata in una fascia proibita forza `viola = 1` per
+    quel giorno: nessuna libera puo' farlo rientrare a conforme, spostando
+    attivita' altrove non cambia nulla per **quel** giorno. Letta alla
+    lettera, `sum(conformi) >= days` diventerebbe insoddisfacibile per
+    colpa del solo passato — l'errore che ADR-018 esiste per evitare, qui
+    nella direzione «minimo», non «tetto». Il residuo si applica **per
+    forzatura** come in `MaxHalfDaysBuilder.post` (`frozen_occupies`, non
+    `residual_cap`): i giorni gia' persi non generano letterali (il loro
+    contributo e' 0 per costruzione, comunque), e la soglia si abbassa a
+    quanto resta raggiungibile — `min(days, days_per_cycle - persi)`, mai
+    sotto zero, mai clampata a zero se raggiungibile: e' un pavimento più
+    basso, non uno spento."""
     TYPE = T.ARRIVAL_DEPARTURE
 
     def post(self, ctx, model, row, rep):
         v, key = ctx.vocab, row.resource_id
+        grid = ctx.grid
         not_before = row.params.get("not_before_slot")
         not_after = row.params.get("not_after_slot")
-        proibite = [s for s in range(ctx.grid.slots_per_day)
+        proibite = [s for s in range(grid.slots_per_day)
                     if (not_before is not None and s < not_before)
                     or (not_after is not None and s >= not_after)]
-        conformi = []
-        for day in range(ctx.grid.days_per_cycle):
+        conformi, persi = [], 0
+        for day in range(grid.days_per_cycle):
+            if frozen_occupies(ctx, key, day, proibite, rep):
+                persi += 1  # gia' non conforme per costruzione: nessuna
+                continue    # libera puo' recuperarlo, non serve il letterale
             viola = model.NewBoolVar(f"ad_viola_{key}_{rep}_{day}")
             lits = [v.occupied(key, day, s, signature=rep) for s in proibite]
             if lits:
@@ -153,7 +182,8 @@ class ArrivalDepartureBuilder(ResourceBuilder):
             conforme = model.NewBoolVar(f"ad_ok_{key}_{rep}_{day}")
             model.Add(conforme + viola == 1)
             conformi.append(conforme)
-        model.Add(sum(conformi) >= row.params["days"])
+        soglia = min(row.params["days"], grid.days_per_cycle - persi)
+        model.Add(sum(conformi) >= soglia)
 
 
 @register(T.FREE_GUARANTEED)
@@ -172,20 +202,45 @@ class FreeGuaranteedBuilder(ResourceBuilder):
     Percio' `libera` (mezza giornata libera-che-conta) e' congiunta con
     `giorno attivo`: vera solo se il giorno lavora e quella meta' e' scarica.
 
-    Minimo garantito: niente `residual_cap`. Se le congelate bastano gia' a
-    coprire `free_days`/`free_half_days`, le somme risultano vacue."""
+    ⚠ Niente `if not len(span): continue` sulla meta' vuota (review Task 7,
+    Important 1 — corretto qui, non in `MaxHalfDaysBuilder` dove e' giusto
+    cosi': li' il checker fa `bool(afternoon)`, che vale 0 su una lista
+    vuota e la salta correttamente da solo; qui il checker fa
+    `(not afternoon)`, che vale **1** su ogni giorno lavorato quando il
+    pomeriggio e' strutturalmente vuoto — saltare quella meta' azzerava un
+    contributo che il checker conta gratis, rendendo insoddisfacibile
+    qualunque `free_half_days >= 1` su una griglia senza pomeriggio.
+    `v.half_active` su uno span vuoto e' gia' una costante 0 via
+    `_max_or_zero`: non serve saltarla, basta lasciarla contribuire.
+
+    ⚠ Minimo garantito, **ma non immune al passato** (Important 2, stessa
+    correzione di `ArrivalDepartureBuilder`, sull'altra parte del
+    ragionamento: qui le congelate possono *consumare* la soglia, non solo
+    aiutarla). Una congelata che occupa un giorno forza quel giorno
+    "attivo" — `libero` non potra' mai valere 1 li'; una congelata in una
+    meta' specifica forza quella meta' "occupata" — `libera` non potra' mai
+    valere 1 li', anche se l'altra meta' dello stesso giorno resta
+    negoziabile. Residuo per forzatura (`frozen_occupies`, non
+    `residual_cap`): i termini gia' persi non generano letterali, le
+    soglie si abbassano a quanto resta raggiungibile."""
     TYPE = T.FREE_GUARANTEED
 
     def post(self, ctx, model, row, rep):
         v, key = ctx.vocab, row.resource_id
+        grid = ctx.grid
         giorni_liberi, mezze_libere = [], []
-        for day in range(ctx.grid.days_per_cycle):
+        giorni_persi, mezze_perse = 0, 0
+        for day in range(grid.days_per_cycle):
             attivo = v.day_active(key, day, signature=rep)
-            libero = model.NewBoolVar(f"freeday_{key}_{rep}_{day}")
-            model.Add(libero + attivo == 1)
-            giorni_liberi.append(libero)
+            if frozen_occupies(ctx, key, day, range(grid.slots_per_day), rep):
+                giorni_persi += 1  # il giorno e' gia' occupato dal passato
+            else:
+                libero = model.NewBoolVar(f"freeday_{key}_{rep}_{day}")
+                model.Add(libero + attivo == 1)
+                giorni_liberi.append(libero)
             for half, span in enumerate(v.halves()):
-                if not len(span):
+                if frozen_occupies(ctx, key, day, span, rep):
+                    mezze_perse += 1  # quella meta' e' gia' occupata
                     continue
                 meta = v.half_active(key, day, half, signature=rep)
                 libera = model.NewBoolVar(f"freehalf_{key}_{rep}_{day}_{half}")
@@ -195,7 +250,9 @@ class FreeGuaranteedBuilder(ResourceBuilder):
                 mezze_libere.append(libera)
         minimo_giorni = row.params.get("free_days", 0)
         if minimo_giorni:
-            model.Add(sum(giorni_liberi) >= minimo_giorni)
+            soglia_giorni = min(minimo_giorni, grid.days_per_cycle - giorni_persi)
+            model.Add(sum(giorni_liberi) >= soglia_giorni)
         minimo_mezze = row.params.get("free_half_days", 0)
-        if minimo_mezze and mezze_libere:
-            model.Add(sum(mezze_libere) >= minimo_mezze)
+        if minimo_mezze:
+            soglia_mezze = min(minimo_mezze, 2 * grid.days_per_cycle - mezze_perse)
+            model.Add(sum(mezze_libere) >= soglia_mezze)
