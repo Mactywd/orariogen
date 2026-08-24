@@ -16,7 +16,7 @@ from domain.models import (
 )
 from domain.solver.model import apply, solve
 from tests import fermi
-from tests.analysis_helpers import make_activity, mini_school
+from tests.analysis_helpers import make_activity, mini_school, place
 
 pytestmark = pytest.mark.django_db
 
@@ -31,11 +31,19 @@ CODICI = {
 
 
 def violazioni(schedule, codici=CODICI):
-    """L'insieme delle chiavi dei finding HARD nelle famiglie modellate.
-    Un insieme, non una lista: il criterio di riuscita e' il **contenimento**
-    (ADR-018), non l'uguaglianza."""
-    return {f.key for f in check_schedule(schedule)
-            if f.severity == Severity.HARD and f.code in codici}
+    """L'insieme delle (chiave, settimana) dei finding HARD nelle famiglie
+    modellate. Un insieme, non una lista: il criterio di riuscita e' il
+    **contenimento** (ADR-018), non l'uguaglianza.
+
+    Espanso per settimana invece di lasciare la sola chiave: `Finding.key`
+    esclude deliberatamente `weeks` (e' pensata per il dedup fra firme dentro
+    check_schedule), quindi una violazione identica per codice/risorse/
+    attivita'/quantita' ma comparsa su una firma diversa da quella di
+    partenza si fonderebbe nello stesso finding e sparirebbe dal calcolo
+    differenziale di `nuove()`. Espandere per settimana la rende visibile."""
+    return {(f.key, w) for f in check_schedule(schedule)
+            if f.severity == Severity.HARD and f.code in codici
+            for w in f.weeks}
 
 
 def nuove(schedule, prima, codici=CODICI):
@@ -154,7 +162,7 @@ def test_oracolo_puo_fallire():
     giorno_orig, fascia_orig = p_b.day, p_b.start_slot
     p_b.day, p_b.start_slot = p_a.day, p_a.start_slot
     p_b.save()
-    codici = {codice for codice, *_ in violazioni(env["schedule"])}
+    codici = {codice for (codice, *_), _settimana in violazioni(env["schedule"])}
     assert "resource_occupied" in codici
 
     # Ripristino: la corruzione precedente non deve contaminare la successiva.
@@ -168,7 +176,7 @@ def test_oracolo_puo_fallire():
         resource=docente_ita, day=0, slot=1, level="hard").exists()
     p_a.day, p_a.start_slot = 0, 1
     p_a.save()
-    codici = {codice for codice, *_ in violazioni(env["schedule"])}
+    codici = {codice for (codice, *_), _settimana in violazioni(env["schedule"])}
     assert "unavailability" in codici
 
 
@@ -342,6 +350,90 @@ def test_oracolo_su_istanza_multi_firma_fattibile():
     assert celle["A6"] == (1, 0)
     # e A1 ha dovuto chiudere il buco della settimana 0, non aprirne uno
     assert celle["A1"] in {(0, 1), (1, 1)}
+
+
+def _due_settimane_stessa_violazione():
+    """Fissa la semantica di nuove() sul caso della review: una violazione
+    max_gap identica per codice/risorsa/quantita' su due settimane diverse.
+    Non passa dal solver — e' costruita a mano con Placement diretti, perche'
+    qui l'oggetto sotto esame e' l'helper del test, non il solver.
+
+    Griglia 1 giorno x 3 fasce, MAX_GAP_HOURS = 0 sulla classe (qualunque
+    buco e' una violazione). Settimana 0: due attivita' piazzate a fascia 0 e
+    2, buco alla fascia 1 → un finding max_gap su 'klass', quantities
+    {gap_minutes: 60, max_gap_minutes: 0}. Settimana 1: due attivita' attive
+    ma non ancora piazzate → nessuna occupazione, nessun buco, nessuna
+    violazione — finche' il chiamante non le piazza con lo stesso schema.
+
+    MaxGapChecker (domain/analysis/checkers/time_constraints.py) costruisce
+    il finding senza 'activities' nella chiave (solo resources e quantities):
+    piazzando A3/A4 con lo stesso buco, il finding della settimana 1 ha
+    esattamente la stessa Finding.key di quello della settimana 0, e
+    check_schedule li fonde in un solo oggetto con weeks=(0, 1)."""
+    grid = TimeGrid.objects.create(
+        days_per_cycle=1, slots_per_day=3, slot_minutes=60, morning_end_slot=3)
+    year = SchoolYear.objects.create(
+        start_date=dt.date(2026, 9, 14), end_date=dt.date(2026, 9, 27),
+        first_week_monday=dt.date(2026, 9, 14),
+    )
+    period = Period.objects.create(
+        school_year=year, name="P1", start_date=year.start_date, end_date=year.end_date)
+    schedule = Schedule.objects.create(period=period)
+    disc = Discipline.objects.create(code="LET", name="Lettere")
+    subject = Subject.objects.create(code="ITA", name="Italiano", discipline=disc)
+    plan = StudyPlan.objects.create(code="P1", name="Piano", year=1)
+    klass = SchoolClass.objects.create(name="1A", study_plan=plan, year=1)
+    teacher = Teacher.objects.create(name="Rossi Anna", last_name="Rossi", first_name="Anna")
+
+    prima_settimana, seconda_settimana = weeks.single_week(0), weeks.single_week(1)
+    a1 = make_activity(subject, teachers=[teacher], classes=[klass], mask=prima_settimana)
+    a2 = make_activity(subject, teachers=[teacher], classes=[klass], mask=prima_settimana)
+    a3 = make_activity(subject, teachers=[teacher], classes=[klass], mask=seconda_settimana)
+    a4 = make_activity(subject, teachers=[teacher], classes=[klass], mask=seconda_settimana)
+
+    ResourceTimeConstraint.objects.create(
+        resource=klass, type=ResourceTimeConstraint.Type.MAX_GAP_HOURS,
+        params={"max_gap_minutes": 0})
+
+    place(schedule, a1, day=0, slot=0)
+    place(schedule, a2, day=0, slot=2)
+
+    return {"schedule": schedule, "a3": a3, "a4": a4}
+
+
+def test_nuove_vede_una_violazione_ripetuta_su_unaltra_settimana():
+    """L'osservazione Important della review del Task 3: violazioni() riduce
+    ogni finding alla sua Finding.key, che esclude 'weeks' per costruzione
+    (e' pensata per il dedup fra firme dentro check_schedule). Senza
+    l'espansione per settimana, una violazione preesistente in una firma e
+    una identica — stesso codice/risorse/quantities — comparsa su un'altra
+    firma si fondono in un solo finding con weeks allargato: la chiave era
+    gia' in 'prima', quindi nuove() la perderebbe.
+
+    Qui costruiamo esattamente quel caso: 'prima' cattura la violazione della
+    settimana 0; poi piazziamo lo stesso schema di buco sulla settimana 1
+    (stessa Finding.key, weeks diverso). Se nuove() operasse sulla sola
+    chiave, il risultato sarebbe l'insieme vuoto — il finding "nuovo" e'
+    identico a quello gia' visto. Con l'espansione per (chiave, settimana),
+    nuove() deve vedere la settimana 1 come genuinamente nuova."""
+    env = _due_settimane_stessa_violazione()
+    schedule = env["schedule"]
+
+    prima = violazioni(schedule)
+    assert len(prima) == 1
+    (chiave, settimana), = prima
+    assert chiave[0] == "max_gap"
+    assert settimana == 0
+
+    # stesso schema di buco, sulla settimana 1: stessa Finding.key di prima
+    place(schedule, env["a3"], day=0, slot=0)
+    place(schedule, env["a4"], day=0, slot=2)
+
+    dopo = violazioni(schedule)
+    assert dopo == prima | {(chiave, 1)}
+
+    trovate = nuove(schedule, prima)
+    assert trovate == {(chiave, 1)}
 
 
 def test_fermi_intero_misurato():
