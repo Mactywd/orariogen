@@ -252,3 +252,58 @@ def test_free_guaranteed_meta_pomeriggio_vuota_normale_sulla_griglia_6():
         params={"free_half_days": 1})
     soluzione = solve(env["schedule"], time_limit=30)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+
+
+def test_adr018_free_guaranteed_bound_delle_mezze_e_per_giorno():
+    """Important 1 del giro 1 della review Task 7. Il residuo di
+    `free_half_days` era calcolato come `2 * days_per_cycle - mezze_perse`,
+    cioe' assumendo che un giorno possa contribuire **due** mezze libere.
+    Non puo': `libera = attivo AND NOT meta`, quindi un giorno attivo ha per
+    forza almeno una meta' occupata (ne da' al massimo una libera) e un
+    giorno inattivo non ne da' nessuna — il massimo raggiungibile e'
+    `days_per_cycle`, e va tolto un giorno per ogni giorno **interamente**
+    congelato.
+
+    L'istanza: due congelate sul giorno 0, una per meta' (slot 0 mattina,
+    slot 4 pomeriggio), piu' sei attivita' libere, con `free_half_days=5`.
+    Il massimo raggiungibile e' 4 (i giorni 1..4, una mezza ciascuno): il
+    giorno 0 e' perso per intero. Col vecchio bound la soglia restava 5
+    (`min(5, 10 - 2)`) e il modello era INFEASIBLE **per colpa del solo
+    passato**, cio' che ADR-018 vieta. Col bound corretto
+    (`min(5, 5 - 1) = 4`) e' risolvibile."""
+    env = mini_school()
+    for slot in (0, 4):
+        congelata = make_activity(
+            env["subject"], teachers=[env["teacher"]], classes=[env["klass"]],
+            immobility=Activity.Immobility.LOCKED_IN_PLACE)
+        place(env["schedule"], congelata, day=0, slot=slot)
+    libere = [make_activity(env["subject"], teachers=[env["teacher"]],
+                            classes=[env["klass"]]) for _ in range(6)]
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED,
+        params={"free_half_days": 5})
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    assert all(soluzione.placements[a.id] is not None for a in libere)
+
+
+def test_free_guaranteed_bound_delle_mezze_morde_ancora_senza_congelate():
+    """Controprova del test sopra: senza congelate il bound non deve
+    ammorbidire nulla. Griglia 5x6, sei attivita' libere e
+    `free_half_days=5` — il massimo raggiungibile e' esattamente 5 (una
+    mezza libera per ciascuno dei cinque giorni), quindi il vincolo e'
+    stretto e la soluzione deve lasciare almeno cinque mezze giornate
+    libere secondo il checker."""
+    env = mini_school()
+    for _ in range(6):
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED,
+        params={"free_half_days": 5})
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    apply(soluzione, env["schedule"])
+    assert violazioni(env["schedule"], {"free_guaranteed"}) == set()
