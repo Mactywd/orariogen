@@ -563,3 +563,44 @@ partizioni diverse condividono almeno un atomo. Nessun campo nuovo, nessuna
 migrazione, e nessun effetto sulle classi con meno di due partizioni.
 
 **Data.** 2026-07-26
+
+---
+
+## ADR-018 — L'input sporco non blocca il solver: capacità residua e oracolo differenziale
+
+**Decisione.** Quando un vincolo mescola attività **congelate già in violazione**
+e attività **libere**, il constraint si posta comunque, ma sui **soli letterali
+liberi**, con il budget ridotto di quanto le congelate hanno già consumato e
+**clampato a zero**. Il solver non è mai `INFEASIBLE` per colpa di una
+violazione preesistente: al più non può aggiungere nulla lì.
+
+Di conseguenza il criterio di riuscita dell'oracolo diventa **differenziale**:
+non «zero finding `HARD`», ma «nessun finding `HARD` che non ci fosse già prima
+del solve». I finding preesistenti restano visibili — non vengono nascosti, solo
+non attribuiti al solver.
+
+**Alternative scartate.** (a) **Input pulito come precondizione**: il solver si
+rifiuta di partire e dichiara quali congelate sono in violazione. Modello più
+semplice e oracolo invariato, ma trasforma in vicolo cieco il caso più comune —
+l'utente ha piazzato a mano qualcosa di illegale e vuole solo riempire il resto.
+(b) **Una regola per builder**: ogni vincolo dichiara come si comporta
+sull'input sporco. Più fedele ai casi limite, ma sono ventidue decisioni invece
+di una, e nessuna proprietà globale resta dimostrabile.
+(c) Mantenere la regola dello spike («un constraint i cui letterali provengono
+tutti da attività congelate non si posta»): è coerente ma non basta, ed è
+esattamente il buco documentato in `CLAUDE.md` fino a oggi.
+
+**Motivo.** È il comportamento osservato in EDT, non un'invenzione: un orario
+valido **non è un invariante** del prodotto. Una base con 984/984 attività
+piazzate dichiarava comunque 21 attività in violazione, piazzate a mano, e il
+motore continuava a lavorare (`docs/edt/diagnostica.md`). La violazione è uno
+stato ammesso e interrogabile; il solver è uno strumento che migliora l'orario,
+non un guardiano che si rifiuta di toccarlo.
+
+**Conseguenze.** Ogni builder dei ventidue restanti va scritto contro la
+capacità residua, non contro il budget nominale — il calcolo del consumo delle
+congelate va nel contesto, una volta sola, non dentro i builder. E i test
+dell'oracolo vanno riscritti sul confronto prima/dopo: `violazioni()` diventa
+una differenza di insiemi, non un totale.
+
+**Data.** 2026-08-24

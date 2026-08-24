@@ -283,23 +283,14 @@ l'assegnazione delle aule e il violatore di Hall. Vedi
 - [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
       `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
       CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
-- [ ] ⚠ **Come si comporta un builder quando un constraint mescola attività
-      congelate già in violazione e attività libere nello stesso vincolo?** La
-      regola attuale — «un constraint i cui letterali provengono tutti da
-      attività congelate non si posta» — è coerente ma non basta su input
-      sporco: se fra le congelate c'è già una violazione e c'è anche
-      un'attività libera nello stesso constraint, il modello diventa
-      `INFEASIBLE` per colpa di una violazione preesistente; se l'attività
-      libera è altrove, l'oracolo rifiuta una soluzione corretta perché
-      `check_schedule` non distingue i finding preesistenti da quelli causati
-      dal solver. Tre strade in gioco, da decidere nella spec del modello
-      completo prima di scrivere gli altri ventidue builder: **capacità
-      residua** clampata sui soli letterali liberi (il constraint conta solo
-      ciò che è ancora in gioco); **oracolo differenziale** che confronta i
-      finding prima e dopo il solve, invece che il totale; oppure dichiarare
-      le violazioni preesistenti **fuori dal criterio di riuscita**
-      dell'oracolo. Emersa dalla review finale dello spike CP-SAT (2026-08-24),
-      non risolta lì. → `domain/solver/`
+- [x] **Come si comporta un builder quando un constraint mescola attività
+      congelate già in violazione e attività libere?** Deciso con
+      [ADR-018](docs/decisioni.md): **capacità residua** clampata sui soli
+      letterali liberi, e **oracolo differenziale** (nessun finding `HARD`
+      *nuovo*, invece di nessun finding `HARD`). Un orario illegale è uno
+      stato ammesso — è il comportamento di EDT, che con 21 attività in
+      violazione piazzate a mano continua a lavorare. **Da implementare** nella
+      spec del modello completo, prima dei ventidue builder restanti.
 
 ## Scope di v1 — deciso il 2026-07-26
 
