@@ -65,6 +65,7 @@ le libere abbiano ancora voce in capitolo — l'analogo esatto di
 from domain.models import ResourceTimeConstraint
 from domain.solver.builders.base import ResourceBuilder
 from domain.solver.registry import register
+from domain.solver.residual import frozen_occupies
 
 T = ResourceTimeConstraint.Type
 
@@ -112,3 +113,82 @@ class MaxGapBuilder(ResourceBuilder):
                     terms.append(cov[s] - v.occupied(key, day, s, signature=rep))
         if terms:
             model.Add(grid.slot_minutes * sum(terms) <= cap)
+
+
+def _frozen_presence_minutes(ctx, key, day, rep):
+    """La presenza (in minuti) indotta dalle sole attivita' **congelate** su
+    `key`, nel giorno `day`, per la firma `rep`. Stesso schema di
+    `_frozen_gap_minutes` (celle fisse, note a build time), ma sulla
+    **giornata intera** — non per mezza giornata — perche' e' cosi' che
+    MaxPresenceChecker misura la presenza (`_presence_minutes`, che non passa
+    mai da `_halves`)."""
+    grid, active = ctx.grid, ctx.states[rep].activities
+    occupate = sorted({
+        s for s in range(grid.slots_per_day)
+        for aid, _ in ctx.by_cell.get((key, day, s), ())
+        if aid not in ctx.free and aid in active
+    })
+    if not occupate:
+        return 0
+    return (occupate[-1] - occupate[0] + 1) * grid.slot_minutes
+
+
+@register(T.MAX_PRESENCE)
+class MaxPresenceBuilder(ResourceBuilder):
+    """Presenza != lavoro: la presenza include i buchi, e si misura
+    `ultima - prima + 1` **sulla giornata intera**.
+
+    ⚠ Lo `span` e' la giornata, non la mezza giornata. MaxPresenceChecker usa
+    `_presence_minutes`, che non passa da `_halves` — a differenza del D.T.B.,
+    che i buchi non li conta mai a cavallo del pranzo. Sono due vincoli che si
+    somigliano e non sono la stessa cosa: usare la mezza giornata qui
+    produrrebbe un vincolo piu' largo del checker (due presenze corte a
+    cavallo del pranzo passerebbero, mentre il checker le fonde in una sola).
+
+    ⚠ **ADR-018, correzione al piano (Ruling 23): clampa, non saltare.** Il
+    piano originale faceva `continue` sul giorno in cui le sole congelate
+    avevano gia' sforato il tetto, con l'argomento che «le libere non possono
+    ridurre una presenza, quindi il vincolo e' perso comunque». La premessa e'
+    vera — la presenza e' monotona non decrescente — ma la conclusione e'
+    sbagliata: saltare il vincolo lascia le libere **allargare** la presenza
+    di quel giorno oltre il debito gia' contratto, e il finding porta
+    `minutes=presence` fra le sue `quantities` (`Finding.key`,
+    domain/analysis/findings.py) — una presenza peggiorata e' una violazione
+    **nuova** per l'oracolo differenziale, non la stessa di prima. La forma
+    corretta e' il clamp gia' usato da `MaxGapBuilder` sopra: il tetto
+    effettivo e' `max(cap, presenza_indotta_dalle_sole_congelate)`
+    (`_frozen_presence_minutes`), mai sotto al debito gia' contratto dal
+    passato. Nel caso pulito coincide col tetto dichiarato; nel caso sporco
+    il modello non e' mai infattibile per colpa del passato, ma le libere
+    restano vincolate a non peggiorare ulteriormente la giornata.
+
+    Il ramo `days` non passa da `residual_cap`: i termini sono variabili
+    derivate (`day_active`), non `(peso, id_attivita', letterale)` per
+    attivita' — il caso esplicitamente previsto da `frozen_occupies`
+    (Ruling 25). Il consumo delle congelate si sottrae a mano dal tetto,
+    come gia' fanno i Task 6 e 7."""
+    TYPE = T.MAX_PRESENCE
+
+    def post(self, ctx, model, row, rep):
+        grid, v = ctx.grid, ctx.vocab
+        key = row.resource_id
+        giornata = range(grid.slots_per_day)
+        cap = row.params.get("max_minutes")
+        if cap is not None:
+            for day in range(grid.days_per_cycle):
+                # ADR-018 (Ruling 23): clamp, non salto — vedi il docstring
+                # di classe per l'argomento sulle quantities.
+                cap_effettivo = max(cap, _frozen_presence_minutes(ctx, key, day, rep))
+                cov = v.covered(key, day, giornata, signature=rep)
+                model.Add(grid.slot_minutes * sum(cov[s] for s in giornata)
+                          <= cap_effettivo)
+        max_days = row.params.get("days")
+        if max_days is not None:
+            terms, consumo = [], 0
+            for day in range(grid.days_per_cycle):
+                if frozen_occupies(ctx, key, day, giornata, rep):
+                    consumo += 1
+                else:
+                    terms.append(v.day_active(key, day, signature=rep))
+            if terms:
+                model.Add(sum(terms) <= max(0, max_days - consumo))

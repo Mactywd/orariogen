@@ -518,3 +518,37 @@ def _derive_free_guaranteed(w):
         resource=docente, type=RT.FREE_GUARANTEED,
         params={"free_days": min_giorni, "free_half_days": min_mezze})
     return 1
+
+
+@deriver(RT.MAX_PRESENCE, {"max_presence", "max_presence_days"})
+def _derive_max_presence(w):
+    """Il picco di presenza (`ultima - prima + 1`, sulla **giornata intera**
+    — non per mezza giornata, a differenza del D.T.B.) e il numero di giorni
+    lavorati, per la firma peggiore. Con l'uguaglianza il vincolo e'
+    soddisfatto e stretto.
+
+    Vacua (ritorna 0, correzione 3 del brief, Ruling 24) in due casi:
+    il docente scelto a caso non compare in nessuna firma (`giorni == 0`,
+    stessa convenzione di `_derive_max_half_days` — nessuna soglia potrebbe
+    mai essere violata); oppure il picco copre gia' l'intera giornata **e**
+    i giorni coprono gia' `days_per_cycle`, cioe' entrambi i rami del
+    checker diventano banalmente veri per costruzione (nessuna presenza puo'
+    mai superare la giornata, nessun conteggio di giorni puo' mai superare
+    il ciclo) — un builder rotto non potrebbe farlo fallire."""
+    grid = w.env["grid"]
+    docente = w.rng.choice(w.env["teachers"])
+    picco, giorni = 0, 0
+    for rep, _ in w.signatures:
+        per_firma = w.resource_days(docente.pk, rep)
+        giorni = max(giorni, len(per_firma))
+        for _day, fasce in per_firma.items():
+            picco = max(picco, (fasce[-1] - fasce[0] + 1) * grid.slot_minutes)
+    if giorni == 0:
+        return 0
+    if (picco >= grid.slots_per_day * grid.slot_minutes
+            and giorni >= grid.days_per_cycle):
+        return 0
+    ResourceTimeConstraint.objects.create(
+        resource=docente, type=RT.MAX_PRESENCE,
+        params={"max_minutes": picco, "days": giorni})
+    return 1
