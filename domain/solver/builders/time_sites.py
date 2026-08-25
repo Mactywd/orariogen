@@ -31,23 +31,59 @@ comunque vacuo (la coppia non forza nulla se in mezzo c'e' un'altra sede
 nota, che a sua volta partecipa alle proprie coppie adiacenti), e le coppie
 vicine includono tutte le consecutive.
 
-⚠ **Caso verificato e non risolto (stesso Ruling, ultimo paragrafo): due
-attivita' di sede diversa sulla STESSA fascia della stessa chiave.** Il
-checker le conta entrambe (appende una voce per **ogni** attivita' che
-occupa la fascia, `state.occupancy[(key, day, s)]`), quindi due attivita' di
-sede diversa simultanee sulla stessa fascia sono un cambio. La costruzione a
-coppie `s < t` (qui sotto) non puo' esprimerlo: non esiste una coppia con
-`s == t`. Di norma e' irraggiungibile perche' la stessa fascia della stessa
-chiave e' gia' vietata da `structural:occupation` (capienza 1) — ma
-**verificato che e' raggiungibile** quando la chiave ha capienza cumulativa
-`simultaneous_capacity > 1` (il campo esiste sulla `Resource` base, quindi
-anche su classi/docenti, anche se il caso d'uso tipico e' aule/materiali):
-costruita un'istanza con una classe a capienza 2, due attivita' di sede
-diversa su docenti diversi piazzate sulla stessa fascia — zero finding di
-occupazione, un `max_site_changes` `HARD` dal checker, nessuna coppia del
-builder in grado di intercettarlo. **Non risolto qui**: e' un'osservazione
-per il controller (il brief lo vieta esplicitamente come task di iniziativa),
-non un difetto corretto in questo giro.
+⚠ **Due attivita' di sede diversa sulla STESSA fascia della stessa chiave —
+riparato solo in `SiteTransitionBuilder` (Important 1 + Ruling 33, giro di
+correzione 1).** Il checker le conta entrambe (appende una voce per **ogni**
+attivita' che occupa la fascia, `state.occupancy[(key, day, s)]`), quindi due
+attivita' di sede diversa simultanee sulla stessa fascia sono **sempre** un
+cambio per `SiteTransitionChecker`: con `s1 == s2`, `gap_slots = s2-s1-1 =
+-1`, che e' `< needed` per **qualunque** `needed >= 0` — anche `needed = 0`.
+La violazione non dipende dalla soglia. La costruzione a coppie `s < t` (qui
+sotto) non puo' esprimerla: non esiste una coppia con `s == t`. Di norma e'
+irraggiungibile perche' la stessa fascia della stessa chiave e' gia' vietata
+da `structural:occupation` (capienza 1) — ma **raggiungibile** quando la
+chiave ha capienza cumulativa `simultaneous_capacity > 1` (il campo esiste
+sulla `Resource` base, quindi anche su classi/docenti, ma il caso reale e'
+l'aula col `Numero di aule`/`Qta'` di EDT, documentato in `docs/edt/aule.md`
+— non un caso di laboratorio): un'aula a capienza 2 con due attivita' di
+classi diverse, sedi diverse, piazzate sulla stessa fascia produce zero
+finding di occupazione ma un `site_transition` `HARD` dal checker — l'oracolo
+differenziale rotto (solver `OPTIMAL`, checker boccia con un finding nuovo).
+
+**Riparato**: `SiteTransitionBuilder.build` posta ora, per ogni `(chiave,
+giorno, fascia)` e ogni coppia di sedi distinte che tocca davvero quella
+cella, la clausola `s == t` (`site_occupied(key, day, s, sa).Not() OR
+site_occupied(key, day, s, sb).Not()`) — **indipendente da `needed`**, perche'
+il checker non la esenta mai, nemmeno a `needed = 0`. Esatto, non
+conservativo; costo trascurabile (una clausola per chiave × giorno × fascia ×
+coppia di sedi effettivamente compresenti in quella cella, filtrate da
+`_sedi_raggiungibili` — Minor 2 sotto). Test:
+`test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa` in
+`tests/test_solver_sites.py`.
+
+⚠ **`MaxSiteChangesBuilder` — NON riparato, deliberatamente (Ruling 33).** Lo
+stesso buco esiste anche qui (due sedi diverse sulla stessa fascia sono un
+cambio per il checker), ma qui la riparazione non e' univoca, perche' la
+semantica del checker stesso non lo e'. `ScheduleState.occupancy`
+(`domain/analysis/state.py`) e' un `defaultdict(list)`, e `_site_sequence` la
+scorre **in ordine di lista** — l'ordine in cui `ScheduleState.build` ha
+inserito le occupazioni. Sotto capienza cumulativa il **conteggio** dei
+cambi dipende quindi dall'**ordine di inserimento**: la stessa coppia di
+attivita' simultanee da' un conteggio diverso a seconda che la sequenza
+letta sia `[A, B]` o `[B, A]` seguita da una terza occupazione. Non e' una
+proprieta' del piazzamento, e' un artefatto di implementazione del checker —
+e il checker e' **l'autorita'** su cosa significhi il vincolo. Tradurre
+l'artefatto nel builder (per esempio imponendo un ordine arbitrario fra le
+due sedi simultanee) significherebbe replicare un comportamento che nessuno
+ha deciso essere corretto, non tradurre una semantica. **Va prima deciso in
+`domain/analysis` cosa significhi «cambio di sede» quando due sedi
+coesistono nella stessa fascia** (per esempio: ordinare la sequenza
+intra-fascia in modo deterministico, o dichiarare che sedi diverse
+simultanee valgono un cambio e basta indipendentemente da quante sono e in
+che ordine) — solo allora questo builder ha una semantica bersaglio univoca
+da tradurre. Fino a quella decisione resta **esatto solo per chiavi a
+capienza 1** (confronto esaustivo nel report del Task 9, giro di correzione
+1 e nella review). Voce gia' in CLAUDE.md, elenco «Ancora aperto».
 
 ⚠ **ADR-018.** `MaxSiteChangesBuilder` posta somme su variabili derivate
 (i letterali di cambio `c`), non su termini `(peso, id, letterale)`
@@ -56,7 +92,37 @@ separabili: stesso schema di `MaxGapBuilder`/`MaxPresenceBuilder`
 `continue` e' stato sbagliato due volte su questo piano: review Task 6
 Important 2, e Ruling 23 sul Task 8). `SiteTransitionBuilder` invece ha gia'
 ADR-018 nella forma della regola dell'implicazione (`any_free`): non
-toccato."""
+toccato.
+
+⚠ **Minor 2 (review Task 9): filtro a costo zero sul numero di clausole —
+applicato, ma misurato a effetto nullo sul Fermi.** Entrambi i builder
+ciclavano su **tutte** le sedi conosciute nell'istituto per ogni `sa`/`sb`,
+anche quando nessuna attivita' di quella sede tocca davvero la cella in
+questione — in quel caso `site_occupied(...)` e' costante a zero per
+costruzione (nessun letterale in `ctx.by_cell`) e la clausola che lo
+coinvolge e' vera per costruzione, quindi inutile da postare.
+`_sedi_raggiungibili` restituisce, per una cella, solo le sedi di cui esiste
+**davvero** un'attivita' il cui dominio tocca quella cella (lettura diretta
+di `ctx.by_cell`, senza filtrare per firma di settimana — filtro grosso ma a
+costo zero in complessita' del codice): e' logicamente corretto e non
+costa nulla in leggibilita', quindi resta. **Ma misurato sul Fermi (giro di
+correzione 1) non taglia nulla**: a 2 sedi il conteggio dei constraint di
+`SiteTransitionBuilder` e' identico con e senza il filtro (5604, sia al 50%
+sia al 100% di attivita' con sede), e lo stesso a 4 sedi (21830 con e senza).
+La ragione e' strutturale, non un errore del filtro: sul Fermi le attivita'
+di ogni chiave (classe o docente) non hanno restrizioni di dominio ulteriori
+(nessuna indisponibilita', nessun vincolo di griglia in questi scenari di
+misura), quindi `ctx.by_cell` per quella chiave contiene gia' rappresentanti
+di (quasi) tutte le sedi in (quasi) ogni cella — non c'e' nulla da filtrare.
+Il filtro tornerebbe utile su dati con domini davvero ristretti per sede
+(indisponibilita', griglia, congelate), che il Fermi con le sedi aggiunte
+sinteticamente per la misura non esercita. La crescita superlineare col
+numero di sedi resta comunque reale e superiore a quella del piano originale
+(la clausola `s == t` aggiunge una famiglia intera di vincoli): misurato qui,
+`SiteTransitionBuilder` da solo (senza righe MAX_SITE_CHANGES) passa da 5604
+constraint a 2 sedi a 21830 a 4 sedi sul Fermi — piu' del baseline
+pre-riparazione (4008 → 12254) perche' la riparazione dell'Important 1 e'
+un'intera famiglia di vincoli in piu', non un'ottimizzazione."""
 
 from domain.models import ResourceTimeConstraint
 from domain.solver.builders.base import ResourceBuilder
@@ -69,6 +135,20 @@ T = ResourceTimeConstraint.Type
 def _sedi(ctx):
     return sorted({a.site_id for a in ctx.activities.values()
                    if a.site_id is not None})
+
+
+def _sedi_raggiungibili(ctx, key, day, slot):
+    """Le sedi di cui esiste **davvero** un'attivita' il cui dominio tocca
+    questa cella (Minor 2, review Task 9): fuori da questo insieme,
+    `site_occupied(key, day, slot, sito)` e' costante a zero per
+    costruzione (nessun letterale in `ctx.by_cell`), quindi ogni clausola
+    che lo coinvolge sarebbe vera per costruzione — inutile da postare.
+    Non filtra per firma di settimana (sarebbe piu' preciso ma complica il
+    chiamante): un falso positivo qui costa al piu' una clausola vera per
+    costruzione, mai una sbagliata."""
+    return {ctx.activities[aid].site_id
+            for aid, _ in ctx.by_cell.get((key, day, slot), ())
+            if ctx.activities[aid].site_id is not None}
 
 
 def _coppie_di_sede(ctx, key, day, s, t, sa, sb, rep, sedi):
@@ -119,10 +199,15 @@ class MaxSiteChangesBuilder(ResourceBuilder):
         consumo_settimana = 0
         for day in range(ctx.grid.days_per_cycle):
             cambi = []
+            # Minor 2: le sedi davvero raggiungibili in ogni fascia,
+            # calcolate una volta per giornata invece che ad ogni coppia
+            # (s, t) — stesso filtro, meno lavoro ripetuto.
+            per_fascia = [_sedi_raggiungibili(ctx, key, day, s)
+                          for s in range(ctx.grid.slots_per_day)]
             for s in range(ctx.grid.slots_per_day):
                 for t in range(s + 1, ctx.grid.slots_per_day):
-                    for sa in sedi:
-                        for sb in sedi:
+                    for sa in per_fascia[s]:
+                        for sb in per_fascia[t]:
                             if sa == sb:
                                 continue
                             lits = _coppie_di_sede(ctx, key, day, s, t,
@@ -156,21 +241,58 @@ class SiteTransitionBuilder(Builder):
 
     ADR-018 e' gia' presente nella forma della regola dell'implicazione
     (`any_free`): se nessuna delle attivita' che toccano le due fasce e'
-    libera, il vincolo e' un fatto sul passato e non si posta."""
+    libera, il vincolo e' un fatto sul passato e non si posta.
+
+    `build` posta due famiglie di clausole: `s == t` (due sedi diverse sulla
+    stessa fascia, indipendente da `needed` — Important 1, Ruling 33) e
+    `s < t` (le coppie a distanza insufficiente, vacua se `needed == 0`).
+    Vedi il docstring del modulo per i dettagli e i limiti."""
 
     def build(self, ctx, model):
         sedi = _sedi(ctx)
         if len(sedi) < 2:
             return
         needed = ctx.states[ctx.signatures[0][0]].settings.site_transition_slots
-        if not needed:
-            return
         chiavi = sorted({k for (k, _d, _s) in ctx.by_cell}, key=str)
         posted = set()
         for rep, _ in ctx.signatures:
             active = ctx.states[rep].activities
             for key in chiavi:
                 for day in range(ctx.grid.days_per_cycle):
+                    per_fascia = [_sedi_raggiungibili(ctx, key, day, s)
+                                  for s in range(ctx.grid.slots_per_day)]
+
+                    # s == t (Important 1, riparazione Ruling 33): due sedi
+                    # diverse sulla STESSA fascia sono sempre un cambio per
+                    # il checker (gap_slots = -1, sempre < needed qualunque
+                    # sia needed >= 0), quindi questa clausola non dipende
+                    # da `needed` — postata anche a needed = 0. Di norma
+                    # irraggiungibile (structural:occupation la vieta gia'
+                    # a capienza 1), raggiungibile a
+                    # simultaneous_capacity > 1 (vedi docstring del modulo).
+                    for s in range(ctx.grid.slots_per_day):
+                        tocca = {aid for aid, _ in ctx.by_cell.get((key, day, s), ())
+                                  if aid in active}
+                        if not any_free(ctx, tocca):
+                            continue
+                        for sa in per_fascia[s]:
+                            for sb in per_fascia[s]:
+                                if sa == sb:
+                                    continue
+                                firma = (key, day, s, s, sa, sb,
+                                         frozenset(tocca))
+                                if firma in posted:
+                                    continue
+                                posted.add(firma)
+                                model.AddBoolOr([
+                                    ctx.vocab.site_occupied(
+                                        key, day, s, sa, signature=rep).Not(),
+                                    ctx.vocab.site_occupied(
+                                        key, day, s, sb, signature=rep).Not(),
+                                ])
+
+                    if not needed:
+                        continue   # la coppia s < t sotto e' interamente vacua
                     for s in range(ctx.grid.slots_per_day):
                         for t in range(s + 1, ctx.grid.slots_per_day):
                             if t - s - 1 >= needed:
@@ -183,8 +305,8 @@ class SiteTransitionBuilder(Builder):
                             }
                             if not any_free(ctx, tocca):
                                 continue
-                            for sa in sedi:
-                                for sb in sedi:
+                            for sa in per_fascia[s]:
+                                for sb in per_fascia[t]:
                                     if sa == sb:
                                         continue
                                     firma = (key, day, s, t, sa, sb,

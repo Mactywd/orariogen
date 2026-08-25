@@ -571,25 +571,62 @@ def _derive_max_presence(w):
 
 @deriver(RT.MAX_SITE_CHANGES, {"max_site_changes"})
 def _derive_max_site_changes(w):
-    """I cambi di sede osservati nel testimone per il docente scelto, per
-    giornata e in totale sulla settimana, presi sulla firma peggiore. Con
-    l'uguaglianza il vincolo e' soddisfatto e stretto.
+    """Formulazione **«segregato»** (Ruling 34, review Task 9 giro di
+    correzione 1, §3): il derivatore **costruisce** lo scenario invece di
+    osservarlo. La versione precedente sceglieva un docente a caso e si
+    limitava a leggere le sedi che gli erano gia' toccate da
+    `_make_activities` (assegnazione al 50%, indipendente dal docente): la
+    review ha misurato il potere vincolante reale (builder reso no-op, il
+    caso deve fallire) a **0/15** — la famiglia non testava niente, perche'
+    quasi mai un docente a caso aveva due sedi distinte sulle proprie
+    attivita' nello stesso giorno.
 
-    Vacua (ritorna 0, correzione 3 del brief, Ruling 29) se il docente scelto
-    a caso ha **meno di due sedi distinte** fra le proprie attivita' del
-    testimone (nessuna sede, o una sola): in quel caso «cambio di sede» non
-    e' nemmeno strutturalmente possibile per lui — nessuna coppia di sue
-    attivita' puo' mai differire di sede, qualunque arrangiamento scelga il
-    solver — quindi il tetto, per quanto stretto (anche zero), non potrebbe
-    mai essere violato da un builder rotto (stessa convenzione di
-    _derive_max_half_days: non basta che la riga esista, deve poter essere
-    violata)."""
-    docente = w.rng.choice(w.env["teachers"])
-    sedi_docente = {w.act(aid).site_id for aid in w.placement
-                    if docente.pk in w.tokens[aid]
-                    and w.act(aid).site_id is not None}
-    if len(sedi_docente) < 2:
+    Qui si sceglie il docente con **piu' attivita'** nel testimone e gli si
+    assegna una sede **per giornata**: tutte le sue attivita' dello stesso
+    giorno alla stessa sede, sedi alternate fra giorni consecutivi
+    (`sites[day % len(sites)]`); tutte le altre attivita' (di lui e di
+    chiunque altro) restano senza sede. Cosi' i cambi di sede **per
+    giornata** del docente scelto sono sempre zero nel testimone — non serve
+    dimostrarlo caso per caso, e' garantito dalla costruzione — quindi il
+    tetto derivato e' `per_day = per_week = 0`, e qualunque soluzione che
+    mescoli due sedi diverse nella stessa giornata di quel docente lo viola.
+    Misurato qui (giro di correzione 1, builder reso no-op, 15 seed, piu'
+    esecuzioni per il non determinismo di CP-SAT): **10/15** stabile su
+    quattro esecuzioni consecutive. La review aveva misurato 12/15 sulla
+    propria formulazione di riferimento (non il codice qui sopra, solo la
+    descrizione): la differenza e' compatibile coi dettagli di
+    implementazione (qui il docente e' scelto per numero totale di
+    attivita', non specificamente per idoneita' a produrre sedi multiple) —
+    resta comunque un miglioramento netto rispetto allo 0/15 in albero.
+
+    Non tocca `_make_activities`: sovrascrive le sedi **dopo** che il
+    testimone e' gia' completo, e ogni `run_family` costruisce il proprio
+    testimone da zero — nessun altro derivatore vede questo cambiamento.
+
+    Vacua (ritorna 0) solo se il docente piu' carico ha **meno di due
+    attivita'** nel testimone: con una sola, «cambio di sede» non e'
+    strutturalmente possibile per lui, qualunque cosa scelga il solver."""
+    conteggio = defaultdict(int)
+    for aid in w.placement:
+        for t in w.act(aid).teachers.all():
+            conteggio[t.pk] += 1
+    docente_pk = max(conteggio, key=conteggio.get)
+    docente = next(t for t in w.env["teachers"] if t.pk == docente_pk)
+    attivita_docente = [aid for aid in w.placement
+                        if docente.pk in w.tokens[aid]]
+    if len(attivita_docente) < 2:
         return 0
+
+    sites = w.env["sites"]
+    for act in w.activities:
+        act.site = None
+        act.save()
+    for aid in attivita_docente:
+        day, _slot = w.placement[aid]
+        act = w.act(aid)
+        act.site = sites[day % len(sites)]
+        act.save()
+
     per_giorno, per_settimana = 0, 0
     for rep, _ in w.signatures:
         settimana = 0
@@ -611,39 +648,108 @@ def _derive_max_site_changes(w):
     return 1
 
 
-@deriver("structural:site_transition", {"site_transition"})
-def _derive_site_transition(w):
-    """Il numero di fasce libere che il testimone garantisce gia' fra due
-    lezioni su sedi diverse che condividono una chiave (stessa classe o
-    stesso docente), nello stesso giorno. Derivato sulle **coppie vicine**,
-    cioe' contro la regola piu' stretta del builder e non contro quella del
-    checker: e' cosi' che «direzione dimostrata» diventa eseguibile (spec
-    §5.2).
+def _distanza_sedi(w, aid, slot, altro, slot2):
+    """Distanza in fasce fra le occupazioni di due attivita' — sulle fasce
+    **occupate**, non sulle fasce d'inizio (Important 2, review Task 9 giro
+    di correzione 1): un'attivita' di durata > 1 occupa anche le fasce
+    successive alla prima, e il checker cammina sulle fasce occupate
+    (`_site_sequence`, `domain/analysis/checkers/time_constraints.py` e
+    `sites.py`). La vecchia formula (`abs(slot2 - slot) - 1`, sulle sole
+    fasce d'inizio) poteva dichiarare un `needed` che il testimone stesso
+    viola: riprodotto con `run_family("structural:site_transition", 15)` sul
+    codice in albero, seed 15 (vedi il report del Task 9, giro di correzione
+    1, per l'output verbatim)."""
+    if slot < slot2:
+        return slot2 - slot - w.act(aid).duration_slots
+    return slot - slot2 - w.act(altro).duration_slots
 
-    Vacua (ritorna 0, correzione 3 del brief, Ruling 29) quando il minimo
-    osservato produce un `needed` di **zero**: sia perche' nessuna coppia
-    di attivita' con sedi diverse e chiave condivisa esiste nel testimone
-    (`minimo` resta `None`), sia perche' la coppia piu' vicina trovata ha
-    gia' distanza zero (due sedi diverse a fasce adiacenti). In entrambi i
-    casi il builder esce subito (`if not needed: return`,
-    `domain/solver/builders/time_sites.py`): la famiglia e' completamente
-    vacua, non c'e' nulla che un builder rotto potrebbe far fallire."""
-    minimo = None
+
+def _coppie_sedi_vicine(w):
+    """Tutte le coppie (non ordinate) di attivita' con sedi note e diverse,
+    chiave condivisa (stessa classe o stesso docente) e stesso giorno, in
+    almeno una firma di settimana in cui sono entrambe attive — con la loro
+    distanza (fasce occupate, `_distanza_sedi`)."""
+    viste = set()
+    coppie = []
     for rep, _ in w.signatures:
         for aid, (day, slot) in w.placement.items():
-            if w.act(aid).site_id is None or rep not in w.weeks_of[aid]:
+            a1 = w.act(aid)
+            if a1.site_id is None or rep not in w.weeks_of[aid]:
                 continue
             for altro, (day2, slot2) in w.placement.items():
                 if altro == aid or day2 != day or rep not in w.weeks_of[altro]:
                     continue
-                if w.act(altro).site_id in (None, w.act(aid).site_id):
+                a2 = w.act(altro)
+                if a2.site_id is None or a2.site_id == a1.site_id:
                     continue
                 if not (w.tokens[aid] & w.tokens[altro]):
                     continue
-                distanza = abs(slot2 - slot) - 1
-                minimo = distanza if minimo is None else min(minimo, distanza)
-    needed = 0 if minimo is None else max(0, minimo)
+                chiave = frozenset((aid, altro))
+                if chiave in viste:
+                    continue
+                viste.add(chiave)
+                coppie.append((aid, altro,
+                               _distanza_sedi(w, aid, slot, altro, slot2)))
+    return coppie
+
+
+@deriver("structural:site_transition", {"site_transition"})
+def _derive_site_transition(w):
+    """Formulazione **«denso»** (Ruling 34, review Task 9 giro di correzione
+    1, §3): il derivatore **costruisce** lo scenario invece di osservarlo.
+
+    La versione precedente osservava le sedi assegnate a caso al 50% da
+    `_make_activities` e derivava il minimo delle distanze fra le coppie
+    trovate. La review ha dimostrato che nessuna riformulazione che si
+    limiti a **osservare** puo' fare meglio: `site_transition_slots` e'
+    un'impostazione d'istituto globale, quindi il `needed` derivabile e'
+    *necessariamente* il minimo su tutte le coppie — e il minimo su coppie
+    casuali e' quasi sempre zero (potere vincolante reale misurato: 1/15).
+    Ridurre la densita' delle sedi peggiora, non aiuta: meno coppie significa
+    piu' spesso *zero* coppie, che e' vacuo lo stesso.
+
+    L'unica via che regge e' **riparare** il testimone: (i) calcolare la
+    distanza sulle fasce occupate, non sulle fasce d'inizio (`_distanza_sedi`
+    — chiude anche l'Important 2 per costruzione, non solo qui); (ii)
+    assegnare una sede a **tutte** le attivita' del testimone (sovrascrive
+    l'assegnazione al 50% di `_make_activities`, ma solo su questa copia del
+    testimone: non tocca `_make_activities`, e nessun altro derivatore ne
+    risente); (iii) finche' esiste una coppia a distanza <= 0, togliere la
+    sede, greedy, a una delle due (converge sempre: ogni rimozione riduce di
+    uno il numero di attivita' con sede, quindi il ciclo e' limitato da
+    `len(w.activities)`); (iv) `needed` = minimo superstite, vacua
+    (`return 0`) se non sopravvive nessuna coppia. Misurato qui (giro di
+    correzione 1, builder reso no-op, 15 seed, piu' esecuzioni per il non
+    determinismo di CP-SAT): **12-14/15** a seconda dell'esecuzione, contro
+    l'1/15 della formulazione osservativa — in linea con la misura della
+    review (12/15)."""
+    sites = w.env["sites"]
+    if len(sites) < 2:
+        return 0
+    for act in w.activities:
+        act.site = w.rng.choice(sites)
+        act.save()
+
+    limite = len(w.activities) + 1
+    for _ in range(limite):
+        a_zero = [c for c in _coppie_sedi_vicine(w) if c[2] <= 0]
+        if not a_zero:
+            break
+        _, altro, _ = a_zero[0]
+        w.act(altro).site = None
+        w.act(altro).save()
+    else:
+        raise AssertionError(
+            "_derive_site_transition: la riparazione non converge, "
+            "bug nel derivatore")
+
+    coppie = _coppie_sedi_vicine(w)
     settings, _ = InstituteSettings.objects.get_or_create(pk=1)
+    if not coppie:
+        settings.site_transition_slots = 0
+        settings.save()
+        return 0
+    needed = min(d for _, _, d in coppie)
     settings.site_transition_slots = needed
     settings.save()
     return 0 if needed == 0 else 1

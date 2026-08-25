@@ -216,6 +216,55 @@ def test_site_transition_impone_le_fasce_libere():
         assert abs(sa - sb) - 1 >= 2
 
 
+def test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa():
+    """Important 1 (review Task 9, giro di correzione 1): due attivita' di
+    sede diversa piazzate sulla STESSA fascia della stessa chiave. La
+    costruzione a coppie `s < t` non puo' esprimerlo (non esiste una coppia
+    con `s == t`), ma il checker la vede sempre come una violazione
+    (`gap_slots = s2 - s1 - 1 = -1`, sempre `< needed`). Di norma e'
+    irraggiungibile perche' la stessa cella e' gia' vietata da
+    `structural:occupation` a capienza 1 — qui la si rende raggiungibile con
+    un'aula a `simultaneous_capacity = 2` (il `Numero di aule`/`Qta'` di
+    EDT, non un caso di laboratorio): due attivita' di **classi diverse**
+    (quindi nessun conflitto di classe o docente le separa) che condividono
+    la stessa aula, su una griglia 1x1 dove non c'e' altrove dove andare.
+
+    Prima della riparazione (clausola `s == t` in
+    `SiteTransitionBuilder.build`) il solver trovava `OPTIMAL` piazzando
+    entrambe sulla stessa unica cella — zero finding di occupazione, ma
+    `check_schedule` sulla soluzione applicata riportava un `site_transition`
+    `HARD` che il solver non aveva visto (vedi il report del Task 9, giro di
+    correzione 1, per l'output verbatim prima/dopo). Con la riparazione il
+    modello dev'essere INFEASIBLE: e' l'unica cella disponibile e la
+    clausola la vieta."""
+    from domain.models import Room, SchoolClass, StudyPlan, Teacher
+
+    env = mini_school()
+    env["grid"].days_per_cycle = 1
+    env["grid"].slots_per_day = 1
+    env["grid"].morning_end_slot = 1
+    env["grid"].save()
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"site_transition_slots": 1})
+
+    aula = Room.objects.create(name="Aula", simultaneous_capacity=2)
+    a_site = Site.objects.create(name="A")
+    b_site = Site.objects.create(name="B")
+    altro_piano = StudyPlan.objects.create(code="P2", name="Piano 2", year=1)
+    altra_classe = SchoolClass.objects.create(
+        name="1B", study_plan=altro_piano, year=1)
+    altro_docente = Teacher.objects.create(
+        name="Doc2", last_name="D2", first_name="2")
+
+    make_activity(env["subject"], teachers=[env["teacher"]],
+                  classes=[env["klass"]], rooms=[aula], site=a_site)
+    make_activity(env["subject"], teachers=[altro_docente],
+                  classes=[altra_classe], rooms=[aula], site=b_site)
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status == "INFEASIBLE", soluzione.stats
+
+
 # ⚠ Un tentativo di test in piu' e' stato scartato qui, non aggiunto: una
 # variante dell'istanza sopra con **due** giorni invece di uno (cosi' il
 # solver trova sempre una soluzione, per un test in stile oracolo con
