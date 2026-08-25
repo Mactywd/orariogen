@@ -291,6 +291,18 @@ l'assegnazione delle aule e il violatore di Hall. Vedi
       stato ammesso — è il comportamento di EDT, che con 21 attività in
       violazione piazzate a mano continua a lavorare. **Da implementare** nella
       spec del modello completo, prima dei ventidue builder restanti.
+- [ ] ⚠ **Cosa significa «cambio di sede» quando due sedi coesistono nella
+      stessa fascia?** Sotto capienza cumulativa (aula con `Qtà > 1`, feature
+      EDT documentata) due attività di sedi diverse possono occupare la stessa
+      fascia della stessa risorsa. `MaxSiteChangesChecker` **conta un cambio**,
+      ma solo come conseguenza di un dettaglio implementativo:
+      `state.occupancy` è una `list` e `_site_sequence` la scorre in ordine
+      d'inserimento, quindi il conteggio dipende dall'ordine. È un **artefatto,
+      non una semantica**, e va deciso in `domain/analysis` prima di poter
+      essere tradotto — tradurre un artefatto sarebbe peggio che lasciare lo
+      scarto. Il builder CP-SAT lo dichiara nel proprio docstring. Trovato
+      nella review del Task 9 del piano `modello-hard-completo`. ⚠ Non tocca il
+      Fermi, dove le aule non sono mai state inserite (voce qui sopra).
 
 ## Scope di v1 — deciso il 2026-07-26
 
