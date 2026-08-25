@@ -52,9 +52,11 @@ def test_i_builder_tradotti_finora():
     Task 11 (MAX_HOURS_DAY, MAX_HOURS_HALF_DAY sulla base comune
     `_Bucketed`, e FORBIDDEN_SEQUENCE), WEEKLY_ORDER del Task 12, primo
     della famiglia d'ordine, IMPOSED_SUCCESSION del Task 13, secondo della
-    stessa famiglia, e HALF_DAY_GAP del Task 14, terzo — cosi' una
-    registrazione dimenticata o una di troppo si vede subito, invece di
-    dipendere dalla memoria di chi legge."""
+    stessa famiglia, HALF_DAY_GAP del Task 14, terzo, e i quattro `PARTS_*`
+    del Task 15b (l'ordine fra ore di parte e ore a classe intera, sullo
+    scheletro comune `_PartsOrderBuilder`) — cosi' una registrazione
+    dimenticata o una di troppo si vede subito, invece di dipendere dalla
+    memoria di chi legge."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
     assert set(BUILDERS) == {
@@ -79,4 +81,8 @@ def test_i_builder_tradotti_finora():
         SubjectConstraint.Type.WEEKLY_ORDER,
         SubjectConstraint.Type.IMPOSED_SUCCESSION,
         SubjectConstraint.Type.HALF_DAY_GAP,
+        SubjectConstraint.Type.PARTS_BEFORE_CLASS,
+        SubjectConstraint.Type.PARTS_AFTER_CLASS,
+        SubjectConstraint.Type.PARTS_BEFORE_OR_AFTER_CLASS_H,
+        SubjectConstraint.Type.PARTS_BEFORE_OR_AFTER_CLASS_AB,
     }

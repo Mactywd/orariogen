@@ -1712,3 +1712,277 @@ def _derive_site_transition(w):
     settings.site_transition_slots = needed
     settings.save()
     return 0 if needed == 0 else 1
+
+
+# --- i quattro PARTS_* (Task 15b) ---------------------------------------
+
+_PARTE, _CLASSE = 1, 0
+
+
+def _etichetta_parts(w, aid):
+    """`_is_class_level` del checker (`subject_constraints.py`): l'attivita'
+    e' «a classe intera» se **qualcuna** delle sue chiavi di occupazione e'
+    una Resource di tipo CLASS. Nel banco le sole Resource di tipo CLASS sono
+    le due classi di `_school`, quindi il test si riduce all'intersezione con
+    i loro pk.
+
+    La codifica numerica (`_CLASSE = 0`, `_PARTE = 1`) riproduce
+    l'ordinamento del checker, che ordina tuple `(fascia, etichetta, id)` con
+    la stringa `"class"` prima di `"part"`: a parita' di fascia la classe
+    viene prima."""
+    classi_pk = {k.pk for k in w.env["classes"]}
+    return _CLASSE if (w.tokens[aid] & classi_pk) else _PARTE
+
+
+def _secchi_parts(w, aids, rep, kind):
+    """secchio → [(fascia, etichetta)] delle occorrenze **piazzate** attive
+    nella firma `rep`. `kind` e' `"day"` per PARTS_BEFORE_CLASS,
+    PARTS_AFTER_CLASS e PARTS_BEFORE_OR_AFTER_CLASS_AB, `"half"` per
+    PARTS_BEFORE_OR_AFTER_CLASS_H — ⚠ e' l'unica differenza fra i due
+    omogenei (`PartsHomogeneousHalfChecker` sovrascrive `bucket()`)."""
+    grid = w.env["grid"]
+    secchi = defaultdict(list)
+    for aid in aids:
+        if rep not in w.weeks_of[aid]:
+            continue
+        day, slot = w.placement[aid]
+        bucket = (day if kind == "day"
+                  else day * 2 + (slot >= grid.morning_end_slot))
+        secchi[bucket].append((slot, _etichetta_parts(w, aid)))
+    return secchi
+
+
+def _parts_viola(tipo, voci):
+    """Mirror di `_PartsOrder.violations` su un solo secchio, **scritto per
+    conto proprio** e non importato da
+    `domain/solver/builders/subject_parts.py`: un derivatore che chiedesse al
+    builder «e' violato?» non potrebbe piu' accorgersi di un builder che
+    sbaglia la semantica — direbbe di si' e di no esattamente quando lo dice
+    lui."""
+    voci = sorted(voci)
+    parti = [s for s, lab in voci if lab == _PARTE]
+    classi = [s for s, lab in voci if lab == _CLASSE]
+    if not parti or not classi:
+        return False          # il checker salta i secchi senza entrambe
+    if tipo == ST.PARTS_BEFORE_CLASS:
+        return max(parti) > min(classi)
+    if tipo == ST.PARTS_AFTER_CLASS:
+        return min(parti) < max(classi)
+    etichette = [lab for _, lab in voci]
+    return sum(x != y for x, y in zip(etichette, etichette[1:])) > 1
+
+
+def _larghezza_secchio(w, kind, bucket):
+    """Quante fasce d'inizio distinte entrano in quel secchio. Serve alla
+    guardia di violabilita' dei due **omogenei**: due sole occorrenze non
+    possono mai avere piu' di una transizione, quindi un secchio che non
+    regge tre occorrenze rende la riga inviolabile per aritmetica.
+
+    Due occorrenze non possono condividere la fascia dentro un'unita': una
+    lezione a classe intera occupa la classe **e tutte le sue parti**, e due
+    lezioni a classe intera occupano la classe — quindi confliggono
+    sull'occupazione. Il numero di occorrenze in un secchio e' percio'
+    limitato dal numero di fasce del secchio."""
+    grid = w.env["grid"]
+    if kind == "day":
+        return grid.slots_per_day
+    return (grid.morning_end_slot if bucket % 2 == 0
+            else grid.slots_per_day - grid.morning_end_slot)
+
+
+def _unita_parts(w):
+    """Le unita' su cui provare a derivare una riga, con la loro espansione
+    in chiavi di occupazione: `(kwargs per SubjectConstraint, chiavi)`.
+
+    Due forme, non una. Sulla **classe** l'espansione e' `_chiavi_unita`
+    (la classe piu' tutte le sue parti, come `_unit_keys` del checker), e
+    la riga vede entrambe le parti insieme. Sulla **parte** l'espansione e'
+    la sola parte (stessa lettura di `_unit_keys` per `class_part`): la riga
+    vede l'attivita' di quella parte piu' tutte le attivita' a classe intera,
+    che occupano ogni parte della classe e quindi entrano nell'unita'.
+
+    La seconda forma non e' un di piu' cosmetico. Una riga sulla classe si
+    scarta appena **una** delle due parti smentisce l'ordine in un qualunque
+    secchio; la riga sulla singola parte sopravvive lo stesso, e il potere
+    vincolante misurato ne dipende (i numeri nel report). In piu' e' l'unica
+    forma che porta il ramo `class_part` di `_unit_keys` dentro il banco."""
+    unita = [({"school_class": klass}, _chiavi_unita(w, klass))
+             for klass in w.env["classes"]]
+    unita += [({"class_part": part}, frozenset({part.pk}))
+              for part in w.env["parts"]]
+    return unita
+
+
+def _riga_parts_ammissibile(w, tipo, kind, chiavi, subject_pk):
+    """La riga `(unita', materia)` si puo' creare su questo testimone?
+
+    Due condizioni, entrambe **per firma di settimana**, perche' e' cosi' che
+    il checker guarda l'orario (`check_schedule` costruisce uno
+    `ScheduleState` per firma):
+
+    - il testimone la soddisfa in **ogni** firma e in ogni secchio (basta un
+      secchio violato a scartarla: sarebbe un fallimento al passo 1 di
+      `run_family`, e la colpa sarebbe del derivatore, non del builder);
+    - e' **violabile**: almeno un secchio, in almeno una firma, con
+      entrambe le etichette. Per i due omogenei serve anche che tre
+      occorrenze ci stiano davvero (tre attivita' co-attive e un secchio
+      largo almeno tre fasce): «piu' di una transizione» su due occorrenze e'
+      aritmeticamente impossibile."""
+    aids = [aid for aid in w.placement
+            if w.tokens[aid] & chiavi
+            and w.act(aid).subject_id == subject_pk]
+    if not aids:
+        return False
+    omogeneo = tipo in (ST.PARTS_BEFORE_OR_AFTER_CLASS_H,
+                        ST.PARTS_BEFORE_OR_AFTER_CLASS_AB)
+    violabile = False
+    for rep, _ in w.signatures:
+        attive = sum(1 for aid in aids if rep in w.weeks_of[aid])
+        for bucket, voci in _secchi_parts(w, aids, rep, kind).items():
+            if len({lab for _, lab in voci}) < 2:
+                continue
+            if _parts_viola(tipo, voci):
+                return False
+            if not omogeneo or (attive >= 3
+                                and _larghezza_secchio(w, kind, bucket) >= 3):
+                violabile = True
+    return violabile
+
+
+def _sintonizza_parti(w, tipo, kind):
+    """Formulazione **«densa»** (Ruling 34, come `_derive_site_transition`):
+    il derivatore **costruisce** lo scenario invece di limitarsi a osservarlo.
+
+    Osservando soltanto, questa famiglia e' quasi sempre vacua e non per
+    colpa del derivatore: `_make_activities` crea **una** attivita' per
+    parte e le pesca la materia a caso fra tre, quindi la probabilita' che
+    l'attivita' di parte e una lezione a classe intera della **stessa**
+    materia finiscano nello stesso secchio del testimone e' bassa. Misurato
+    prima di questa correzione: 15 dei 20 casi del banco (4 famiglie x 5
+    seed) saltavano per derivazione vacua.
+
+    La riparazione e' minima e sta tutta dentro il derivatore: si prova a
+    riassegnare la **materia** dell'attivita' di ogni parte, e si tiene la
+    prima assegnazione che rende ammissibile la riga sull'unita' di quella
+    parte. Non si tocca `_make_activities` (cambierebbe il testimone di tutte
+    le altre famiglie a parita' di seed), non si sposta nessun piazzamento e
+    non cambia nessuna chiave di occupazione: la materia non entra ne' nella
+    griglia ne' nell'occupazione, quindi il testimone resta valido esattamente
+    com'era. Se nessuna materia funziona, si rimette quella originale.
+
+    Il monte ore del `Service` segue la materia, cosi' la fixture non
+    accumula uno scarto di copertura in piu' di quello gia' dichiarato in
+    testa a questo modulo (Ruling 102)."""
+    classi_pk = {k.pk for k in w.env["classes"]}
+    for part in w.env["parts"]:
+        aids = [aid for aid in w.placement
+                if part.pk in w.tokens[aid] and not (w.tokens[aid] & classi_pk)]
+        if not aids:
+            continue
+        act = w.act(aids[0])
+        originale = act.subject_id
+        chiavi = frozenset({part.pk})
+        piano = part.effective_study_plan
+        for subject in w.env["subjects"]:
+            _sposta_servizio(piano, act.subject_id, subject.pk,
+                             act.duration_minutes)
+            act.subject = subject
+            act.save()
+            if _riga_parts_ammissibile(w, tipo, kind, chiavi, subject.pk):
+                break
+        else:
+            _sposta_servizio(piano, act.subject_id, originale,
+                             act.duration_minutes)
+            act.subject_id = originale
+            act.save()
+
+
+def _sposta_servizio(plan, da_subject, a_subject, minuti):
+    if da_subject == a_subject:
+        return
+    vecchio = Service.objects.filter(study_plan=plan, subject_id=da_subject).first()
+    if vecchio is not None:
+        vecchio.class_minutes = max(0, vecchio.class_minutes - minuti)
+        vecchio.save()
+    nuovo, _ = Service.objects.get_or_create(
+        study_plan=plan, subject_id=a_subject, defaults={"class_minutes": 0})
+    nuovo.class_minutes += minuti
+    nuovo.save()
+
+
+def _derive_parts(w, tipo, kind):
+    """Il derivatore comune ai quattro `PARTS_*`.
+
+    ⚠ **Il derivatore del piano non restituisce niente**: con `None`,
+    `run_family` fa `if not potere: pytest.skip(...)` e tutte e quattro le
+    famiglie salterebbero su **ogni** seed — venti test verdi che non
+    provano nulla, la forma piu' pura del successo travestito che la
+    convenzione sul potere vincolante esiste per impedire. Riscritto:
+
+    - filtro sull'unita' con `_chiavi_unita(w, klass)`, non su `klass.pk`:
+      le attivita' legate alla **sola parte** sono meta' del vincolo, e col
+      filtro sul solo pk della classe sparirebbero — un derivatore che non
+      le vede non vede mai entrambe le etichette e resta vacuo per sempre.
+      Le unita' provate sono due (`_unita_parts`): la classe e la singola
+      parte;
+    - **per firma di settimana**: un secchio si valuta con le sole attivita'
+      attive in quella firma, perche' e' cosi' che il checker lo vede
+      (`check_schedule` costruisce uno `ScheduleState` per firma). Una riga
+      si crea solo se il testimone la soddisfa in **ogni** firma;
+    - **guardia di violabilita'**: serve almeno un secchio, in almeno una
+      firma, con **entrambe** le etichette. Senza, il checker salterebbe
+      ogni secchio e la riga sarebbe inviolabile per costruzione — una riga
+      creata che nessun piazzamento puo' violare, contata dal banco come un
+      successo. Per i due **omogenei** la condizione non basta: «piu' di una
+      transizione» chiede almeno **tre** occorrenze nello stesso secchio,
+      quindi servono anche tre attivita' co-attive in quella firma e un
+      secchio largo almeno tre fasce (`_larghezza_secchio`). Trovata
+      misurando: senza, al seed 2 la famiglia `_H` creava due righe che
+      nessun piazzamento poteva violare — la meta' giornata del banco puo'
+      essere larga due fasce;
+    - **accumula** su tutte le unita' e tutte le materie, e restituisce il
+      conteggio.
+
+    Le due condizioni stanno in `_riga_parts_ammissibile`; la formulazione
+    «densa» che rende il banco non vacuo sta in `_sintonizza_parti`.
+
+    Nel banco solo la prima classe ha parti, quindi le righe sulla seconda
+    non superano mai la guardia di violabilita': e' voluto, ed e' anche il
+    caso di controllo (una classe monolitica non puo' violare un vincolo
+    d'ordine fra parti e classe intera).
+
+    I numeri misurati — righe create, testimoni violati, seed mordenti col
+    builder spento — stanno nel report del task, non qui (Ruling 50)."""
+    _sintonizza_parti(w, tipo, kind)
+    creata = 0
+    for unita, chiavi in _unita_parts(w):
+        for subject in w.env["subjects"]:
+            if not _riga_parts_ammissibile(w, tipo, kind, chiavi, subject.pk):
+                continue
+            SubjectConstraint.objects.create(
+                subject_a=subject, subject_b=subject, type=tipo, **unita)
+            creata += 1
+    return creata
+
+
+@deriver(ST.PARTS_BEFORE_CLASS, {"subject_parts_order"})
+def _derive_parts_before(w):
+    return _derive_parts(w, ST.PARTS_BEFORE_CLASS, "day")
+
+
+@deriver(ST.PARTS_AFTER_CLASS, {"subject_parts_order"})
+def _derive_parts_after(w):
+    return _derive_parts(w, ST.PARTS_AFTER_CLASS, "day")
+
+
+@deriver(ST.PARTS_BEFORE_OR_AFTER_CLASS_H, {"subject_parts_order"})
+def _derive_parts_homogeneous_half(w):
+    """⚠ `_H` = **mezza giornata**: `PartsHomogeneousHalfChecker` sovrascrive
+    `bucket()` con `_half`, mentre `_PartsOrder.bucket` torna `pl.day`."""
+    return _derive_parts(w, ST.PARTS_BEFORE_OR_AFTER_CLASS_H, "half")
+
+
+@deriver(ST.PARTS_BEFORE_OR_AFTER_CLASS_AB, {"subject_parts_order"})
+def _derive_parts_homogeneous_day(w):
+    """⚠ `_AB` = **giornata**: eredita il `bucket()` della base."""
+    return _derive_parts(w, ST.PARTS_BEFORE_OR_AFTER_CLASS_AB, "day")
