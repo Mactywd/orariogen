@@ -61,8 +61,9 @@ requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza
-  solver/               lo spike CP-SAT: registro dei builder, contesto, modello, cinque vincoli
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder, contesto, il modello, i pre-filtri, l'occupazione, il D.T.B., l'incompatibilità di materia, l'oracolo)
+  solver/               il modello CP-SAT: vocabolario di variabili derivate,
+                        residuo di ADR-018, ventisei builder su ventisette
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -131,17 +132,25 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > dominio è approvato in [docs/modello-dominio.md](docs/modello-dominio.md). Lo
 > schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
 > predicati e l'analisi di capienza **sono anch'essi implementati**
-> (`domain/analysis/`, 116 test verdi a suite completa, misurati con
-> `venv/bin/pytest`); lo **spike CP-SAT è implementato** (`domain/solver/`):
-> cinque vincoli su ventisette, scelti per attraversare i tre pattern di
-> traduzione, e l'oracolo tiene — una soluzione del solver riletta da
-> `check_schedule` non produce alcun finding `HARD` nelle famiglie modellate.
-> Il passo successivo è la spec del **modello completo**: i ventidue vincoli
-> restanti, gli alleggerimenti a quota, l'ottimizzazione lessicografica,
-> l'assegnazione delle aule e il violatore di Hall.
-> Restano due punti aperti, entrambi marginali e non bloccanti:
-> le aule mai inserite nella base del Fermi, e l'estensione della cascata di
-> default.
+> (`domain/analysis/`); e il **modello CP-SAT hard è completo**
+> (`domain/solver/`): **ventisei builder su ventisette checker**, e il
+> ventisettesimo (`structural:coverage`) non ne ha uno per costruzione —
+> `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. **424 test
+> verdi**, 15 skip tutti misurati e attribuiti (`venv/bin/pytest`).
+>
+> ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
+> righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
+> `None`, quindi ventuno builder su ventisei non postano nulla — e infatti dà
+> **gli stessi 8140 variabili e 1082 constraint dello spike a cinque vincoli**,
+> `OPTIMAL` in ~0,56 s. La misura del modello è
+> `test_modello_completo`, che attiva tutte le famiglie **insieme** sullo stesso
+> testimone: 22–23 famiglie con righe su 26, 48–73 righe, `OPTIMAL` su tutti e
+> cinque i seed, oracolo pulito.
+>
+> Restano i **tre pezzi dichiarati fuori**: l'assegnazione delle aule, gli
+> alleggerimenti a quota con l'ottimizzazione lessicografica, e il violatore di
+> Hall (che non usa il solver: è un conteggio di capienza). Più i punti aperti
+> elencati sotto.
 
 ### Prototipo solver — parcheggiato
 
@@ -159,11 +168,11 @@ risposta a un problema più facile.
 
 Questo script **resta parcheggiato ed è superato**: il codice vivo del solver
 è `domain/solver/` (vedi la nota di stato sopra), che ne riprende l'idea sullo
-schema del dominio approvato invece che sui dati grezzi. Ciò che manca ancora
-non è "il modello CP-SAT" in generale — è tradotto, ma **solo** per cinque
-vincoli su ventisette. Manca il **modello completo**: i ventidue vincoli
-restanti, gli alleggerimenti a quota, l'ottimizzazione lessicografica,
-l'assegnazione delle aule e il violatore di Hall. Vedi
+schema del dominio approvato invece che sui dati grezzi. Il **modello hard è
+ora completo** — ventisei builder su ventisette checker. Ciò che manca non è
+più la traduzione dei vincoli, ma i tre pezzi dichiarati fuori dal piano: gli
+alleggerimenti a quota con l'ottimizzazione lessicografica, l'assegnazione
+delle aule e il violatore di Hall. Vedi
 [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md).
 
 ### Aperto / da verificare
@@ -369,6 +378,135 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-25** — **Il modello hard completo: ventisei builder su
+  ventisette.** Diciassette task sul branch `modello-hard-completo`, ciascuno
+  scritto da un sottoagente su un brief e verificato per mutazione. Il registro
+  dei builder è chiuso: la ventisettesima chiave (`structural:coverage`) non ha
+  un builder **per costruzione** — è `PLACEMENT_INDEPENDENT`, confronta attività
+  e servizi anagrafici e non guarda mai i piazzamenti, e il solver non crea né
+  distrugge attività. L'assenza è **dichiarata da un test**
+  (`tests/test_solver_registry_completo.py`), così che chi volesse aggiungerla
+  debba prima cancellare il test e leggerne il perché. **424 test verdi**, 15
+  skip tutti misurati e attribuiti.
+
+  **Il vocabolario, e perché esiste.** I checker ragionano su quantità che i
+  piazzamenti non contengono: «il docente lavora quel giorno», «quella mezza
+  giornata è occupata», «la posizione della prima occorrenza di questa
+  materia». Tradurle una per builder avrebbe prodotto ventisei definizioni
+  incoerenti della stessa cosa. `domain/solver/vocabulary.py` le costruisce una
+  volta sola — `occupied`, `day_active`, `half_active`, `pos` — memoizzate per
+  chiave, e ⚠ **parametriche sulla firma di settimana**, che è la dimensione su
+  cui questo progetto ha già sbagliato una volta.
+
+  **ADR-018 nelle sue forme, che non erano due.** La spec ne prevedeva due —
+  tetti (si clampa il residuo a zero) e minimi (nessun clamp, non sono mai
+  infattibili per colpa del passato). Ne sono servite **quattro**.
+  ⚠ I minimi **non** sono sempre innocui: su `ARRIVAL_DEPARTURE` e
+  `FREE_GUARANTEED` una congelata in una fascia proibita **consuma** la
+  quantità contata, e nessuna mossa sulle libere la recupera — corretto col
+  residuo *per forzatura* (`frozen_occupies`), mentre `MIN_DISTRIBUTION` regge
+  davvero, quindi l'asimmetria è reale e non generale.
+  ⚠ E il caso che nessuno aveva previsto: il **tetto inevadibile**. Il secchio
+  settimanale del peso didattico contiene *tutte* le celle candidate di ogni
+  attività dell'unità, quindi `AddExactlyOne` rende la somma dei letterali
+  liberi una **costante**: col residuo clampato a zero il vincolo diventa
+  `costante positiva ≤ 0`, falso comunque vada il piazzamento. Non «inagibile»:
+  **contraddittorio**. Il clamp, che altrove è il trattamento giusto, produce
+  qui esattamente ciò che ADR-018 vieta — misurato, `INFEASIBLE` con due
+  congelate e una libera. Il criterio che unifica i quattro casi è più preciso
+  di «tetto o minimo»: **`INFEASIBLE` che nasce dal vietare un peggioramento è
+  ammesso, `INFEASIBLE` che nasce dal pretendere una riparazione no.**
+
+  **Il generatore a testimone.** Il banco genera **prima** un orario valido a
+  caso, **poi** le righe di vincolo che quell'orario soddisfa, e solo allora
+  chiede al solver di ricostruirlo da zero. Rende impossibile un oracolo vacuo:
+  un builder che postasse `1 == 0` non trova il testimone, uno che non postasse
+  nulla lascia passare un orario che il checker boccia. Ogni derivatore
+  restituisce il proprio **potere vincolante** (quante righe ha creato), e zero
+  fa saltare il seed invece di spacciarlo per un successo.
+
+  **Le trappole trovate leggendo i checker invece di ricordarli.**
+  `FREE_GUARANTEED` conta le mezze giornate libere **solo sui giorni con
+  attività**, non su tutti; `MAX_PRESENCE` usa la **giornata intera** dove il
+  D.T.B. usa la mezza; `_PartsOrder` bucketizza per giorno, ma
+  `PartsHomogeneousHalfChecker` **sovrascrive** il bucket con la mezza giornata,
+  e invertire le due cose non fa fallire niente di ovvio; `ImposedSuccession`
+  non ha la guardia di vacuità che `WeeklyOrder` ha, quindi con B assente
+  **ogni** occorrenza di A è in violazione. Nessuna di queste era nel piano.
+
+  **I due conservativi previsti erano uno.** ⚠ `HALF_DAY_GAP` era il caso
+  vetrina della sovra-approssimazione deliberata: si è rivelato **esatto**. Le
+  due regole — coppie consecutive nel checker, tutte le coppie incrociate nel
+  builder — sono equivalenti (dimostrato, e verificato su 200 000 casi sintetici
+  con zero divergenze). Resta conservativo il solo `structural:site_transition`.
+  A consuntivo: **venticinque builder esatti su ventisei**.
+
+  **⚠ E la misura sul Fermi dice meno di quanto sembri.** `OPTIMAL` in ~0,56 s,
+  284 attività, 8140 variabili, 1082 constraint — **gli stessi numeri, byte per
+  byte, dello spike a cinque vincoli del 2026-08-09**. La ragione è che il
+  dataset Fermi ha **zero** righe `ResourceTimeConstraint`, **zero**
+  `SubjectConstraint` e i quattro tetti di peso a `None`: delle ventisei
+  famiglie ne esercita cinque, e ventuno builder non postano nulla. «OPTIMAL sul
+  Fermi col modello completo» è una frase vera e priva di contenuto, ed è ora
+  scritta così nel test, con due assert che la tengono ferma.
+  La misura vera è `test_modello_completo`, aggiunto qui: tutte le famiglie
+  attive **insieme** sullo stesso testimone — 22–23 famiglie con righe su 26,
+  48–73 righe, `OPTIMAL` su tutti e cinque i seed, oracolo pulito. Non esisteva:
+  il banco provava ventisei modelli da una famiglia ciascuno, e due traduzioni
+  corrette separatamente possono contraddirsi una volta postate insieme.
+
+  **Comporre ha trovato una precedenza che nessuno aveva visto.** ⚠ I derivatori
+  **non sono componibili in ordine qualunque**: due sono in formulazione densa e
+  non osservano il testimone, lo **riparano**. `_derive_site_transition`
+  riassegna le sedi — che sono ciò che `max_site_changes` conta;
+  `_sintonizza_parti` riassegna la materia — che è ciò su cui ogni riga
+  `SubjectConstraint` è ancorata. In ordine alfabetico la composizione risponde
+  `INFEASIBLE` su 2 seed su 3. Entrambe le docstring dichiaravano di non
+  disturbare nessuno: vero per il testimone *in sé*, falso per le righe già
+  derivate da altri. Corrette, e la precedenza è ora esplicita.
+
+  **L'oracolo differenziale era rimasto alle cinque famiglie dello spike** per
+  dieci task: `CODICI` non era mai stato esteso, quindi copriva un ventesimo di
+  ciò che sorvegliava di nome. Ora copre le ventisei, con una guardia che gli
+  impedisce di reinvecchiare — una causale nuova deve finire in `CODICI` oppure
+  in `FUORI`, per decisione esplicita.
+
+  **Il passo «risolvi e guarda» è un rilevatore debole, misurato.** Sulle quattro
+  famiglie `PARTS_*` le righe derivate sono violabili **118 volte su 120** —
+  forzando la violazione: `INFEASIBLE` col builder acceso, `FEASIBLE` con quello
+  spento — eppure il banco, che risolve e guarda, coglie un builder rotto **1
+  volta su 11**. CP-SAT non cerca la soluzione cattiva e quasi mai la trova per
+  caso. Da qui la regola della casa: **il test che dimostra che un vincolo morde
+  forza la violazione e attende `INFEASIBLE`**, mai «risolvi e controlla dove è
+  finita». La sonda esatta di violabilità è adottata in questa forma, e
+  **non** come criterio del banco: farne il criterio richiederebbe di
+  reimplementare in CP-SAT la condizione di violazione di tutte e ventisei le
+  famiglie, dentro il banco che le verifica.
+
+  **Il pattern, contato.** «Questa semplificazione è conservativa» era già stata
+  asserita e falsificata tre volte prima di questo piano. Il piano l'ha ripetuta
+  (`HALF_DAY_GAP`), e ne ha aggiunte altre: derivatori senza `return` (**tre
+  volte** — avrebbero reso una famiglia intera verde per non aver fatto nulla),
+  docstring che dichiarano di non disturbare nessuno, `residual_cap` dichiarato
+  sufficiente per ogni tetto. Sempre la stessa forma: **il documento dichiara
+  vera una proprietà che si rivela falsa solo controllandola contro il checker o
+  contro i dati, mai a colpo d'occhio sul documento.** Le due contromisure che
+  hanno funzionato sono misurare il derivatore del piano **prima** di scrivere
+  il builder, e la mutazione — spegnere il builder e contare i rossi, perché un
+  test che non diventa rosso quando il codice che afferma sparisce non sta
+  affermando niente.
+
+  **Debiti dichiarati**, tutti in «Ancora aperto» o nella §9 della spec: il
+  banco **non congela mai nulla**, quindi la copertura di ADR-018 poggia
+  interamente sui test scritti a mano; `coverage_mismatch` sul testimone, da
+  riparare nella fixture prima di qualunque oracolo differenziale a tutto campo;
+  i due tie-break di `domain/analysis` che sono artefatti dell'ordine
+  d'inserimento; e ⚠ **una metà del tetto inevadibile che nessun builder può
+  risolvere** — la `Finding.key` cresce comunque delle attività libere, quindi
+  per le famiglie indipendenti dal piazzamento l'oracolo differenziale andrà
+  formulato su una chiave più grossolana, o quelle famiglie andranno dove EDT le
+  mette davvero: nell'analisi di capienza, che si esegue *prima* del calcolo.
 
 - **2026-08-24** — **La review finale falsifica l'oracolo, e lo ripara.**
   L'oracolo dichiarato "tenuto" il 2026-08-09 aveva un limite non notato:

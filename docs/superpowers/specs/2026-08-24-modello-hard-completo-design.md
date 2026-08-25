@@ -445,3 +445,206 @@ l'oracolo e ciò che deve giudicare.
   capienza sopra `domain/analysis/capacity.py`.
 - **Un comando `manage.py solve`** — ha senso quando esistono gli
   alleggerimenti. Prima di quelli saprebbe dire soltanto `INFEASIBLE`.
+
+## 9. Esito — a consuntivo
+
+Scritto a lavoro finito, il 2026-08-25. Questa sezione **corregge** le
+sezioni precedenti dove l'implementazione le ha smentite: le previsioni
+restano scritte com'erano, ma qui si dice quali erano sbagliate.
+
+### 9.1 I numeri
+
+| | |
+|---|---|
+| checker nel registro | **27** |
+| builder | **26** — il ventisettesimo (`structural:coverage`) non ne ha uno, ed è dichiarato |
+| suite | **424 passed, 15 skipped** |
+| modello completo sul banco (5 seed) | 22–23 famiglie con righe su 26, 48–73 righe, **OPTIMAL** ovunque, oracolo pulito |
+| Fermi intero | 284 attività, 8140 variabili, 1082 constraint, **OPTIMAL in ~0,56 s** |
+
+I quindici skip sono tutti vacuità misurate e attribuite, non fallimenti
+mascherati.
+
+### 9.2 ⚠ Il Fermi non misura il modello completo — misura il dataset
+
+§5.6 dava per scontato che il Fermi fosse la prova del modello completo, e
+prevedeva perfino la diagnosi in caso di `INFEASIBLE`. È sbagliato, e la
+prova sta nei numeri: **8140 variabili e 1082 constraint sono esattamente
+quelli dello spike a cinque vincoli** del 2026-08-09, con lo stesso tempo.
+
+Il dataset Fermi ha **zero** righe `ResourceTimeConstraint`, **zero**
+`SubjectConstraint` e i quattro tetti di peso a `None`. Delle ventisei
+famiglie ne esercita cinque — griglia, indisponibilità (42 righe),
+occupazione, sedi, D.T.B. — e ventuno builder non postano nulla. «OPTIMAL sul
+Fermi col modello completo» è quindi una frase vera e priva di contenuto.
+
+La misura del modello sta invece in
+`tests/test_solver_witness.py::test_modello_completo`, aggiunto qui: tutte le
+famiglie attive **insieme** sullo stesso testimone. Non esisteva — `test_famiglia`
+prova ventisei modelli da una famiglia ciascuno, e due traduzioni corrette
+separatamente possono contraddirsi una volta postate insieme.
+
+Il Fermi resta per l'altra metà, la **scala**: 284 attività su una griglia
+stretta, contro le 14–32 del banco.
+
+### 9.3 ⚠ I derivatori non sono componibili in ordine qualunque
+
+Trovato componendoli. Due formulazioni **dense** (Ruling 34) non osservano il
+testimone, lo **riparano**, e la riparazione si vede dalle altre famiglie:
+
+- `_derive_site_transition` riassegna la **sede** a tutte le attività — e le
+  sedi sono ciò che `max_site_changes` conta;
+- `_sintonizza_parti` riassegna la **materia** dell'attività di ogni parte — e
+  la materia è ciò su cui ogni riga `SubjectConstraint` è ancorata.
+
+In ordine alfabetico la composizione risponde `INFEASIBLE` su 2 seed su 3.
+Entrambe le docstring dichiaravano di non disturbare nessuno: vero per il
+testimone *in sé* (griglia e occupazione non cambiano), falso per le **righe
+già derivate** da altri. Corrette. La precedenza è ora esplicita (`MUTANTI`):
+chi ripara va per primo.
+
+### 9.4 Esatto contro conservativo, a consuntivo
+
+Il bilancio di §4.5 — «diciannove esatti su ventuno, il conservativo serve due
+volte» — era una previsione, e va corretto in **entrambe** le direzioni.
+
+- ⚠ **`HALF_DAY_GAP` non è conservativo: è esatto.** §4.2 lo chiama «l'unico
+  dei dodici dove serve il conservativo», e il piano ne faceva il caso
+  vetrina. Le due regole — coppie consecutive (checker) e tutte le coppie
+  incrociate (builder) — sono **equivalenti**: se esiste una coppia incrociata
+  troppo corta, ne esiste una adiacente altrettanto corta. Dimostrato, e
+  verificato su 200 000 casi sintetici con zero divergenze.
+- ⚠ **`MAX_GAP_HOURS` (il D.T.B.) era conservativo nel verso sbagliato**, ed è
+  stato corretto il 2026-08-24 prima di questo piano: trattare tutte le
+  attività come co-attive **allarga** invece di stringere, perché
+  un'occupazione di un'altra firma riempie un buco che nelle settimane reali
+  resta scoperto. Ora posta un budget **per firma**.
+- Resta conservativo **`structural:site_transition`** (§4.3), per la ragione
+  già scritta lì.
+
+Il conto a consuntivo: **venticinque builder esatti su ventisei**, non
+diciannove su ventuno. Il permesso di essere conservativi, concesso in §1.2,
+è servito **una volta sola**.
+
+### 9.5 ⚠ ADR-018 ha più di due casi, e uno non è risolvibile
+
+§3.1 dichiara «due casi e non ventuno giudizi»: tetti (clamp) e minimi
+(nessun clamp). All'atto pratico i casi sono **quattro**, e la differenza non è
+cosmetica.
+
+1. **Tetto separabile** — `residual_cap`, come da §3.1. È il caso più comune.
+2. **Minimo garantito** — §3.1 lo dà per «mai infattibile per colpa del
+   passato». ⚠ **Vero solo a metà**: su `ARRIVAL_DEPARTURE` e
+   `FREE_GUARANTEED` una congelata in una fascia proibita **consuma** la
+   quantità contata, e nessuna mossa sulle libere la recupera. Corretto col
+   residuo *per forzatura* (`frozen_occupies`); `MIN_DISTRIBUTION` invece
+   regge davvero, quindi l'asimmetria è reale e non generale.
+3. **Clausola** — si posta se almeno un letterale è libero; tutta congelata è
+   un fatto, non una decisione. Come da §3.1. ⚠ Con una sola congelata la
+   clausola resta ed è un **divieto**, che ADR-018 concede anche quando
+   produce `INFEASIBLE`.
+4. **⚠ Tetto inevadibile** — non previsto da nessuna parte, e trovato al Task
+   16. Il secchio **settimanale** del peso didattico contiene *tutte* le celle
+   candidate di ogni attività dell'unità, quindi `AddExactlyOne` rende la
+   somma dei letterali liberi una **costante**: col residuo clampato a zero il
+   vincolo diventa `costante positiva ≤ 0`, falso comunque vada il
+   piazzamento. Non «inagibile»: **contraddittorio**. Il clamp, che altrove è
+   il trattamento corretto, qui produce esattamente ciò che ADR-018 vieta —
+   misurato, `INFEASIBLE` con due congelate e una libera.
+
+Il criterio che unifica i quattro casi è più preciso di «tetto o minimo»:
+
+> `INFEASIBLE` che nasce dal **vietare un peggioramento** è ammesso;
+> `INFEASIBLE` che nasce dal **pretendere una riparazione** non lo è.
+
+E dove ogni piazzamento è un peggioramento — il caso 4 — non c'è niente da
+vietare: si salta.
+
+**⚠ Una metà del caso 4 non è risolvibile da nessun builder**, e va detta.
+Anche saltando il vincolo, la soluzione porta comunque il finding
+`weight_week`, e la sua `Finding.key` non è quella di prima: `activities`
+cresce delle libere e `quantities["weight"]` cambia. Le libere vanno
+collocate, e ovunque vadano pesano. Quindi **l'oracolo differenziale a tutto
+campo va formulato su una chiave più grossolana** (causale + risorsa) per le
+famiglie indipendenti dal piazzamento, oppure quelle famiglie vanno dove EDT
+le mette davvero: nell'**analisi di capienza**, che si esegue *prima* del
+calcolo e non dentro.
+
+Lo stesso vale, in piccolo, per la Ruling 22: `quantities` dentro
+`Finding.key` rende «peggiorato» e «migliorato» entrambi finding *nuovi*.
+Con `CODICI` esteso a ventisei famiglie la questione è ora reale, non teorica.
+
+### 9.6 Il criterio di riuscita, e quale metà lo regge davvero
+
+`CODICI` in `tests/test_solver_oracle.py` era rimasto alle cinque famiglie
+dello spike per dieci task: l'oracolo differenziale del Fermi era cieco su
+ventuno famiglie su ventisei. Esteso qui, con una guardia che gli impedisce
+di reinvecchiare — una causale nuova deve finire in `CODICI` oppure in
+`FUORI`, per decisione esplicita.
+
+⚠ **E il passo 3 di `run_family` è un rilevatore debole**, misurato. Il passo
+dice: «qualunque soluzione il solver restituisca dev'essere pulita». Sulle
+quattro famiglie `PARTS_*` le righe derivate sono violabili **118 volte su
+120** — forzando la violazione, `INFEASIBLE` col builder acceso e `FEASIBLE`
+con quello spento — eppure il banco, che risolve e guarda, coglie un builder
+rotto **1 volta su 11**. Non sono le righe a essere vacue: è la forma. CP-SAT
+non cerca la soluzione cattiva, e quasi mai la trova per caso.
+
+Decisione sulla sonda esatta di violabilità (Rulings 65, 86, 104):
+**adottata come forma dei test scritti a mano, non come criterio del banco.**
+
+- Come **forma di test** è già la regola della casa (Ruling 85): chi dimostra
+  che un vincolo morde costruisce il modello, **forza** la violazione con
+  `model.Add(x[...] == 1)` e attende `INFEASIBLE`. Costo per i vincoli
+  d'ordine: cinque righe, perché la condizione di violazione *è* una clausola
+  sulle variabili che il builder già costruisce.
+- Come **criterio di `potere`** resta esclusa, e l'obiezione della Ruling 65
+  regge: richiederebbe di riesprimere in CP-SAT la condizione di violazione di
+  ogni famiglia, cioè una seconda implementazione di ventisei vincoli dentro
+  il banco che li verifica. E i numeri dicono che non servirebbe: le righe
+  hanno già potere: è il passo 3 a non saperlo sfruttare.
+
+Il banco resta prezioso per i suoi **altri due** passi — il passo 1 sorveglia
+il derivatore, il passo 2 (`INFEASIBLE` con un testimone disponibile)
+sorveglia i builder troppo stretti, ed è quello che ha trovato più difetti.
+
+### 9.7 Debiti dichiarati
+
+- **Il banco non congela mai nulla** (Ruling 20). Ogni attività del testimone
+  è libera, quindi tutta la copertura di ADR-018 poggia sui test scritti a
+  mano. È il buco strutturale più grande che resta.
+- **`coverage_mismatch` sul testimone** (Ruling 102): i `Service` della
+  fixture sono per (piano, materia) mentre `student_units` attribuisce il
+  monte ore alle **parti**. Innocuo — `structural:coverage` non ha un builder
+  e non entra mai nel modello — ma un oracolo differenziale a tutto campo sul
+  banco lo incontrerebbe. Si ripara **nella fixture**.
+- **Il filtro di `_coppie_di_sede`** (Ruling 39, Minor 3): la docstring
+  dichiarava un'inefficacia che non ha — 8277 chiamate su 18308 filtrano
+  davvero, e con le sedi correlate alle classi taglia fino al −63%. Resta non
+  applicato alle fasce **intermedie**, dove sta il grosso delle variabili
+  sprecate a molte sedi.
+- **Due tie-break di `domain/analysis` sono artefatti dell'ordine
+  d'inserimento**, non semantiche: `MaxSiteChangesChecker` e `_placed_of`.
+  Vanno decisi lì prima di poter essere tradotti fedelmente. Entrambi in
+  «Ancora aperto» di `CLAUDE.md`.
+
+### 9.8 Il metodo, e cosa ha effettivamente trovato
+
+La frase «questa semplificazione è conservativa» era stata asserita tre volte
+e falsificata tre volte prima che questo piano cominciasse (§1.2). Il piano
+stesso l'ha ripetuta: `HALF_DAY_GAP` dichiarato conservativo ed esatto, il
+D.T.B. come soglia singola invece che budget, l'insieme di chiavi «sufficiente»
+di ADR-017. E ne ha aggiunte di nuove: derivatori senza `return` (tre volte),
+docstring che dichiarano di non disturbare nessuno, `residual_cap` dichiarato
+sufficiente per ogni tetto.
+
+Il pattern è sempre lo stesso: **il documento dichiara vera una proprietà che
+si rivela falsa solo controllandola contro il checker o contro i dati, mai a
+colpo d'occhio sul documento**. Le due contromisure che hanno funzionato:
+
+1. **misurare il derivatore del piano prima di scrivere il builder** — ha
+   intercettato quattro difetti fatali, ciascuno dei quali avrebbe reso una
+   famiglia intera verde per non aver fatto nulla;
+2. **la mutazione** — spegnere il builder e contare i rossi. Un test che non
+   diventa rosso quando il codice che afferma sparisce non sta affermando
+   niente.
