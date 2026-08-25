@@ -325,6 +325,28 @@ l'assegnazione delle aule e il violatore di Hall. Vedi
       la causa a monte resta nel tie-break di `domain/analysis`, non
       toccabile da questo giro: va decisa quando si generalizza la famiglia
       d'ordine ai Task 13-17.
+- [ ] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
+      piazzamento**, e il tetto **settimanale** del peso didattico è il primo
+      caso incontrato. `AddExactlyOne` obbliga a piazzare ogni attività, e il
+      secchio settimanale di un'unità-studente contiene *tutte* le sue celle
+      candidate: la somma dei letterali liberi è quindi una **costante**, e il
+      vincolo è vero sempre o falso sempre. Ne discendono due cose. La prima è
+      risolta: col residuo clampato a zero il vincolo diventava `costante
+      positiva <= 0`, cioè la pretesa che il passato venga riparato — il
+      modello rispondeva INFEASIBLE per colpa delle sole congelate (misurato:
+      due congelate da 2 punti, tetto 3, una libera). `DidacticWeightBuilder`
+      ora **non posta** il tetto settimanale quando a sforarlo sono le
+      congelate da sole, e continua a postarlo quando il colpevole è il totale
+      — due test tengono ferme le due metà. La seconda **non è risolvibile da
+      nessun builder**: la soluzione restituita porta comunque il finding
+      `weight_week`, e la sua `Finding.key` non è quella di prima, perché
+      `activities` cresce delle libere e `quantities["weight"]` cambia. Le
+      libere vanno collocate, e ovunque vadano pesano. Quindi **l'oracolo
+      differenziale a tutto campo, quando lo si scriverà, va formulato su una
+      chiave più grossolana** (causale + risorsa) per le famiglie
+      placement-invariant, oppure quelle famiglie vanno spostate dove EDT le
+      mette davvero: nell'**analisi di capienza**, che si esegue *prima* del
+      calcolo e non dentro. Trovato verificando il Task 16.
 
 ## Scope di v1 — deciso il 2026-07-26
 

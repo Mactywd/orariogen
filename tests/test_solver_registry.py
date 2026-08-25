@@ -54,9 +54,14 @@ def test_i_builder_tradotti_finora():
     della famiglia d'ordine, IMPOSED_SUCCESSION del Task 13, secondo della
     stessa famiglia, HALF_DAY_GAP del Task 14, terzo, e i quattro `PARTS_*`
     del Task 15b (l'ordine fra ore di parte e ore a classe intera, sullo
-    scheletro comune `_PartsOrderBuilder`) — cosi' una registrazione
-    dimenticata o una di troppo si vede subito, invece di dipendere dalla
-    memoria di chi legge."""
+    scheletro comune `_PartsOrderBuilder`) e `structural:didactic_weight` del
+    Task 16, l'ultimo — cosi' una registrazione dimenticata o una di troppo si
+    vede subito, invece di dipendere dalla memoria di chi legge.
+
+    Con il Task 16 il registro e' **completo**: ventisei chiavi su
+    ventisette, e la ventisettesima (`structural:coverage`) non ne ha una per
+    costruzione — e' `PLACEMENT_INDEPENDENT`, il solver non crea ne'
+    distrugge attivita'."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
     assert set(BUILDERS) == {
@@ -64,6 +69,7 @@ def test_i_builder_tradotti_finora():
         "structural:unavailability",
         "structural:occupation",
         "structural:site_transition",
+        "structural:didactic_weight",
         ResourceTimeConstraint.Type.MAX_GAP_HOURS,
         ResourceTimeConstraint.Type.MAX_HOURS,
         ResourceTimeConstraint.Type.MAX_HALF_DAYS,

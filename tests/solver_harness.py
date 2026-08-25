@@ -1986,3 +1986,129 @@ def _derive_parts_homogeneous_half(w):
 def _derive_parts_homogeneous_day(w):
     """⚠ `_AB` = **giornata**: eredita il `bucket()` della base."""
     return _derive_parts(w, ST.PARTS_BEFORE_OR_AFTER_CLASS_AB, "day")
+
+
+# --- il peso didattico (Task 16) ----------------------------------------
+
+def _unita_studente(w, aid):
+    """Le unita'-studente di un'attivita', con la regola del checker
+    (`domain/analysis/checkers/weight.py::_student_keys`): le parti presenti
+    nei token, o la classe se la classe non ha partizioni. Qui si legge dalla
+    fixture invece che da `state.kinds` perche' le parti e le classi del banco
+    sono note per costruzione — ma il criterio e' lo stesso, e in particolare
+    un'attivita' a **classe intera** della classe partizionata pesa sulle sue
+    **due parti**, non sulla classe."""
+    parti = {p.pk for p in w.env["parts"]} & w.tokens[aid]
+    if parti:
+        return sorted(parti)
+    return sorted({k.pk for k in w.env["classes"]} & w.tokens[aid])
+
+
+@deriver("structural:didactic_weight", {"weight_day", "weight_morning",
+                                        "weight_afternoon", "weight_week"})
+def _derive_weight(w):
+    """Accende i tetti d'istituto sui valori osservati nel testimone: senza
+    questo, il banco proverebbe un builder spento (in una base reale i quattro
+    tetti sono tutti a «nessuno»).
+
+    Tre scelte che il derivatore ingenuo sbaglia:
+
+    1. **Si somma sulle unita'-studente**, non su tutti i token. Sommare sui
+       docenti sarebbe una sovrastima, e una sovrastima qui non e' innocua:
+       produce un tetto piu' largo del massimo che un'unita'-studente possa
+       mai raggiungere, cioe' un tetto **inviolabile** — che il banco
+       conterebbe come successo.
+    2. **Il massimo e' fra le firme**, non sull'unione: il checker valuta uno
+       `ScheduleState` per firma, e il massimo sull'unione sarebbe piu' largo
+       e quindi piu' debole.
+    3. **Guardia di violabilita'**: un tetto che nessun piazzamento puo'
+       superare e' vacuo. Il limite superiore di un secchio e' `min(peso
+       totale dell'unita' in quella firma, peso massimo per fascia x fasce del
+       secchio)` — un'unita'-studente non puo' essere occupata da due
+       attivita' nella stessa fascia, quindi ogni fascia vale al massimo il
+       `didactic_weight` piu' alto fra le sue attivita'. ⚠ Per la **mezza
+       giornata** le fasce non sono la sua larghezza: il checker attribuisce
+       il peso alla meta' in cui l'attivita' **comincia**, quindi una che
+       comincia nell'ultima fascia del mattino pesa sul mattino occupando il
+       pomeriggio. Vedi il commento nel corpo. Un tetto pari o superiore a
+       quel limite non si accende.
+
+    ⚠ **Il tetto settimanale non e' derivabile da un testimone, e la ragione
+    e' strutturale**: `AddExactlyOne` obbliga a piazzare **tutte** le
+    attivita', quindi il peso settimanale di un'unita' e' lo stesso in ogni
+    soluzione — e' il totale delle sue attivita' attive in quella firma. Il
+    massimo osservato coincide col totale della peggiore unita', e nessun
+    piazzamento potra' mai superarlo: qualunque tetto settimanale soddisfatto
+    dal testimone e' soddisfatto da ogni soluzione. Lo stesso vale per il
+    tetto della classe, che e' un tetto settimanale. Le due semantiche sono
+    percio' coperte da test scritti a mano in `tests/test_solver_weight.py`,
+    in forma avversaria.
+
+    Restituisce quanti tetti ha davvero acceso: zero fa saltare il seed,
+    invece di spacciarlo per un successo travestito."""
+    grid = w.env["grid"]
+    # Pesi didattici diversi da 1: col default il peso coincide con la durata,
+    # e un builder che ignorasse `didactic_weight` passerebbe il banco.
+    for subject in w.env["subjects"]:
+        subject.didactic_weight = w.rng.randint(1, 3)
+        subject.save()
+    pesi_materia = {s.pk: s.didactic_weight for s in w.env["subjects"]}
+
+    def peso(aid):
+        act = w.act(aid)
+        return pesi_materia[act.subject_id] * act.duration_slots
+
+    larghezze = {"day": grid.slots_per_day,
+                 "morning": grid.morning_end_slot,
+                 "afternoon": grid.slots_per_day - grid.morning_end_slot}
+    massimi = {"day": 0, "morning": 0, "afternoon": 0}
+    limiti = {"day": 0, "morning": 0, "afternoon": 0}
+    for rep, _ in w.signatures:
+        per_day, per_half = defaultdict(int), defaultdict(int)
+        totale, max_peso, max_durata = (defaultdict(int), defaultdict(int),
+                                        defaultdict(int))
+        for aid, (day, slot) in w.placement.items():
+            if rep not in w.weeks_of[aid]:
+                continue
+            act = w.act(aid)
+            p = peso(aid)
+            meta = "afternoon" if slot >= grid.morning_end_slot else "morning"
+            for key in _unita_studente(w, aid):
+                per_day[(key, day)] += p
+                per_half[(key, day, meta)] += p
+                totale[key] += p
+                max_peso[key] = max(max_peso[key], pesi_materia[act.subject_id])
+                max_durata[key] = max(max_durata[key], act.duration_slots)
+        massimi["day"] = max(massimi["day"], max(per_day.values(), default=0))
+        for nome in ("morning", "afternoon"):
+            massimi[nome] = max(massimi[nome], max(
+                (v for (_k, _d, m), v in per_half.items() if m == nome),
+                default=0))
+        for key, tot in totale.items():
+            for nome, larghezza in larghezze.items():
+                # Fasce al massimo occupabili nel secchio da attivita' che vi
+                # **cominciano**. Per la giornata sono le sue fasce. Per la
+                # mezza giornata **non** lo sono: un'attivita' che comincia
+                # nell'ultima fascia del mattino pesa tutta sul mattino ma
+                # occupa anche il pomeriggio (il checker guarda `start_slot`),
+                # quindi la finestra va allargata di `durata - 1`. Senza questa
+                # correzione il limite non e' un maggiorante: misurato sul
+                # seed 9, mattino osservato 8 contro un «limite» di 6.
+                if larghezza == 0:
+                    continue
+                fasce = larghezza + (0 if nome == "day"
+                                     else max_durata[key] - 1)
+                limiti[nome] = max(limiti[nome],
+                                   min(tot, max_peso[key] * fasce))
+
+    settings, _ = InstituteSettings.objects.get_or_create(pk=1)
+    accesi = 0
+    for campo, secchio in (("max_weight_day", "day"),
+                           ("max_weight_morning", "morning"),
+                           ("max_weight_afternoon", "afternoon")):
+        valore = massimi[secchio]
+        if valore and valore < limiti[secchio]:
+            setattr(settings, campo, valore)
+            accesi += 1
+    settings.save()
+    return accesi
