@@ -928,6 +928,143 @@ def _derive_forbidden_sequence(w):
     return creata
 
 
+def _pos_bounds(w, aid):
+    """Il pos minimo e il pos massimo ammissibili per un'attivita', sullo
+    stesso dominio che GridBuilder.restrict costruirebbe:
+    `_collocazioni(w, aid)` per le fasce, il giorno festivo escluso quando
+    la settimana festiva e' fra quelle attive dell'attivita' (stessa lettura
+    di `_try_place`). Il dominio e' un prodotto cartesiano giorni x fasce —
+    nessuna delle due dipende dall'altra, quindi il minimo/massimo di
+    `pos = day * width + slot` si ottiene dai minimi/massimi separati senza
+    enumerare le celle — **finche' nessun pre-filtro taglia per coppia**
+    `(giorno, fascia)`: qui vale perche' i due soli pre-filtri che tagliano
+    celle si decompongono (`GridBuilder` taglia per giorno i festivi e per
+    fascia durata/intervalli, separatamente), ma `UnavailabilityBuilder.
+    restrict` taglia per coppia. Se questa famiglia acquistasse
+    indisponibilita', la decomposizione smetterebbe di essere un invariante
+    — resterebbe pero' un rilassamento (min/max su un sovrainsieme sono
+    sempre `<=`/`>=` quelli veri), cioe' ancora dalla parte generosa.
+
+    Non enumera nulla: se l'attivita' e' stata piazzata dal testimone, il
+    suo dominio non e' vuoto (`_try_place` pesca proprio da questo
+    prodotto), quindi `giorni` e `fasce` sono garantiti non vuoti."""
+    grid = w.env["grid"]
+    width = grid.slots_per_day
+    holiday_week, holiday_day = w.env["holiday"]
+    vieta_festivo = holiday_week in w.weeks_of[aid]
+    giorni = [d for d in range(grid.days_per_cycle)
+              if not (vieta_festivo and d == holiday_day)]
+    fasce = _collocazioni(w, aid)
+    return (min(giorni) * width + min(fasce), max(giorni) * width + max(fasce))
+
+
+@deriver(ST.WEEKLY_ORDER, {"subject_weekly_order"})
+def _derive_weekly_order(w):
+    """Per ogni classe, per ogni coppia **ordinata** di materie distinte (A,
+    B) presenti nel testimone: la riga si crea solo se supera due controlli,
+    entrambi per firma di settimana.
+
+    ⚠ **Il derivatore del piano e' rotto, misurato**: calcola la prima
+    occorrenza sull'**unione** delle settimane, mentre il checker valuta uno
+    ScheduleState **per firma** — il minimo su un sottoinsieme e' sempre
+    `>=` il minimo sull'unione, quindi la relazione `first_a <= first_b` puo'
+    ribaltarsi dentro una singola firma pur valendo sull'unione. Misurato su
+    60 seed prima della correzione: 60/60 righe=1 (mai vacuo), ma 19/60 il
+    testimone stesso viola la riga appena creata — un fallimento duro al
+    passo 1 di `run_family` — e il seed 1 e' fra questi. Nota di contrasto:
+    per SAME_DAY/SAME_HALF_DAY/TWO_DAYS derivare sull'unione e' corretto,
+    perche' sono vincoli di «non accade mai» e un sottoinsieme dei
+    piazzamenti puo' solo averne di meno — qui e' un minimo, il caso opposto.
+
+    1. **Il testimone deve soddisfarla, firma per firma.** Per ogni firma in
+       cui sia A sia B hanno attivita' attive nel testimone: se la prima
+       occorrenza *piazzata* di B precede quella di A, la coppia si scarta —
+       basta una sola firma a smentirla. Una firma dove una delle due materie
+       e' assente non dice nulla (il checker uscirebbe con `not a or not b`):
+       si passa oltre.
+    2. **Violabilita' geometrica**, in almeno una firma dove entrambe sono
+       presenti: il minimo, su B, della posizione ammissibile piu' presto
+       (`floor_b`, da `_pos_bounds`) deve essere minore del minimo, su A,
+       della posizione ammissibile piu' tardi (`ceil_a`) — cioe' deve essere
+       *possibile* che B arrivi prima di quanto A sia costretta ad
+       arrivare. E' necessaria, non sufficiente, per costruzione: ignora le
+       altre attivita' che occupano le fasce, le indisponibilita', le sedi.
+       Sbagliare generoso costa un caso di banco debole; sbagliare stretto
+       costa copertura persa in silenzio, che e' peggio — quindi si sbaglia
+       generoso.
+
+    ⚠ Anche cosi', un seed del banco (il 5) non morde nella forma «risolvi e
+    guarda la soluzione» — misurato, e la causa **non** e' che la guardia
+    geometrica avesse creato una riga vacua: rifatto il modello per ogni
+    riga del seed 5 col builder spento e forzata la violazione sulle stesse
+    variabili che il builder costruirebbe, tutte e quattro le righe
+    rispondono OPTIMAL, cioe' sono **davvero violabili**. Non mordono perche'
+    il banco (`run_family`) chiede solo «risolvi col builder acceso e guarda
+    se la soluzione restituita e' pulita», e CP-SAT restituisce da solo,
+    deterministicamente, una soluzione che le rispetta per conto proprio —
+    non perche' il vincolo non morda. La guardia geometrica resta comunque
+    generosa (vede solo la geometria della coppia, non il resto del modello,
+    stesso limite dichiarato per `_capienza_secchio`): quella proprieta' e'
+    vera, ma e' un'altra cosa, e non e' la causa del non-mordere del seed 5.
+
+    Accumula su tutte le classi e tutte le coppie ordinate, non si ferma
+    alla prima: restituisce il numero di righe create (il potere
+    vincolante)."""
+    # Precondizione taciuta, sullo stesso modello di _capienza_secchio:
+    # il filtro `klass.pk in w.tokens[aid]` (sotto) usa solo la chiave
+    # della classe, mentre il checker espande l'unita' a _unit_keys(row) =
+    # {classe, *parti} (subject_constraints.py). Con una ClassPart in gioco,
+    # un'attivita' legata alla sola parte ha tokens senza klass.pk: il
+    # derivatore la perde, il checker no. Su A la perdita allarga la
+    # guardia (innocuo); su B la stringe, e puo' scartare righe violabili —
+    # esattamente il modo di sbagliare che questa funzione dichiara di
+    # evitare. Asserita invece che sperata: se il testimone acquista
+    # partizioni, questa guardia smette di essere quella descritta sopra e
+    # comincia a scartare righe violabili senza che si veda dai verdi.
+    assert not ClassPart.objects.exists(), (
+        "_derive_weekly_order filtra su klass.pk: con le parti, le "
+        "occorrenze legate alla sola parte sfuggono al derivatore e non "
+        "al checker")
+    grid = w.env["grid"]
+    width = grid.slots_per_day
+    creata = 0
+    for klass in w.env["classes"]:
+        per_materia = defaultdict(list)
+        for aid in w.placement:
+            if klass.pk in w.tokens[aid]:
+                per_materia[w.act(aid).subject_id].append(aid)
+        materie = sorted(per_materia)
+        for a_id in materie:
+            for b_id in materie:
+                if a_id == b_id:
+                    continue
+                aa_tutte, bb_tutte = per_materia[a_id], per_materia[b_id]
+                scartata, violabile = False, False
+                for rep, _ in w.signatures:
+                    aa = [aid for aid in aa_tutte if rep in w.weeks_of[aid]]
+                    bb = [aid for aid in bb_tutte if rep in w.weeks_of[aid]]
+                    if not aa or not bb:
+                        continue
+                    prima_a = min(w.placement[aid][0] * width + w.placement[aid][1]
+                                 for aid in aa)
+                    prima_b = min(w.placement[bid][0] * width + w.placement[bid][1]
+                                 for bid in bb)
+                    if prima_b < prima_a:
+                        scartata = True
+                        break
+                    floor_b = min(_pos_bounds(w, bid)[0] for bid in bb)
+                    ceil_a = min(_pos_bounds(w, aid)[1] for aid in aa)
+                    if floor_b < ceil_a:
+                        violabile = True
+                if scartata or not violabile:
+                    continue
+                SubjectConstraint.objects.create(
+                    subject_a_id=a_id, subject_b_id=b_id,
+                    school_class=klass, type=ST.WEEKLY_ORDER)
+                creata += 1
+    return creata
+
+
 @deriver(RT.MIN_DISTRIBUTION, {"min_distribution"})
 def _derive_min_distribution(w):
     """Chiede i giorni effettivamente lavorati nella firma **peggiore**: e'

@@ -303,6 +303,28 @@ l'assegnazione delle aule e il violatore di Hall. Vedi
       scarto. Il builder CP-SAT lo dichiara nel proprio docstring. Trovato
       nella review del Task 9 del piano `modello-hard-completo`. ⚠ Non tocca il
       Fermi, dove le aule non sono mai state inserite (voce qui sopra).
+- [ ] ⚠ **Il tie-break di `_placed_of` è un artefatto dell'ordine
+      d'inserimento, non una semantica** — la stessa forma del problema qui
+      sopra su `MaxSiteChangesChecker`. `_placed_of` (in
+      `domain/analysis/checkers/subject_constraints.py`) ordina le occorrenze
+      piazzate per `(day, start_slot)` con `sorted` **stabile**: a parità di
+      collocazione, quale attività diventi `a[0]` dipende dall'ordine del
+      queryset `Activity`, non da niente di dichiarato nel modello. Per
+      `WEEKLY_ORDER`, `Finding.key` include l'**identità** delle due attività
+      argmin (non la loro posizione): due occorrenze della stessa materia su
+      parti diverse della stessa partizione (sdoppiamento) possono
+      condividere la stessa cella senza confliggere sull'occupazione, quindi
+      un pareggio esatto con la posizione della congelata può cambiare *chi*
+      è l'argmin — e quindi la chiave del finding — mentre il valore
+      aggregato resta invariato. Trovato nella review del Task 12: il builder
+      `WeeklyOrderBuilder` (`domain/solver/builders/subject_order.py`) vietava
+      solo il valore aggregato (`prima_a >= FA`), non l'identità, ed era
+      quindi possibile che il solver ammettesse un finding `HARD` *nuovo*
+      restando dentro ADR-018 solo in apparenza. **Corretto lì** stringendo il
+      ramo status-quo (divieto per attività, non sul minimo aggregato) — ma
+      la causa a monte resta nel tie-break di `domain/analysis`, non
+      toccabile da questo giro: va decisa quando si generalizza la famiglia
+      d'ordine ai Task 13-17.
 
 ## Scope di v1 — deciso il 2026-07-26
 
