@@ -526,19 +526,20 @@ Il conto a consuntivo: **venticinque builder esatti su ventisei**, non
 diciannove su ventuno. Il permesso di essere conservativi, concesso in §1.2,
 è servito **una volta sola**.
 
-### 9.5 ⚠ ADR-018 ha più di due casi, e uno non è risolvibile
+### 9.5 ⚠ ADR-018 ha cinque casi, non due, e uno non è risolvibile
 
 §3.1 dichiara «due casi e non ventuno giudizi»: tetti (clamp) e minimi
-(nessun clamp). All'atto pratico i casi sono **quattro**, e la differenza non è
-cosmetica.
+(nessun clamp). All'atto pratico i casi sono **cinque**, e la differenza non è
+cosmetica. ⚠ Il quinto è stato aggiunto il 2026-08-26 dalla review finale, che
+ha falsificato due affermazioni scritte qui — vedi il caso 5.
 
 1. **Tetto separabile** — `residual_cap`, come da §3.1. È il caso più comune.
-2. **Minimo garantito** — §3.1 lo dà per «mai infattibile per colpa del
-   passato». ⚠ **Vero solo a metà**: su `ARRIVAL_DEPARTURE` e
-   `FREE_GUARANTEED` una congelata in una fascia proibita **consuma** la
-   quantità contata, e nessuna mossa sulle libere la recupera. Corretto col
-   residuo *per forzatura* (`frozen_occupies`); `MIN_DISTRIBUTION` invece
-   regge davvero, quindi l'asimmetria è reale e non generale.
+2. **Minimo garantito separabile** — §3.1 lo dà per «mai infattibile per
+   colpa del passato». ⚠ **Falso**: su `ARRIVAL_DEPARTURE` una congelata in
+   una fascia proibita **consuma** la quantità contata, e nessuna mossa sulle
+   libere la recupera. Corretto col residuo *per forzatura*
+   (`frozen_occupies`, non `residual_cap`): i termini già persi non generano
+   letterali e la soglia scende a quanto resta raggiungibile.
 3. **Clausola** — si posta se almeno un letterale è libero; tutta congelata è
    un fatto, non una decisione. Come da §3.1. ⚠ Con una sola congelata la
    clausola resta ed è un **divieto**, che ADR-018 concede anche quando
@@ -552,7 +553,36 @@ cosmetica.
    il trattamento corretto, qui produce esattamente ciò che ADR-018 vieta —
    misurato, `INFEASIBLE` con due congelate e una libera.
 
-Il criterio che unifica i quattro casi è più preciso di «tetto o minimo»:
+5. **⚠ Minimo non separabile** — trovato dalla review finale, e la ragione
+   per cui questa sezione è stata riscritta il 2026-08-26. `MIN_DISTRIBUTION`
+   e `FREE_GUARANTEED` contano una quantità che **non è una somma di
+   contributi per attività** — giorni qualificanti, giorni liberi, mezze
+   giornate libere — quindi il residuo non è additivo: una congelata non
+   «consuma una quota», toglie gradi di libertà, e né `residual_cap` né il
+   residuo per forzatura lo esprimono.
+   ⚠ La versione precedente di questo elenco diceva che `FREE_GUARANTEED` era
+   risolto dal caso 2 e che `MIN_DISTRIBUTION` «regge davvero». **Entrambe le
+   affermazioni erano false**, e nessuna delle due si vedeva rileggendo il
+   documento: sono cadute solo misurando. `MinDistributionBuilder` postava la
+   soglia grezza pur avendo il controesempio scritto nella propria docstring —
+   due congelate sullo stesso giorno, una libera, `min_days=3`: `INFEASIBLE`
+   anche forzando lo *status quo*. `FreeGuaranteedBuilder` clampava le due
+   soglie **indipendentemente**, ma i due conteggi si escludono a vicenda
+   (`libera = attivo AND NOT meta` conta una mezza solo se il giorno lavora),
+   quindi ciascuna era raggiungibile da sola e la congiunzione no.
+   Il trattamento è la **disgiunzione reificata** già in uso su
+   `WeeklyOrderBuilder` — «ripara *oppure* non peggiorare» — con le due
+   soglie di `FREE_GUARANTEED` sotto **lo stesso** booleano. `B` si legge
+   chiamando il checker di `domain/analysis`, mai riscrivendone la
+   condizione.
+   ⚠ E il ripiego, quando lo *status quo* non è rappresentabile, **non è
+   simmetrico fra le due**: su `MIN_DISTRIBUTION` l'occupazione è monotona,
+   quindi `B` contato su un sottoinsieme è un valore raggiungibile da ogni
+   assegnazione; su `FREE_GUARANTEED` più occupazione *toglie* giorni liberi,
+   quindi «`B` sulle sole congelate» è una sovrastima — è letteralmente il
+   bound che causava il difetto — e il ripiego è zero.
+
+Il criterio che unifica i cinque casi è più preciso di «tetto o minimo»:
 
 > `INFEASIBLE` che nasce dal **vietare un peggioramento** è ammesso;
 > `INFEASIBLE` che nasce dal **pretendere una riparazione** non lo è.
@@ -627,6 +657,25 @@ sorveglia i builder troppo stretti, ed è quello che ha trovato più difetti.
   d'inserimento**, non semantiche: `MaxSiteChangesChecker` e `_placed_of`.
   Vanno decisi lì prima di poter essere tradotti fedelmente. Entrambi in
   «Ancora aperto» di `CLAUDE.md`.
+- **⚠ Il ramo *status quo* è pigro, e nel caso misto può spegnere la riga.**
+  Riguarda l'intera famiglia dei rami disgiuntivi — `WeeklyOrderBuilder` dal
+  Task 12, `MinDistributionBuilder` e `FreeGuaranteedBuilder` dal 2026-08-26.
+  Il modello non ha funzione di costo: `riparato` e `riparato.Not()` sono alla
+  pari, e CP-SAT non ha nessun motivo di preferire la riparazione quando anche
+  lo *status quo* è soddisfacibile. Nel solve incrementale «poche congelate +
+  libere non ancora piazzate» la baseline del checker è quasi sempre già
+  violata — perché **nulla è piazzato** — `B` vale quanto qualificano le sole
+  congelate, e il ramo *status quo* diventa **vacuo**: la riga smette di
+  vincolare. Misurato: una congelata, sei libere mai piazzate, `min_days=3` —
+  ammassarle tutte su due giorni è ammesso, e prima della correzione era
+  vietato (al prezzo però di `INFEASIBLE` su 33 istanze sporche su 45).
+  È perdita di **qualità**, non di correttezza: nessun finding nuovo,
+  l'oracolo differenziale regge. Tre strade, nessuna adottata: `AddHint` sul
+  booleano di riparazione (zero rischio semantico, meccanismo nuovo per questo
+  branch); clamp sul massimo raggiungibile (non pigro, ma è una **sovrastima**
+  — sarebbe il quarto «bound dichiarato conservativo e non lo è»); oppure
+  dichiararlo, che è ciò che si è fatto. ⚠ Va deciso sulla **famiglia**, non
+  builder per builder.
 
 ### 9.8 Il metodo, e cosa ha effettivamente trovato
 

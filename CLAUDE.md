@@ -135,8 +135,8 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > (`domain/analysis/`); e il **modello CP-SAT hard è completo**
 > (`domain/solver/`): **ventisei builder su ventisette checker**, e il
 > ventisettesimo (`structural:coverage`) non ne ha uno per costruzione —
-> `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. **424 test
-> verdi**, 15 skip tutti misurati e attribuiti (`venv/bin/pytest`).
+> `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. **436 test
+> verdi**, 16 skip tutti misurati e attribuiti (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
 > righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
@@ -334,6 +334,22 @@ delle aule e il violatore di Hall. Vedi
       la causa a monte resta nel tie-break di `domain/analysis`, non
       toccabile da questo giro: va decisa quando si generalizza la famiglia
       d'ordine ai Task 13-17.
+- [ ] ⚠ **Il ramo «status quo» è pigro, e nel caso misto spegne la riga.**
+      Riguarda la **famiglia** dei rami disgiuntivi introdotti da ADR-018 —
+      `WeeklyOrderBuilder` dal Task 12, `MinDistributionBuilder` e
+      `FreeGuaranteedBuilder` dal 2026-08-26 — non i singoli builder. Il
+      modello non ha funzione di costo, quindi `riparato` e `riparato.Not()`
+      sono alla pari e CP-SAT non ha motivo di preferire la riparazione. Nel
+      solve incrementale «poche congelate + libere non ancora piazzate» la
+      baseline del checker è quasi sempre già violata **perché nulla è
+      piazzato**, `B` vale quanto qualificano le sole congelate, e il ramo
+      status quo diventa **vacuo**: la riga smette di vincolare. Misurato —
+      una congelata, sei libere mai piazzate, `min_days=3`: ammassarle tutte
+      su due giorni è ammesso, mentre prima era vietato (al prezzo però di
+      `INFEASIBLE` su 33 istanze sporche su 45). È perdita di **qualità**, non
+      di correttezza: nessun finding nuovo, l'oracolo differenziale regge. Tre
+      strade in §9.7 della spec, nessuna adottata.
+
 - [ ] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
       piazzamento**, e il tetto **settimanale** del peso didattico è il primo
       caso incontrato. `AddExactlyOne` obbliga a piazzare ogni attività, e il
@@ -379,6 +395,78 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
 
 ## Changelog
 
+- **2026-08-26** — **La review finale, e due builder che rifiutavano il
+  presente.** Sei findings su tutte e ventisei le famiglie, con i seed allargati
+  da 5 a 40. ⚠ **Il risultato più importante è positivo e va detto per primo**:
+  **zero** builder più larghi del checker e **zero** più stretti del testimone.
+  I difetti stanno su input **sporco** (ADR-018), copertura di test e vacuità
+  del banco — non nella traduzione dei vincoli.
+
+  **I due gravi erano lo stesso errore in due forme.**
+  `MinDistributionBuilder` postava la soglia **grezza** pur avendo il
+  controesempio scritto nella propria docstring: due congelate sullo stesso
+  giorno, una libera, `min_days=3` → `INFEASIBLE` **anche forzando lo status
+  quo**, cioè rifiutando un piazzamento che non introduce niente di nuovo.
+  Spegnendo il solo builder, `OPTIMAL`. `FreeGuaranteedBuilder` clampava le due
+  soglie **una per volta**, ma i due conteggi si escludono a vicenda —
+  `libera = attivo AND NOT meta` conta una mezza solo se il giorno lavora,
+  quindi un giorno che la soglia dei *giorni* obbliga a lasciare vuoto
+  contribuisce **zero** mezze — e la congiunzione era irraggiungibile mentre
+  ciascuna soglia da sola no. Entrambi passano alla **disgiunzione reificata**
+  già in uso su `WeeklyOrderBuilder`, con le due soglie sotto **lo stesso**
+  booleano. `B` si legge **chiamando il checker** di `domain/analysis`, mai
+  riscrivendone la condizione: una divergenza di uno renderebbe il residuo
+  peggiore del difetto. Misurato: status quo rifiutato 45/45 → **0** e 43/45 →
+  **0**, `solve()` `INFEASIBLE` 33/45 e 16/45 → **0**, coppie (causale,
+  risorsa) nuove **0** prima e dopo.
+  ⚠ **ADR-018 ha quindi cinque casi, non quattro**, e la §9.5 della spec —
+  scritta il giorno prima — **dichiarava vere due cose false**: che
+  `FREE_GUARANTEED` fosse risolto dal residuo per forzatura e che
+  `MIN_DISTRIBUTION` «reggesse davvero». Nessuna delle due si vedeva
+  rileggendo il documento. È il pattern di questo progetto per l'ennesima
+  volta, stavolta su un documento scritto da meno di ventiquattr'ore.
+
+  🔑 **E la mutazione che avrebbe dovuto accorgersene non poteva.**
+  `PartsHomogeneousHalfBuilder` non era difeso da **nessun** test: un `post()`
+  no-op sulla sola sottoclasse `_H` lasciava la suite identica alla baseline,
+  mentre le altre tre danno 5, 3 e 3 rossi. Tutte le mutazioni fatte fino a lì
+  spegnevano `_PartsOrderBuilder.post`, cioè **tutte e quattro le sottoclassi
+  insieme**: misuravano la base, non le foglie. **Corollario da portarsi
+  dietro: quando un builder ha sottoclassi, la mutazione va fatta per
+  sottoclasse.** Lo stesso corollario ha poi trovato un secondo buco —
+  `_giorni_garantiti` sostituito da `resource_days` lasciava la suite verde,
+  cioè il codice faceva una distinzione che nessun test affermava.
+
+  **Settima forma di vacuità.** `_derive_max_gap` dichiarava «anche a budget
+  zero è un vincolo vero»: falso, il buco è `ultima − prima + 1 − conteggio`,
+  quindi serve una mezza giornata larga **almeno tre**, e la fixture pesca
+  anche `(4, 2)` dove entrambe le metà sono larghe due. Otto righe inviolabili
+  su 40 seed, e il **seed 2 era fra i cinque del banco** — un verde incapace di
+  fallire. Ora salta onestamente: **uno skip in più, 15 → 16**, che è il numero
+  giusto. E `_derive_two_days` era l'unico derivatore di materia senza la
+  guardia di co-attività per firma; ⚠ `_coppia_violabile` **non** si può
+  riusare, perché richiede lo **stesso** secchio mentre `TWO_DAYS` vuole
+  l'opposto.
+
+  **I quattro `parts_*` si invalidavano a vicenda**, e la precedenza fra
+  derivatori introdotta al Task 17 non poteva proteggerli: tutti e quattro
+  risintonizzano la **stessa** materia della **stessa** attività di parte, e
+  non esiste un ordine che funzioni. Serviva un guardiano, non un riordino.
+  Con `_sintonia_compatibile` la composizione passa da 34/40 a **40/40**
+  puliti; le righe scendono da 48-73 a **36-76**, e il minimo cala perché i
+  numeri di prima **includevano righe diventate vacue** — il sospetto che la
+  review aveva segnalato senza quantificare era fondato.
+
+  ⚠ **Debito nuovo, dichiarato e non risolto: il ramo status quo è pigro.**
+  Senza funzione di costo i due rami sono alla pari, e nel solve incrementale
+  con le libere non ancora piazzate la baseline è quasi sempre già violata
+  perché **nulla è piazzato**: `B` vale quanto qualificano le sole congelate e
+  il ramo diventa **vacuo**, cioè la riga smette di vincolare. Misurato. È
+  perdita di qualità, non di correttezza, e va decisa sulla **famiglia** dei
+  rami disgiuntivi — vedi «Ancora aperto» e §9.7 della spec.
+
+  Suite: **436 test verdi**, 16 skip.
+
 - **2026-08-25** — **Il modello hard completo: ventisei builder su
   ventisette.** Diciassette task sul branch `modello-hard-completo`, ciascuno
   scritto da un sottoagente su un brief e verificato per mutazione. Il registro
@@ -387,7 +475,7 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   e servizi anagrafici e non guarda mai i piazzamenti, e il solver non crea né
   distrugge attività. L'assenza è **dichiarata da un test**
   (`tests/test_solver_registry_completo.py`), così che chi volesse aggiungerla
-  debba prima cancellare il test e leggerne il perché. **424 test verdi**, 15
+  debba prima cancellare il test e leggerne il perché. **436 test verdi**, 16
   skip tutti misurati e attribuiti.
 
   **Il vocabolario, e perché esiste.** I checker ragionano su quantità che i
