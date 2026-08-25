@@ -312,3 +312,47 @@ def test_adr018_una_sola_congelata_resta_un_divieto():
         cp_model.OPTIMAL, cp_model.FEASIBLE)
     assert _verdetto(env["schedule"],
                      [(parte, 0, 2)]) == cp_model.INFEASIBLE
+
+
+def test_h_morde_dentro_la_stessa_mezza_giornata():
+    """⚠ Il test che mancava: fino alla review finale
+    `PartsHomogeneousHalfBuilder` non era difeso da **nessun** test.
+
+    Misurato: rendendo `post()` no-op sulla sola sottoclasse `_H`, la suite
+    intera restava **424 passed, 15 skipped** — identica alla baseline. Per
+    confronto, la stessa mutazione su `_AB` da' 3 rossi, su `PartsBefore` 5,
+    su `PartsAfter` 3.
+
+    Era sfuggito perche' tutte le mutazioni fatte finora spegnevano
+    `_PartsOrderBuilder.post`, cioe' tutte e quattro le sottoclassi insieme; e
+    perche' l'unico test che nomina `_H` — `test_h_e_ab_hanno_secchi_diversi`
+    — lo usa nel verso **legale**, cioe' afferma un'assenza. Un'assenza non
+    puo' diventare rossa quando il vincolo sparisce.
+
+    Qui `_H` deve **mordere**: parte, classe, parte tutte e tre nel mattino
+    del giorno 0. La sequenza di etichette e' `P C P`, due transizioni, e
+    «al piu' una transizione» la vieta.
+
+    ⚠ Questo test non separa `_H` da `_AB` — non puo': il secchio mezza
+    giornata e' un sottoinsieme di quello giornata, quindi «illegale per `_H`»
+    implica sempre «illegale per `_AB`», e una configurazione che li separi
+    esiste solo nel verso opposto. La separazione resta compito di
+    `test_h_e_ab_hanno_secchi_diversi`; questo test copre l'altra meta', che
+    il builder faccia qualcosa."""
+    env = mini_school()
+    assert env["grid"].morning_end_slot == 4      # 0..3 mattino
+    (p1,) = _parti(env)
+    _riga(env, T.PARTS_BEFORE_OR_AFTER_CLASS_H)
+    prima = make_activity(env["subject"], parts=[p1])
+    classe = make_activity(env["subject"], classes=[env["klass"]])
+    dopo = make_activity(env["subject"], parts=[p1])
+
+    assert _verdetto(env["schedule"],
+                     [(prima, 0, 0), (classe, 0, 1), (dopo, 0, 2)]) == (
+        cp_model.INFEASIBLE), "P C P nella stessa mezza giornata: due transizioni"
+
+    assert _verdetto(env["schedule"],
+                     [(prima, 0, 0), (dopo, 0, 1), (classe, 0, 2)]) in (
+        cp_model.OPTIMAL, cp_model.FEASIBLE), (
+        "P P C e' una transizione sola: se anche questo e' INFEASIBLE, "
+        "l'INFEASIBLE di sopra non dice niente sul vincolo")

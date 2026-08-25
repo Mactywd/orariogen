@@ -424,8 +424,13 @@ def run_tutte_le_famiglie(seed, time_limit=120):
     sporco = _hard(w.schedule, codici)
     assert sporco == set(), (
         f"il testimone viola la congiunzione delle righe derivate "
-        f"(seed {seed}): {sorted(sporco)} — un derivatore ha sporcato le "
-        f"righe di un altro, vedi ordine_derivatori()")
+        f"(seed {seed}): {sorted(sporco)}\n"
+        f"Un derivatore ha sporcato le righe di un altro. ⚠ Non riordinare i "
+        f"MUTANTI: l'ordine protegge le altre famiglie dai mutanti, non i "
+        f"mutanti fra loro. Se le causali qui sopra sono di materia, il "
+        f"sospettato e' _sintonizza_parti — che riassegna la materia delle "
+        f"attivita' di parte e viene chiamata da tutti e quattro i PARTS_*: "
+        f"vedi il suo guardiano _sintonia_compatibile.")
 
     Placement.objects.filter(schedule=w.schedule).delete()
     soluzione = solve(w.schedule, time_limit=time_limit)
@@ -516,9 +521,33 @@ def _derive_unavailability(w):
 def _derive_max_gap(w):
     """Il budget settimanale osservato nel testimone, per la firma peggiore.
     Con l'uguaglianza il vincolo e' soddisfatto e stretto: se il builder
-    contasse i buchi anche solo di un minuto in piu', sforerebbe. Crea sempre
-    una riga: anche a budget zero e' un vincolo vero, perche' qualunque buco
-    lo violerebbe."""
+    contasse i buchi anche solo di un minuto in piu', sforerebbe.
+
+    ⚠ **Non crea sempre una riga**, e la versione precedente lo faceva con una
+    giustificazione falsa: «anche a budget zero e' un vincolo vero, perche'
+    qualunque buco lo violerebbe». Il buco di una mezza giornata e'
+    `ultima - prima + 1 - conteggio`: perche' sia positivo servono **almeno
+    tre fasce** nella mezza giornata. La fixture pesca `slots_per_day` fra 4 e
+    6 e `morning_end_slot` fra 2 e 4, quindi con `(4, 2)` **entrambe** le
+    meta' sono larghe due e nessun piazzamento puo' produrre un buco: la riga
+    nasce inviolabile, il derivatore restituiva `1`, `run_family` non saltava,
+    e il caso passava senza aver provato niente. Misurato dalla review finale
+    con la sonda esatta di violabilita': **8 righe inviolabili su 40 seed**,
+    e il **seed 2 e' fra i cinque del banco** — cioe' un verde incapace di
+    fallire.
+
+    La guardia e' un maggiorante geometrico: in una mezza giornata larga `W`
+    il buco massimo e' `W - 2` (due attivita' agli estremi; ogni attivita' in
+    piu' lo riduce). Se la somma su tutte le mezze giornate non supera
+    `peggiore`, nessun piazzamento puo' sforare il budget e la riga e' vacua.
+    E' un **maggiorante**, quindi si scartano solo righe dimostrabilmente
+    inviolabili — mai una violabile. Settima forma di vacuita' censita.
+
+    ⚠ Resta fuori il caso del **seed 1** (meta' larghe 3 e 1, budget 60): la
+    riga e' geometricamente violabile ma inviolabile per via del resto del
+    modello. E' il limite gia' dichiarato dalla Ruling 64, e chiuderlo
+    richiederebbe la sonda esatta come criterio permanente — decisione presa
+    in senso contrario in §9.6 della spec."""
     grid = w.env["grid"]
     klass = w.rng.choice(w.env["classes"])
     peggiore = 0
@@ -530,6 +559,14 @@ def _derive_max_gap(w):
                 if len(meta) >= 2:
                     totale += (meta[-1] - meta[0] + 1 - len(meta)) * grid.slot_minutes
         peggiore = max(peggiore, totale)
+
+    larghezze = (grid.morning_end_slot,
+                 grid.slots_per_day - grid.morning_end_slot)
+    massimo = (grid.days_per_cycle * sum(max(0, l - 2) for l in larghezze)
+               * grid.slot_minutes)
+    if massimo <= peggiore:
+        return 0
+
     ResourceTimeConstraint.objects.create(
         resource=klass, type=RT.MAX_GAP_HOURS,
         params={"max_gap_minutes": peggiore})
@@ -763,6 +800,33 @@ def _derive_same_half_day(w):
     return creata
 
 
+def _coattive(w, aids_a, aids_b):
+    """Esiste una coppia (attivita' di A, attivita' di B) attiva nella
+    **stessa** firma di settimana?
+
+    E' la quarta forma di vacuita' (Ruling 49), che `_coppia_violabile`
+    incapsula per i secchi ma che `_derive_two_days` non applicava — l'unico
+    derivatore di materia rimasto scoperto, trovato dalla review finale
+    (3 seed su 60: 6, 22, 59; nessuno fra i cinque del banco, stesso profilo
+    latente delle Rulings 35 e 48).
+
+    ⚠ Qui **non** si puo' riusare `_coppia_violabile`: quello richiede anche
+    che le due stiano nello **stesso secchio** (`_ci_stanno`), mentre
+    `TWO_DAYS_INCOMPATIBLE` vuole l'opposto — A in un giorno e B in **quello
+    dopo**. Serve la sola meta' della co-attivita'.
+
+    Condizione **necessaria, non sufficiente**, come tutte le guardie di
+    questo modulo: ignora festivi, indisponibilita' e il resto del modello.
+    Una guardia troppo generosa costa un caso di banco debole, una troppo
+    stretta costa copertura persa in silenzio."""
+    for a in aids_a:
+        for b in aids_b:
+            if any(rep in w.weeks_of[a] and rep in w.weeks_of[b]
+                   for rep, _ in w.signatures):
+                return True
+    return False
+
+
 @deriver(ST.TWO_DAYS_INCOMPATIBLE, {"subject_two_days"})
 def _derive_two_days(w):
     """Cerca, per ogni classe, una coppia di materie **entrambe presenti** nel
@@ -782,10 +846,11 @@ def _derive_two_days(w):
     creata = 0
     for klass in w.env["classes"]:
         chiavi = _chiavi_unita(w, klass)
-        giorni = defaultdict(set)
+        giorni, attivita = defaultdict(set), defaultdict(list)
         for aid, (day, _slot) in w.placement.items():
             if w.tokens[aid] & chiavi:
                 giorni[w.act(aid).subject_id].add(day)
+                attivita[w.act(aid).subject_id].append(aid)
         for a in w.env["subjects"]:
             if not giorni[a.pk]:
                 continue
@@ -793,6 +858,8 @@ def _derive_two_days(w):
                 if a.pk == b.pk or not giorni[b.pk]:
                     continue
                 if any(d + 1 in giorni[b.pk] for d in giorni[a.pk]):
+                    continue
+                if not _coattive(w, attivita[a.pk], attivita[b.pk]):
                     continue
                 SubjectConstraint.objects.create(
                     subject_a=a, subject_b=b, school_class=klass,
@@ -1933,6 +2000,60 @@ def _riga_parts_ammissibile(w, tipo, kind, chiavi, subject_pk):
     return violabile
 
 
+# I quattro `PARTS_*` e il secchio di ciascuno. Serve a `_sintonizza_parti`
+# per ricontrollare le righe gia' create dai tipi che l'hanno preceduta.
+KIND_PARTS = {
+    ST.PARTS_BEFORE_CLASS: "day",
+    ST.PARTS_AFTER_CLASS: "day",
+    ST.PARTS_BEFORE_OR_AFTER_CLASS_H: "half",
+    ST.PARTS_BEFORE_OR_AFTER_CLASS_AB: "day",
+}
+
+
+def _parts_gia_create(w):
+    """Le righe `PARTS_*` gia' esistenti, come `(tipo, chiavi, materia)`."""
+    fuori = []
+    for row in SubjectConstraint.objects.filter(type__in=KIND_PARTS):
+        if row.school_class_id is not None:
+            chiavi = _chiavi_unita(w, row.school_class)
+        elif row.class_part_id is not None:
+            chiavi = frozenset({row.class_part_id})
+        else:
+            continue
+        fuori.append((row.type, chiavi, row.subject_a_id))
+    return fuori
+
+
+def _sintonia_compatibile(w, precedenti):
+    """La riassegnazione appena fatta lascia in piedi tutto il lavoro
+    precedente?
+
+    ⚠ Due condizioni, e la seconda non e' ovvia:
+
+    1. il **testimone resta pulito** su tutte le causali. Riassegnare la
+       materia di un'attivita' di parte fa violare le righe gia' derivate da
+       altre famiglie di materia — misurato dalla review finale: il testimone
+       violava una riga `subject_parts_order` gia' creata in 6 seed su 40, e
+       quei sei erano esattamente i sei fallimenti di
+       `run_tutte_le_famiglie` sui seed 6-45;
+    2. le righe `PARTS_*` gia' create restano **ammissibili**, non solo non
+       violate. Una riassegnazione puo' togliere a un secchio una delle due
+       etichette: la riga non e' violata — il checker quel secchio lo salta —
+       ma diventa **vacua**, e il `potere` che il banco ha gia' contato la
+       include. E' il sospetto che la review ha segnalato senza quantificare;
+       qui e' chiuso per costruzione invece che misurato.
+
+    ⚠ `coverage_mismatch` e' escluso apposta: e' presente su **tutti** i seed
+    per una ragione di fixture gia' dichiarata in testa a questo modulo
+    (Ruling 102), e non c'entra con la sintonizzazione."""
+    sporco = {f.code for f in check_schedule(w.schedule)
+              if f.severity == Severity.HARD and f.code != "coverage_mismatch"}
+    if sporco:
+        return False
+    return all(_riga_parts_ammissibile(w, tipo, KIND_PARTS[tipo], chiavi, pk)
+               for tipo, chiavi, pk in precedenti)
+
+
 def _sintonizza_parti(w, tipo, kind):
     """Formulazione **«densa»** (Ruling 34, come `_derive_site_transition`):
     il derivatore **costruisce** lo scenario invece di limitarsi a osservarlo.
@@ -1966,6 +2087,7 @@ def _sintonizza_parti(w, tipo, kind):
     `subject_max_hours_day/half_day`. Vedi `MUTANTI` e
     `run_tutte_le_famiglie`."""
     classi_pk = {k.pk for k in w.env["classes"]}
+    precedenti = _parts_gia_create(w)
     for part in w.env["parts"]:
         aids = [aid for aid in w.placement
                 if part.pk in w.tokens[aid] and not (w.tokens[aid] & classi_pk)]
@@ -1980,7 +2102,8 @@ def _sintonizza_parti(w, tipo, kind):
                              act.duration_minutes)
             act.subject = subject
             act.save()
-            if _riga_parts_ammissibile(w, tipo, kind, chiavi, subject.pk):
+            if (_riga_parts_ammissibile(w, tipo, kind, chiavi, subject.pk)
+                    and _sintonia_compatibile(w, precedenti)):
                 break
         else:
             _sposta_servizio(piano, act.subject_id, originale,
