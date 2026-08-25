@@ -124,7 +124,7 @@ def _school(rng):
             "holiday": (holiday_week, holiday_day)}
 
 
-def _make_activities(rng, env):
+def _make_activities(rng, env, seed=0):
     """Per ogni classe, attivita' fino al 50% della capienza della griglia:
     il margine serve a rendere il piazzamento casuale quasi sempre possibile
     al primo tentativo. La prima attivita' di ogni classe attraversa
@@ -132,6 +132,10 @@ def _make_activities(rng, env):
     capace di far scattare break_straddled se GridBuilder fosse vacuo
     (Important 1, review Task 5)."""
     grid = env["grid"]
+    # Flusso casuale separato per le sedi: pescare dal flusso principale
+    # sposterebbe ogni estrazione successiva e cambierebbe il testimone di
+    # tutti gli altri derivatori a parita' di seed.
+    sedi_rng = random.Random(f"sedi-{seed}")
     capienza = grid.days_per_cycle * grid.slots_per_day
     out = []
     for klass in env["classes"]:
@@ -146,8 +150,8 @@ def _make_activities(rng, env):
                 week_mask=rng.choice(MASKS), respects_breaks=sensibile)
             act.teachers.add(rng.choice(env["teachers"]))
             act.classes.add(klass)
-            if rng.random() < 0.5:
-                act.site = rng.choice(env["sites"])
+            if sedi_rng.random() < 0.5:
+                act.site = sedi_rng.choice(env["sites"])
                 act.save()
             service, _ = Service.objects.get_or_create(
                 study_plan=klass.study_plan, subject=subject,
@@ -199,7 +203,7 @@ def _try_place(rng, activities, tokens, weeks_of, grid, holiday, break_boundary)
 def build_witness(seed, tentativi=20):
     rng = random.Random(seed)
     env = _school(rng)
-    activities = _make_activities(rng, env)
+    activities = _make_activities(rng, env, seed)
     tokens = {a.id: activity_tokens(a)[0] for a in activities}
     weeks_of = {a.id: tuple(w for w in range(N_WEEKS)
                             if weeks.week_in_mask(a.week_mask, w))
