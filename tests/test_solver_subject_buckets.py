@@ -1,7 +1,7 @@
 """I vincoli di materia che sono cardinalita' su un secchio: SAME_HALF_DAY e
 TWO_DAYS sul nuovo scheletro di materia, piu' i quattro rami di ADR-018 su
 SAME_DAY (A = B via `residual_cap`, A != B via la tabella a quattro rami di
-`_post_cross` in domain/solver/builders/subject_buckets.py).
+`post_cross` in domain/solver/builders/subject_buckets.py).
 
 ⚠ Niente `test_secchi_sul_banco` qui (Ruling 16, correzione 3 del brief
 Task 9): `tests/solver_harness.py` registra `_derive_same_half_day` sotto
@@ -96,7 +96,7 @@ def test_two_days_con_a_uguale_b():
 # --- ADR-018, i quattro rami --------------------------------------------
 #
 # Caso A = B: separabile, via residual_cap (rami 1-2 sotto).
-# Caso A != B: non separabile, via la tabella a quattro rami di _post_cross
+# Caso A != B: non separabile, via la tabella a quattro rami di post_cross
 # (rami 3-4 sotto; i rami fa=0,fb=0 e fa=0,fb=1 sono gia' esercitati da
 # test_due_materie_diverse_non_coesistono_nella_giornata e da
 # test_il_vincolo_asimmetrico_quando_a_e_congelata_e_b_libera in
@@ -162,7 +162,7 @@ def test_adr018_a_diverso_b_entrambe_congelate_piu_libera_di_a():
 
 def test_adr018_a_diverso_b_entrambe_congelate_piu_libera_di_b():
     """Ramo 3 (A != B, fa=1 e fb=1), lato **B**: simmetrico al test
-    precedente, ma la libera e' di B invece che di A. `_post_cross` azzera i
+    precedente, ma la libera e' di B invece che di A. `post_cross` azzera i
     letterali liberi di A **e** di B con due cicli distinti (`for aid, lit in
     la` e poi `for aid, lit in lb`); il test sopra mette una sola libera, di
     A, ed esercita solo il primo. Mutante di prova della review: togliendo il
@@ -220,7 +220,7 @@ def test_adr018_a_diverso_b_solo_a_congelata_libera_di_a_non_vincolata():
 
 
 def test_adr018_il_quarto_ramo_puo_rendere_il_modello_infattibile():
-    """Minor 5 (review Task 10): il docstring di `_post_cross` avverte in ⚠
+    """Minor 5 (review Task 10): il docstring di `post_cross` avverte in ⚠
     che il quarto ramo (fa=1, fb=1) **puo'** rendere il modello infattibile
     se una libera non ha altro posto dove andare, e dichiara che e' voluto —
     e' testualmente cio' che ADR-018 concede («al piu' non puo' aggiungere

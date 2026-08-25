@@ -3,10 +3,17 @@
 WEEKLY_ORDER e' il primo della famiglia: la prima occorrenza di A deve
 precedere (o coincidere in posizione con) la prima occorrenza di B. Non
 richiede di ordinare davvero le occorrenze nel modello: due AddMinEquality
-sulla posizione canalizzata (vocab.pos) e un confronto bastano."""
+sulla posizione canalizzata (vocab.pos) e un confronto bastano.
+
+HALF_DAY_GAP e' il terzo: uno scarto minimo fra occorrenze, in mezze
+giornate. Si traduce senza ordinare esplicitamente, riusando i due helper
+gia' scritti per i secchi di materia (subject_buckets.py, post_separable e
+post_cross): ogni coppia di mezze giornate a distanza inferiore al param e'
+uno dei quattro casi che quella tabella gia' risolve."""
 
 from domain.models import SubjectConstraint
 from domain.solver.builders.base import SubjectBuilder
+from domain.solver.builders.subject_buckets import post_cross, post_separable
 from domain.solver.registry import register
 
 T = SubjectConstraint.Type
@@ -214,7 +221,7 @@ class ImposedSuccessionBuilder(SubjectBuilder):
     in quel caso, quindi la guardia si limita al caso in cui salterebbe
     davvero qualcosa — nessuna congelata in mezzo.
 
-    **Ramo A != B** (`_post_cross`). Il checker chiede, per **ogni
+    **Ramo A != B** (`post_cross`). Il checker chiede, per **ogni
     occorrenza** di A: esiste una B strettamente dopo, entro `delay` mezze
     giornate. Il finding e' per occorrenza (`[pa.activity_id]`), quindi il
     trigger dev'essere il singolo letterale di A, **non** l'indicatore
@@ -242,9 +249,9 @@ class ImposedSuccessionBuilder(SubjectBuilder):
     esiste. **Puo' rendere il modello INFEASIBLE** se quella libera non ha
     altrove dove andare: e' esattamente cio' che ADR-018 concede (stessa
     proprieta' del ramo disgiuntivo di WeeklyOrderBuilder e del quarto ramo
-    di `_post_cross` in subject_buckets.py).
+    di `post_cross` in subject_buckets.py).
 
-    Nota di implementazione: questo builder **non** riusa il `_post_cross` di
+    Nota di implementazione: questo builder **non** riusa il `post_cross` di
     subject_buckets.py — quella funzione posta una cardinalita' aggregata
     (`ha + hb <= 1`), un vincolo diverso da quello per-occorrenza richiesto
     qui. Il nome del metodo privato sotto e' volutamente distinto per non
@@ -306,3 +313,97 @@ class ImposedSuccessionBuilder(SubjectBuilder):
                                                signature=rep):
                 if aid in ctx.free:
                     model.AddBoolOr([lit.Not()] + finestra)
+
+
+@register(T.HALF_DAY_GAP)
+class HalfDayGapBuilder(SubjectBuilder):
+    """Scarto minimo fra occorrenze, misurato in mezze giornate
+    (HalfDayGapChecker.violations, domain/analysis/checkers/
+    subject_constraints.py righe 211-229):
+
+        same = row.subject_a_id == row.subject_b_id
+        merged = [(_half(...), p.activity_id, "a") for p in a]
+        if not same:
+            merged += [(_half(...), p.activity_id, "b") for p in b]
+        merged.sort()
+        for (h1, a1, s1), (h2, a2, s2) in zip(merged, merged[1:]):
+            crossed = same or s1 != s2
+            if crossed and a1 != a2 and h2 - h1 < row.param:
+                yield ...
+
+    Il checker ordina le occorrenze e confronta solo le coppie
+    **consecutive** nell'ordinamento fuso; con A != B soltanto quelle
+    **incrociate** fra le due sorgenti ("a"/"b" nella tupla, non l'identita'
+    delle materie: con A = B ogni coppia e' incrociata per definizione).
+
+    ⚠ **Non e' il caso "piu' stretto, mai piu' largo" — e' equivalente.**
+    Vincolare tutte le coppie incrociate (quello che fa questo builder) e
+    vincolare solo le consecutive incrociate nell'ordinamento (quello che fa
+    il checker) ammettono esattamente lo stesso insieme di piazzamenti.
+
+    Dimostrazione: se esiste una coppia incrociata a distanza < param, ne
+    esiste una **adiacente** (consecutiva in `merged`) altrettanto corta o
+    piu' corta. Si prenda, fra tutte le coppie incrociate corte, quella con
+    il minor numero di occorrenze strettamente in mezzo. Se qualcosa c'e' in
+    mezzo, quel qualcosa ha sorgente "a" o "b": rispetto a **uno** dei due
+    estremi originali (same=True: sempre incrociata; same=False: incrociata
+    se ha sorgente diversa da quell'estremo — e almeno uno dei due estremi
+    ha per forza sorgente diversa dall'occorrenza in mezzo, visto che i due
+    estremi hanno sorgenti diverse fra loro nel caso same=False, o sono
+    comunque "a" nel caso same=True dove ogni sorgente incrocia) forma una
+    coppia incrociata di distanza non maggiore e con **meno** occorrenze in
+    mezzo — contro la minimalita' scelta. Quindi la coppia minima e'
+    adiacente: vincolare tutte le incrociate o solo le adiacenti incrociate
+    produce lo stesso vincolo. (Verificata anche empiricamente su un gran
+    numero di casi sintetici casuali prima di scrivere questo builder, zero
+    divergenze — i numeri esatti nel report del task, non qui: Ruling 50.)
+
+    Ogni coppia (u, w) di mezze giornate con `u <= w < u + param` e'
+    esattamente uno dei quattro casi gia' risolti da subject_buckets.py:
+
+        A = B,  w == u  -> post_separable(A, "half", u)
+        A = B,  w != u  -> post_cross(A, "half", u,  A, "half", w)
+        A != B, w == u  -> post_cross(A, "half", u,  B, "half", u)
+        A != B, w != u  -> post_cross(A@u, B@w)  E  post_cross(B@u, A@w)
+
+    ⚠ L'ultimo caso vuole **due** chiamate, non una: il checker e' simmetrico
+    anche con A != B (`crossed` non guarda il verso della relazione), quindi
+    sia "A a u, B a w" sia "B a u, A a w" sono coppie incrociate corte da
+    vietare. Una sola chiamata coprirebbe solo un verso.
+
+    ⚠ `post_cross` con A = B su due secchi **distinti** e' gia' l'uso che ne
+    fa `TwoDaysBuilder` (Task 10, subject_buckets.py): non e' un abuso
+    dell'helper, e' un caso gia' previsto.
+
+    ⚠ `post_separable` giustifica il clamp a zero di ADR-018 dicendo che
+    `count` sta dentro `Finding.key` — qui il finding di questo checker porta
+    `gap`/`min_gap`, non `count`, fra le sue `quantities`. Ma la tupla
+    `activities` (gli id delle due occorrenze) cresce comunque a ogni
+    aggiunta libera dentro un secchio gia' violato, ed e' quella tupla a
+    entrare in `Finding.key` — la stessa conclusione di `post_separable`
+    regge, per la stessa ragione: un'aggiunta libera e' un finding *nuovo*,
+    quindi `cap = 0` resta il valore giusto, non un eccesso di zelo."""
+    TYPE = T.HALF_DAY_GAP
+
+    def post(self, ctx, model, row, keys, rep):
+        minimo = row.param
+        if not minimo:
+            return
+        v = ctx.vocab
+        n = ctx.grid.days_per_cycle * 2
+        same = row.subject_a_id == row.subject_b_id
+        for u in range(n):
+            for w in range(u, min(u + minimo, n)):
+                if same:
+                    if w == u:
+                        post_separable(ctx, model, v, row.subject_a_id,
+                                       "half", u, keys, rep)
+                    else:
+                        post_cross(ctx, model, v, row.subject_a_id, "half", u,
+                                   row.subject_a_id, "half", w, keys, rep)
+                else:
+                    post_cross(ctx, model, v, row.subject_a_id, "half", u,
+                               row.subject_b_id, "half", w, keys, rep)
+                    if w != u:
+                        post_cross(ctx, model, v, row.subject_b_id, "half", u,
+                                   row.subject_a_id, "half", w, keys, rep)

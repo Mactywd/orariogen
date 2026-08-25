@@ -1199,6 +1199,109 @@ def _derive_imposed_succession(w):
     return creata
 
 
+@deriver(ST.HALF_DAY_GAP, {"subject_half_day_gap"})
+def _derive_half_day_gap(w):
+    """Per ogni classe, per ogni coppia **ordinata** di materie (A, B),
+    inclusa A = B: `param` e' lo scarto minimo, in mezze giornate, che il
+    testimone rispetta gia' in **ogni** firma di settimana dove la coppia
+    produce almeno una coppia incrociata.
+
+    ⚠ **Deriva contro la regola del builder** (tutte le coppie incrociate,
+    non solo le consecutive nell'ordinamento come il checker): sono
+    equivalenti per la dimostrazione nel docstring di `HalfDayGapBuilder`
+    (domain/solver/builders/subject_order.py), e derivare contro il builder
+    tiene onesta quella dimostrazione a ogni esecuzione, invece di limitarsi
+    a fidarsene una volta sola.
+
+    Per ogni firma si costruisce `merged`: le occorrenze **attive in quella
+    firma**, con l'etichetta di sorgente ("a"/"b") che il checker usa per
+    decidere se una coppia e' incrociata — solo A se `same`, A e B
+    altrimenti. Con `same = False` una firma dove uno dei due lati e' vuoto
+    non produce nessuna coppia incrociata (il checker vedrebbe un `merged`
+    con una sola sorgente, quindi nessuna coppia con `crossed` vero): si
+    salta **quella firma**, non l'intera coppia — a differenza del ramo A
+    != B di IMPOSED_SUCCESSION, qui non c'e' guardia d'uscita del checker da
+    rispettare, quindi una firma senza B non e' una violazione, e' solo una
+    firma senza informazione.
+
+    Il minimo di una firma e' il minimo, su **tutte** le coppie incrociate
+    di quel `merged` (non solo le adiacenti — la dimostrazione dice che e'
+    lo stesso, e derivare contro la regola del builder invece che contro
+    quella "ottimizzata" del checker e' cio' che rende il testimone un test
+    indipendente della dimostrazione).
+
+    `param` finale e' il minimo **fra le firme** di quei minimi — non il
+    massimo, a differenza di WEEKLY_ORDER/IMPOSED_SUCCESSION: li' `param` e'
+    un tetto (lo scarto reale deve stare **sotto**), quindi serve la firma
+    piu' larga; qui `param` e' una soglia dal basso (lo scarto reale deve
+    stare **sopra**), quindi serve la firma piu' stretta — chi vincola di
+    piu' e' chi decide il valore che il testimone puo' ancora rispettare
+    ovunque.
+
+    Guardie: nessuna riga se nessuna firma produce alcuna coppia incrociata
+    (`param is None`), se il minimo trovato e' sotto 1 (riga vacua o
+    degenere), o se `param >= n` (`n = days_per_cycle * 2`, le mezze
+    giornate del ciclo: uno scarto cosi' largo non puo' mai essere violato
+    dentro la settimana, la riga sarebbe inviolabile per costruzione della
+    griglia — stessa forma della guardia in `_derive_imposed_succession`).
+
+    Accumula su tutte le classi e tutte le coppie ordinate, non si ferma
+    alla prima: restituisce il numero di righe create.
+
+    Stessa precondizione taciuta di `_derive_weekly_order`/
+    `_derive_imposed_succession`: il filtro `klass.pk in w.tokens[aid]` usa
+    solo la chiave della classe; con una ClassPart in gioco le occorrenze
+    legate alla sola parte sfuggirebbero al derivatore e non al checker —
+    asserita invece che sperata."""
+    assert not ClassPart.objects.exists(), (
+        "_derive_half_day_gap filtra su klass.pk: con le parti, le "
+        "occorrenze legate alla sola parte sfuggono al derivatore e non "
+        "al checker")
+    grid = w.env["grid"]
+    n = grid.days_per_cycle * 2
+    creata = 0
+    for klass in w.env["classes"]:
+        per_materia = defaultdict(list)
+        for aid in w.placement:
+            if klass.pk in w.tokens[aid]:
+                per_materia[w.act(aid).subject_id].append(aid)
+        materie = sorted(per_materia)
+        for a_id in materie:
+            for b_id in materie:
+                same = a_id == b_id
+                aa_tutte = per_materia[a_id]
+                bb_tutte = per_materia[b_id]
+                param = None
+                for rep, _ in w.signatures:
+                    aa = [aid for aid in aa_tutte if rep in w.weeks_of[aid]]
+                    merged = [(_half_of(w, aid), aid, "a") for aid in aa]
+                    if not same:
+                        bb = [bid for bid in bb_tutte if rep in w.weeks_of[bid]]
+                        if not aa or not bb:
+                            continue
+                        merged += [(_half_of(w, bid), bid, "b") for bid in bb]
+                    merged.sort()
+                    minimo_firma = None
+                    for i, (h1, id1, s1) in enumerate(merged):
+                        for h2, id2, s2 in merged[i + 1:]:
+                            if id1 == id2 or not (same or s1 != s2):
+                                continue
+                            d = h2 - h1
+                            if minimo_firma is None or d < minimo_firma:
+                                minimo_firma = d
+                    if minimo_firma is None:
+                        continue
+                    if param is None or minimo_firma < param:
+                        param = minimo_firma
+                if param is None or param < 1 or param >= n:
+                    continue
+                SubjectConstraint.objects.create(
+                    subject_a_id=a_id, subject_b_id=b_id,
+                    school_class=klass, type=ST.HALF_DAY_GAP, param=param)
+                creata += 1
+    return creata
+
+
 @deriver(RT.MIN_DISTRIBUTION, {"min_distribution"})
 def _derive_min_distribution(w):
     """Chiede i giorni effettivamente lavorati nella firma **peggiore**: e'

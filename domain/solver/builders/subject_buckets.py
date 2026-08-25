@@ -12,7 +12,7 @@ i minuti di durata per il tetto di ore): `residual_cap` clampa il tetto a
 zero. Con A != B — e per TWO_DAYS, sempre, anche con A = B — il residuo
 dell'incompatibilita' non e' separabile: `ha`/`hb` sono indicatori derivati
 (un massimo, non una somma), e serve la tabella a quattro rami di
-`_post_cross` sotto. Il tetto di ore (`_MaxHoursSubject`) resta invece
+`post_cross` sotto. Il tetto di ore (`_MaxHoursSubject`) resta invece
 separabile anche con A != B, perche' somma solo i minuti di A."""
 
 from domain.models import SubjectConstraint
@@ -23,7 +23,7 @@ from domain.solver.residual import any_free, residual_cap
 T = SubjectConstraint.Type
 
 
-def _post_separable(ctx, model, v, subject_id, kind, bucket, keys, rep):
+def post_separable(ctx, model, v, subject_id, kind, bucket, keys, rep):
     """A = B: «al piu' un'occorrenza per secchio». Separabile, quindi
     `residual_cap` e' esatto: il tetto residuo e' `1 - (occorrenze congelate
     in questo secchio)`, clampato a zero quando le congelate lo hanno gia'
@@ -52,7 +52,7 @@ def _post_separable(ctx, model, v, subject_id, kind, bucket, keys, rep):
     model.Add(sum(lit for _, lit in free) <= cap)
 
 
-def _post_cross(ctx, model, v, subject_a_id, kind_a, bucket_a,
+def post_cross(ctx, model, v, subject_a_id, kind_a, bucket_a,
                 subject_b_id, kind_b, bucket_b, keys, rep):
     """A != B (e TWO_DAYS, sempre — anche con A = B, perche' li' i due secchi
     sono distinti: giorno d per A, giorno d+1 per B). Il residuo qui non e'
@@ -94,7 +94,7 @@ def _post_cross(ctx, model, v, subject_a_id, kind_a, bucket_a,
     i numeri esatti stanno nel registro (ri-review Task 10) e non qui, perche'
     in docstring invecchierebbero in silenzio (Ruling 50). ⚠ Sul banco il
     risparmio e' tutto di TWO_DAYS: le righe con A = B passano da
-    `_post_separable`, che questa guardia non attraversa."""
+    `post_separable`, che questa guardia non attraversa."""
     la = v.subject_literals(keys, subject_a_id, kind_a, bucket_a, signature=rep)
     lb = v.subject_literals(keys, subject_b_id, kind_b, bucket_b, signature=rep)
     if not la or not lb:
@@ -145,18 +145,18 @@ class _Bucketed(SubjectBuilder):
 class _BucketIncompatible(_Bucketed):
     """Con A = B (il caso dominante nei dati reali di EDT: non due ore della
     stessa materia nello stesso giorno) e' «al piu' un'occorrenza per
-    secchio», via `_post_separable`. Con A != B e' «le due materie non
-    coesistono nel secchio», via `_post_cross` (tabella a quattro rami di
+    secchio», via `post_separable`. Con A != B e' «le due materie non
+    coesistono nel secchio», via `post_cross` (tabella a quattro rami di
     ADR-018)."""
 
     def post(self, ctx, model, row, keys, rep):
         v = ctx.vocab
         for bucket in self.buckets(ctx):
             if row.subject_a_id == row.subject_b_id:
-                _post_separable(ctx, model, v, row.subject_a_id, self.KIND,
+                post_separable(ctx, model, v, row.subject_a_id, self.KIND,
                                 bucket, keys, rep)
             else:
-                _post_cross(ctx, model, v, row.subject_a_id, self.KIND, bucket,
+                post_cross(ctx, model, v, row.subject_a_id, self.KIND, bucket,
                            row.subject_b_id, self.KIND, bucket, keys, rep)
 
 
@@ -173,7 +173,7 @@ class SameHalfDayBuilder(_BucketIncompatible):
 @register(T.TWO_DAYS_INCOMPATIBLE)
 class TwoDaysBuilder(SubjectBuilder):
     """A nel giorno d e B nel giorno d+1 non coesistono. Stessa tabella a
-    quattro rami di `_post_cross`, applicata su due secchi **distinti** (il
+    quattro rami di `post_cross`, applicata su due secchi **distinti** (il
     giorno d per A, il giorno d+1 per B) — vale anche con A = B, perche' il
     checker confronta `a_days[d]` con `b_days[d+1]`, due letture dello stesso
     insieme su giorni diversi: non e' il caso `_BucketIncompatible` A = B, che
@@ -187,7 +187,7 @@ class TwoDaysBuilder(SubjectBuilder):
     def post(self, ctx, model, row, keys, rep):
         v = ctx.vocab
         for day in range(ctx.grid.days_per_cycle - 1):
-            _post_cross(ctx, model, v, row.subject_a_id, "day", day,
+            post_cross(ctx, model, v, row.subject_a_id, "day", day,
                        row.subject_b_id, "day", day + 1, keys, rep)
 
 
@@ -198,7 +198,7 @@ class _MaxHoursSubject(_Bucketed):
     Sommare anche B sarebbe un vincolo diverso e piu' stretto di quanto la
     riga chieda.
 
-    Separabile come `_post_separable` (ogni letterale pesa i propri minuti,
+    Separabile come `post_separable` (ogni letterale pesa i propri minuti,
     la somma e' lineare): `residual_cap` clampa il tetto residuo a zero
     quando le congelate lo hanno gia' sforato, invece di rendere il modello
     infattibile per colpa del passato (ADR-018).

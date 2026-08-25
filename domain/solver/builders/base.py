@@ -69,8 +69,8 @@ class SubjectBuilder(Builder):
     Il gate e' verificato semanticamente neutro (review Task 10, Minor 3):
     rimosso, la suite intera resta verde — ogni `post()` di questo branch e'
     gia' un no-op quando non c'e' nulla di libero nel proprio secchio (il
-    `if not free: return` di `_post_separable`, il ramo `fa=0, fb=0` di
-    `_post_cross` con nessun letterale, eccetera). Si tiene solo perche' fa
+    `if not free: return` di `post_separable`, il ramo `fa=0, fb=0` di
+    `post_cross` con nessun letterale, eccetera). Si tiene solo perche' fa
     risparmiare il giro sulle firme e sui secchi quando la riga intera non ha
     nulla da decidere — un'ottimizzazione, non una garanzia di correttezza."""
 
