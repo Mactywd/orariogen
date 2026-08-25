@@ -1,19 +1,24 @@
 """I vincoli di materia che si esprimono come cardinalita' su un **secchio**
-(giornata o mezza giornata). L'attivita' si attribuisce al secchio della sua
-fascia di **partenza**, come nei checker (`domain/analysis/checkers/
-subject_constraints.py`).
+(giornata o mezza giornata), piu' FORBIDDEN_SEQUENCE, che non usa secchi ma
+vive nello stesso file perche' e' lo stesso asse di vincolo (SubjectBuilder).
+L'attivita' si attribuisce al secchio della sua fascia di **partenza**, come
+nei checker (`domain/analysis/checkers/subject_constraints.py`).
 
-ADR-018 — un secchio gia' violato da attivita' **congelate** non deve rendere
-il modello INFEASIBLE per colpa del passato. Con A = B il residuo e'
-separabile (ogni letterale pesa 1 allo stesso modo): `residual_cap` clampa il
-tetto a zero. Con A != B — e per TWO_DAYS, sempre, anche con A = B — il
-residuo non e' separabile: `ha`/`hb` sono indicatori derivati (un massimo, non
-una somma), e serve la tabella a quattro rami di `_post_cross` sotto."""
+ADR-018 — un secchio (o una coppia di celle, per FORBIDDEN_SEQUENCE) gia'
+violato da attivita' **congelate** non deve rendere il modello INFEASIBLE per
+colpa del passato. Sui tetti di cardinalita' con A = B il residuo e'
+separabile (ogni letterale pesa allo stesso modo — 1 per l'incompatibilita',
+i minuti di durata per il tetto di ore): `residual_cap` clampa il tetto a
+zero. Con A != B — e per TWO_DAYS, sempre, anche con A = B — il residuo
+dell'incompatibilita' non e' separabile: `ha`/`hb` sono indicatori derivati
+(un massimo, non una somma), e serve la tabella a quattro rami di
+`_post_cross` sotto. Il tetto di ore (`_MaxHoursSubject`) resta invece
+separabile anche con A != B, perche' somma solo i minuti di A."""
 
 from domain.models import SubjectConstraint
 from domain.solver.builders.base import SubjectBuilder
 from domain.solver.registry import register
-from domain.solver.residual import residual_cap
+from domain.solver.residual import any_free, residual_cap
 
 T = SubjectConstraint.Type
 
@@ -115,25 +120,36 @@ def _post_cross(ctx, model, v, subject_a_id, kind_a, bucket_a,
                 model.Add(lit == 0)
 
 
-class _BucketIncompatible(SubjectBuilder):
+class _Bucketed(SubjectBuilder):
+    """Base comune a `_BucketIncompatible` e `_MaxHoursSubject` (Ruling 58):
+    entrambe hanno bisogno degli stessi tre elementi — `KIND`, `buckets(ctx)`
+    e l'assert su `KIND` — e prima di questa estrazione ognuna li duplicava
+    per conto proprio.
+
+    L'assert esiste perche' `vocab.bucket_of` tratta **ogni** `kind != "day"`
+    come mezza giornata: senza, una sottoclasse che dimentichi `KIND`
+    prenderebbe silenziosamente la semantica "half" invece di rompersi. Vive
+    dentro `buckets()` (Ruling 67, non in un metodo `_check_kind()` a parte
+    che ogni `post()` dovrebbe ricordarsi di chiamare): `buckets()` e' cio'
+    che ogni `post()` di questa base **deve** invocare per funzionare, quindi
+    l'assert e' inevitabile invece che opt-in."""
+
+    KIND = None   # "day" | "half"
+
+    def buckets(self, ctx):
+        assert self.KIND in ("day", "half"), type(self).__name__
+        n = ctx.grid.days_per_cycle
+        return range(n) if self.KIND == "day" else range(n * 2)
+
+
+class _BucketIncompatible(_Bucketed):
     """Con A = B (il caso dominante nei dati reali di EDT: non due ore della
     stessa materia nello stesso giorno) e' «al piu' un'occorrenza per
     secchio», via `_post_separable`. Con A != B e' «le due materie non
     coesistono nel secchio», via `_post_cross` (tabella a quattro rami di
     ADR-018)."""
 
-    KIND = None   # "day" | "half"
-
-    def buckets(self, ctx):
-        n = ctx.grid.days_per_cycle
-        return range(n) if self.KIND == "day" else range(n * 2)
-
     def post(self, ctx, model, row, keys, rep):
-        # Stesso argomento dell'assert su TYPE (SubjectBuilder.build), un
-        # livello piu' sotto: `vocab.bucket_of` tratta ogni `kind != "day"`
-        # come mezza giornata, quindi una sottoclasse che dimentichi KIND
-        # prenderebbe silenziosamente la semantica "half" invece di rompersi.
-        assert self.KIND in ("day", "half"), type(self).__name__
         v = ctx.vocab
         for bucket in self.buckets(ctx):
             if row.subject_a_id == row.subject_b_id:
@@ -173,3 +189,94 @@ class TwoDaysBuilder(SubjectBuilder):
         for day in range(ctx.grid.days_per_cycle - 1):
             _post_cross(ctx, model, v, row.subject_a_id, "day", day,
                        row.subject_b_id, "day", day + 1, keys, rep)
+
+
+class _MaxHoursSubject(_Bucketed):
+    """Tetto di minuti per secchio, sulla **sola** materia A — anche quando
+    A != B: `_MaxHours.violations` (domain/analysis/checkers/
+    subject_constraints.py, righe 149-159) itera su `a` e non tocca mai `b`.
+    Sommare anche B sarebbe un vincolo diverso e piu' stretto di quanto la
+    riga chieda.
+
+    Separabile come `_post_separable` (ogni letterale pesa i propri minuti,
+    la somma e' lineare): `residual_cap` clampa il tetto residuo a zero
+    quando le congelate lo hanno gia' sforato, invece di rendere il modello
+    infattibile per colpa del passato (ADR-018).
+
+    ⚠ Con A != B il gate di `SubjectBuilder.build` e la deduplicazione per
+    `coinvolte` guardano l'unione delle attivita' di A **e** B (Ruling 60),
+    ma questo vincolo dipende solo da A: l'effetto e' al piu' una riga
+    postata due volte in modo identico (due firme con lo stesso `coinvolte`
+    ma B che le distingue), mai una firma saltata — la deduplicazione lo
+    assorbe comunque."""
+
+    def post(self, ctx, model, row, keys, rep):
+        # `buckets()` per prima, non dopo il `return`: e' li' che vive
+        # l'assert su KIND (Ruling 67), e con `param` nullo non scatterebbe
+        # mai — la rete di sicurezza deve valere anche sulle righe che non
+        # postano nulla (Minor 3, ri-review Task 11).
+        secchi = self.buckets(ctx)
+        if row.param is None:
+            return
+        for bucket in secchi:
+            lits = ctx.vocab.subject_literals(keys, row.subject_a_id, self.KIND,
+                                              bucket, signature=rep)
+            terms = [(ctx.activities[aid].duration_minutes, aid, lit)
+                     for aid, lit in lits]
+            liberi, residuo = residual_cap(ctx, terms, row.param)
+            if liberi:
+                model.Add(sum(w * lit for w, lit in liberi) <= residuo)
+
+
+@register(T.MAX_HOURS_DAY)
+class MaxHoursDayBuilder(_MaxHoursSubject):
+    TYPE, KIND = T.MAX_HOURS_DAY, "day"
+
+
+@register(T.MAX_HOURS_HALF_DAY)
+class MaxHoursHalfDayBuilder(_MaxHoursSubject):
+    TYPE, KIND = T.MAX_HOURS_HALF_DAY, "half"
+
+
+@register(T.FORBIDDEN_SEQUENCE)
+class ForbiddenSequenceBuilder(SubjectBuilder):
+    """B non puo' iniziare esattamente dove A finisce, nello stesso giorno
+    (`ForbiddenSequenceChecker.violations`, subject_constraints.py righe
+    135-142). Proibizione di coppie di celle: per ogni cella ammissibile
+    `(day, slot)` di un'attivita' di A la cui fine `(day, slot + durata)` e'
+    anche una cella ammissibile di un'attivita' di B, si vieta che le due
+    valgano insieme. Nessuna variabile derivata serve.
+
+    Il `continue` con `pa` e `pb` **entrambe congelate** e' `any_free`: «un
+    fatto, non una decisione» — e' diverso dal `continue` su un **tetto** che
+    le Rulings 14/23/28 vietano (li' saltare perderebbe il clamp a zero di
+    `residual_cap`). Qui non c'e' alcun tetto: e' una clausola fra due
+    letterali, e con entrambi gia' fissati dal passato non c'e' nulla da
+    decidere — il piazzamento congelato o rispetta gia' il vincolo o non lo
+    rispetta, e non e' compito di questo `post()` giudicarlo.
+
+    Con **una sola** congelata la clausola resta e forza a zero il
+    letterale libero corrispondente a quella cella — cio' che impedisce la
+    sequenza. ⚠ Questo **puo' rendere il modello INFEASIBLE** se la libera
+    non ha altro posto dove andare: e' testualmente cio' che ADR-018 concede
+    (esibito in tests/test_solver_subject_maxhours.py,
+    test_adr018_forbidden_sequence_una_congelata_forza_infattibile)."""
+    TYPE = T.FORBIDDEN_SEQUENCE
+
+    def post(self, ctx, model, row, keys, rep):
+        v = ctx.vocab
+        a = v.subject_activities(keys, row.subject_a_id, signature=rep)
+        b = v.subject_activities(keys, row.subject_b_id, signature=rep)
+        for pa in a:
+            durata = ctx.activities[pa].duration_slots
+            for pb in b:
+                if pb == pa:
+                    continue
+                if not any_free(ctx, (pa, pb)):
+                    continue   # un fatto, non una decisione
+                for (day, slot) in sorted(ctx.cells[pa]):
+                    fine = slot + durata
+                    if (day, fine) not in ctx.cells[pb]:
+                        continue
+                    model.AddBoolOr([ctx.x[(pa, day, slot)].Not(),
+                                     ctx.x[(pb, day, fine)].Not()])

@@ -46,11 +46,13 @@ def test_i_builder_tradotti_finora():
     dopo task. Qui si fissa lo stato corrente — dopo il Task 9, i sette del
     Task 6, i tre minimi garantiti del Task 7 (MIN_DISTRIBUTION,
     ARRIVAL_DEPARTURE, FREE_GUARANTEED), MAX_PRESENCE del Task 8, le due
-    sedi del Task 9 (MAX_SITE_CHANGES, structural:site_transition), e i due
-    nuovi secchi di materia del Task 10 (SAME_HALF_DAY_INCOMPATIBLE,
-    TWO_DAYS_INCOMPATIBLE, sullo scheletro SubjectBuilder) — cosi' una
-    registrazione dimenticata o una di troppo si vede subito, invece di
-    dipendere dalla memoria di chi legge."""
+    sedi del Task 9 (MAX_SITE_CHANGES, structural:site_transition), i due
+    secchi di materia del Task 10 (SAME_HALF_DAY_INCOMPATIBLE,
+    TWO_DAYS_INCOMPATIBLE, sullo scheletro SubjectBuilder) e i tre del
+    Task 11 (MAX_HOURS_DAY, MAX_HOURS_HALF_DAY sulla base comune
+    `_Bucketed`, e FORBIDDEN_SEQUENCE) — cosi' una registrazione
+    dimenticata o una di troppo si vede subito, invece di dipendere dalla
+    memoria di chi legge."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
     assert set(BUILDERS) == {
@@ -69,4 +71,7 @@ def test_i_builder_tradotti_finora():
         SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE,
         SubjectConstraint.Type.SAME_HALF_DAY_INCOMPATIBLE,
         SubjectConstraint.Type.TWO_DAYS_INCOMPATIBLE,
+        SubjectConstraint.Type.MAX_HOURS_DAY,
+        SubjectConstraint.Type.MAX_HOURS_HALF_DAY,
+        SubjectConstraint.Type.FORBIDDEN_SEQUENCE,
     }

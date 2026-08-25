@@ -308,9 +308,10 @@ def run_family(key, seed):
 
 
 from domain.models import (
-    InstituteSettings, ResourceTimeConstraint, ResourceUnavailability,
-    SubjectConstraint,
+    ClassPart, InstituteSettings, ResourceTimeConstraint,
+    ResourceUnavailability, SubjectConstraint,
 )
+from domain.models.resources import Resource
 
 RT = ResourceTimeConstraint.Type
 ST = SubjectConstraint.Type
@@ -632,6 +633,297 @@ def _derive_two_days(w):
                 SubjectConstraint.objects.create(
                     subject_a=a, subject_b=b, school_class=klass,
                     type=ST.TWO_DAYS_INCOMPATIBLE)
+                creata += 1
+    return creata
+
+
+def _massimo_pacchetto(opzioni):
+    """Il massimo di minuti impacchettabile scegliendo, per ciascuna
+    attivita' selezionata (una voce di `opzioni`), una delle sue fasce di
+    partenza ammissibili — senza che due selezionate si sovrappongano.
+    Ricerca esatta con memoizzazione su (indice, maschera di fasce
+    occupate): lo spazio di stati e' piccolo per costruzione (al piu'
+    `slots_per_day` fasce, poche attivita' per coppia (classe, materia)),
+    quindi l'esaustivita' costa poco."""
+    memo = {}
+
+    def rec(i, mask):
+        if i == len(opzioni):
+            return 0
+        chiave = (i, mask)
+        if chiave in memo:
+            return memo[chiave]
+        minuti, durata, starts = opzioni[i]
+        migliore = rec(i + 1, mask)   # non selezionare questa attivita'
+        for s in starts:
+            occ = ((1 << durata) - 1) << s
+            if occ & mask:
+                continue   # si sovrappone a una gia' selezionata
+            migliore = max(migliore, minuti + rec(i + 1, mask | occ))
+        memo[chiave] = migliore
+        return migliore
+
+    return rec(0, 0)
+
+
+def _capienza_secchio(w, kind, rep, aids):
+    """Il massimo di minuti che possono **partire** nello stesso secchio, in
+    un giorno qualunque, senza sovrapporsi — fra le attivita' di `aids` che
+    sono co-attive nella firma `rep`. Stessa forma di `_ci_stanno`:
+    enumerazione esaustiva sulle collocazioni ammissibili di ciascuna
+    attivita' (`_collocazioni`), non formula chiusa — la formula chiusa su
+    questo branch e' stata provata e scartata due volte (Ruling 51).
+
+    E' un **limite superiore esatto sulla sola geometria** (Ruling 63): non
+    vede le altre attivita' che occupano le fasce (di altre materie o
+    classi), le indisponibilita', le sedi, i giorni festivi. Un secchio che
+    qui risulta riempibile oltre `param` puo' quindi risultare comunque
+    inviolabile per via del resto del modello — stabilirlo richiede di
+    chiedere al solver (Ruling 64, rimandato al Task 17 dalla Ruling 65). E'
+    la direzione giusta in cui sbagliare: generosa, mai stretta — sbagliare
+    per eccesso costa un caso di banco debole, sbagliare per difetto costa
+    copertura persa in silenzio.
+
+    ⚠ **Ma «generosa, mai stretta» ha due precondizioni, e sono proprieta'
+    del testimone, non del dominio** (Important 2, ri-review Task 11).
+    `_massimo_pacchetto` vieta la **sovrapposizione**, e questo e' un limite
+    superiore vero solo finche':
+
+    1. la capienza simultanea delle risorse vale 1 — il default di
+       `Resource.simultaneous_capacity`, che l'harness non tocca mai. Con
+       capienza cumulativa (`OccupationBuilder` la supporta, ed e' feature
+       EDT documentata) due attivita' co-attive della stessa materia possono
+       **condividere** la fascia e sommarsi entrambe nello stesso secchio;
+    2. la classe non ha **partizioni**. Il checker prende
+       `keys = {classe, *tutte le sue parti}` (`_unit_keys`,
+       subject_constraints.py righe 17-24): due attivita' su parti diverse
+       (sdoppiamento, `_REL`/`_ALT`) sono legittimamente simultanee e cadono
+       **tutte e due** nella stessa somma di secchio.
+
+    In entrambi i casi il massimo reale supera questa capienza, la guardia
+    diventa **stretta**, e scarta righe violabili — cioe' esattamente il
+    modo di sbagliare che il capoverso qui sopra dichiara di evitare. Oggi
+    non morde (misurato: capienza 1 ovunque, zero partizioni nel testimone),
+    ma il testimone cambiera' forma: le due condizioni sono asserite sotto,
+    cosi' chi le rompe se ne accorge invece di perdere copertura in
+    silenzio."""
+    grid = w.env["grid"]
+    # Le due precondizioni del capoverso qui sopra. Asserite invece che
+    # sperate: se il testimone acquista capienza cumulativa o partizioni,
+    # questa guardia smette di essere un limite superiore e comincia a
+    # scartare righe violabili — un modo di sbagliare che non si vede dai
+    # verdi, perche' si manifesta come copertura che non c'e' piu'.
+    assert not Resource.objects.filter(simultaneous_capacity__gt=1).exists(), (
+        "_capienza_secchio presuppone capienza simultanea 1: con risorse "
+        "cumulative due attivita' possono condividere la fascia, e il "
+        "massimo reale supera questo limite")
+    assert not ClassPart.objects.exists(), (
+        "_capienza_secchio presuppone classi senza partizioni: due attivita' "
+        "su parti diverse sono simultanee e cadono entrambe nella stessa "
+        "somma di secchio (_unit_keys)")
+
+    def secchio(s):
+        return 0 if kind == "day" else int(s >= grid.morning_end_slot)
+
+    buckets = (0,) if kind == "day" else (0, 1)
+    migliore = 0
+    for b in buckets:
+        opzioni = []
+        for aid in aids:
+            if rep not in w.weeks_of[aid]:
+                continue
+            starts = [s for s in _collocazioni(w, aid) if secchio(s) == b]
+            if starts:
+                opzioni.append((w.act(aid).duration_minutes,
+                               w.act(aid).duration_slots, starts))
+        migliore = max(migliore, _massimo_pacchetto(opzioni))
+    return migliore
+
+
+def _derive_max_hours_subject(w, tipo, kind):
+    """Comune a MAX_HOURS_DAY e MAX_HOURS_HALF_DAY: per ogni coppia (classe,
+    materia) del testimone, calcola `param` e verifica che la riga sia
+    **violabile in linea di principio** prima di crearla — altrimenti nasce
+    una riga che nessun piazzamento puo' violare (Ruling 54, misurata prima
+    del dispatch: il piano, senza queste correzioni, produceva righe vacue
+    su una minoranza consistente dei seed di prova).
+
+    **Correzione 1 (Ruling 56): `param` per firma di settimana, non
+    sull'unione.** `_try_place` permette a due attivita' di settimane
+    disgiunte di condividere la cella, e il checker valuta uno `ScheduleState`
+    **per firma** — sommare i minuti per secchio su tutti i piazzamenti,
+    ignorando le maschere, produrrebbe un tetto piu' largo del necessario (il
+    testimone lo rispetterebbe comunque, ma il vincolo sarebbe piu' debole di
+    quanto la riga dovrebbe essere). Qui `param` e' il massimo, sulle firme,
+    della somma massima per secchio **dentro quella firma**.
+
+    **Correzione 2 (Ruling 55, sostituita dalla Ruling 63): guardia di
+    riempimento per firma.** La prima versione usava due condizioni
+    congiunte e indipendenti — il totale della coppia per firma supera
+    `param`, e una coppia co-attiva "ci sta" nello stesso secchio
+    (`_coppia_violabile`/`_ci_stanno`) — ma nessuna delle due guarda **quanto
+    ci sta davvero in un secchio**: la review (Ruling 63) ha mostrato che sul
+    secchio mezza giornata 4 righe su 20 restano inviolabili nonostante
+    superino entrambe, perche' *ci sta una coppia* non implica *la somma
+    raggiungibile supera il tetto* (potrebbero starci solo le due piu'
+    corte). La sostituisce `_capienza_secchio`: per ogni firma, il massimo di
+    minuti impacchettabile nello stesso secchio (non solo in coppie) senza
+    sovrapposizioni. E' un limite superiore **esatto sulla geometria**, quindi
+    **sussume entrambe le guardie precedenti**: se la capienza supera
+    `param`, il totale della firma la supera per forza (la capienza e' un
+    sottoinsieme del totale), e la capienza non puo' essere raggiunta da una
+    sola attivita' (ogni attivita' compare gia' da sola nel proprio secchio
+    della sua firma nel testimone, quindi il suo stesso `param` la domina per
+    costruzione — vedi Ruling 69c) — servono sempre almeno due attivita', cioe'
+    una coppia che ci sta. — **Decisione presa qui**: le due guardie vecchie
+    sono **rimosse**, non tenute in parallelo: duplicarle avrebbe significato
+    portare avanti una versione piu' debole della stessa idea, ed e'
+    esattamente il tipo di ridondanza che questo modulo evita altrove (una
+    primitiva per concetto).
+
+    ⚠ **Il residuo non si chiude qui (Ruling 64).** `_capienza_secchio` vede
+    la sola geometria: non le altre risorse, le indisponibilita', le sedi.
+    Una riga la cui capienza supera `param` puo' quindi restare comunque
+    inviolabile per un motivo che il derivatore non puo' vedere — misurato
+    dal revisore: due delle quattro righe originariamente inviolabili lo
+    erano per `structural:site_transition` (le attivita' che sommerebbero
+    abbastanza minuti hanno sedi diverse, e non possono stare in fasce
+    adiacenti), e restano inviolabili anche dopo questa guardia. Non e' un
+    difetto di questa guardia: e' il limite dichiarato di un derivatore che
+    non puo' reimplementare l'intero modello per sapere se una riga e'
+    davvero raggiungibile — quello e' compito della sonda esatta valutata e
+    **non adottata** qui (Ruling 65), rimandata al Task 17.
+
+    **Correzione 3: accumula su tutte le coppie (classe, materia)**, non
+    `return` alla prima — come i tre derivatori di SAME_DAY/SAME_HALF_DAY/
+    TWO_DAYS qui sopra."""
+    grid = w.env["grid"]
+    creata = 0
+    for klass in w.env["classes"]:
+        for subject in w.env["subjects"]:
+            aids = [aid for aid in w.placement
+                    if klass.pk in w.tokens[aid]
+                    and w.act(aid).subject_id == subject.pk]
+            if not aids:
+                continue
+            param = 0
+            for rep, _ in w.signatures:
+                per_secchio = defaultdict(int)
+                for aid in aids:
+                    if rep not in w.weeks_of[aid]:
+                        continue
+                    day, slot = w.placement[aid]
+                    secchio = (day if kind == "day"
+                               else day * 2 + (slot >= grid.morning_end_slot))
+                    per_secchio[secchio] += w.act(aid).duration_minutes
+                if per_secchio:
+                    param = max(param, max(per_secchio.values()))
+            if param == 0:
+                continue
+            if not any(_capienza_secchio(w, kind, rep, aids) > param
+                       for rep, _ in w.signatures):
+                continue
+            SubjectConstraint.objects.create(
+                subject_a=subject, subject_b=subject, school_class=klass,
+                type=tipo, param=param)
+            creata += 1
+    return creata
+
+
+@deriver(ST.MAX_HOURS_DAY, {"subject_max_hours_day"})
+def _derive_max_hours_day(w):
+    return _derive_max_hours_subject(w, ST.MAX_HOURS_DAY, "day")
+
+
+@deriver(ST.MAX_HOURS_HALF_DAY, {"subject_max_hours_half_day"})
+def _derive_max_hours_half_day(w):
+    return _derive_max_hours_subject(w, ST.MAX_HOURS_HALF_DAY, "half")
+
+
+def _adiacenza_raggiungibile(w, a, b):
+    """Esiste una fascia di partenza ammissibile per `a` la cui fine e' anche
+    una fascia di partenza ammissibile per `b`, nello stesso giorno?
+
+    Condizione **necessaria, non sufficiente** per la violabilita' di
+    FORBIDDEN_SEQUENCE su questa coppia — stessa forma di `_ci_stanno`:
+    ignora le altre attivita', le indisponibilita' e i giorni festivi.
+    Sbagliare per eccesso (dire raggiungibile quando in pratica non lo sara'
+    mai, per via del resto dell'orario) costa un caso di banco debole;
+    sbagliare per difetto costa copertura persa in silenzio — quindi qui, se
+    proprio si deve sbagliare, si sbaglia per eccesso."""
+    da = w.act(a).duration_slots
+    ammissibili_b = set(_collocazioni(w, b))
+    return any(sa + da in ammissibili_b for sa in _collocazioni(w, a))
+
+
+def _coppia_adiacente_violabile(w, aids_a, aids_b):
+    """Guardie 2 e 3 della Ruling 57: serve una coppia (attivita' di A,
+    attivita' di B) che sia insieme **co-attiva** in qualche firma di
+    settimana e **geometricamente raggiungibile** come sequenza
+    (`_adiacenza_raggiungibile`). Stessa forma di `_coppia_violabile`, ma su
+    due liste distinte invece che sulle coppie interne a una sola: qui la
+    relazione e' orientata (A prima, B dopo), mai il contrario."""
+    for a in aids_a:
+        for b in aids_b:
+            if not any(rep in w.weeks_of[a] and rep in w.weeks_of[b]
+                       for rep, _ in w.signatures):
+                continue
+            if _adiacenza_raggiungibile(w, a, b):
+                return True
+    return False
+
+
+@deriver(ST.FORBIDDEN_SEQUENCE, {"subject_forbidden_sequence"})
+def _derive_forbidden_sequence(w):
+    """Cerca, per ogni classe, una coppia **ordinata** di materie (A prima, B
+    dopo) che nel testimone non compaia mai adiacente. Scorre tutte le
+    coppie, accumula invece di fermarsi alla prima.
+
+    **Tre guardie di violabilita' (Ruling 57)**, oltre a "mai adiacente nel
+    testimone":
+
+    1. **entrambe** le materie devono avere attivita' nella classe — la forma
+       piu' cruda di vacuita' (seed 2 del banco, misurato prima del
+       dispatch): con una materia **assente**, `_placed_of` nel checker
+       restituisce la lista vuota e il ciclo non entra mai, quindi "mai
+       adiacente" e' banalmente vero pur non esistendo nulla da violare;
+    2. una coppia (attivita' di A, attivita' di B) dev'essere **co-attiva**
+       in qualche firma di settimana;
+    3. l'adiacenza dev'essere **geometricamente raggiungibile**
+       (`_coppia_adiacente_violabile`, che riusa `_collocazioni` con le
+       stesse regole di `_try_place` invece di riscriverle)."""
+    creata = 0
+    for klass in w.env["classes"]:
+        per_materia = defaultdict(list)
+        for aid in w.placement:
+            if klass.pk in w.tokens[aid]:
+                per_materia[w.act(aid).subject_id].append(aid)
+        adiacenti = set()
+        for aid, (day, slot) in w.placement.items():
+            if klass.pk not in w.tokens[aid]:
+                continue
+            fine = slot + w.act(aid).duration_slots
+            for altro, (day2, slot2) in w.placement.items():
+                if (altro != aid and day2 == day and slot2 == fine
+                        and klass.pk in w.tokens[altro]):
+                    adiacenti.add((w.act(aid).subject_id, w.act(altro).subject_id))
+        for a in w.env["subjects"]:
+            aids_a = per_materia.get(a.pk, [])
+            if not aids_a:
+                continue
+            for b in w.env["subjects"]:
+                if a.pk == b.pk:
+                    continue
+                aids_b = per_materia.get(b.pk, [])
+                if not aids_b:
+                    continue
+                if (a.pk, b.pk) in adiacenti:
+                    continue
+                if not _coppia_adiacente_violabile(w, aids_a, aids_b):
+                    continue
+                SubjectConstraint.objects.create(
+                    subject_a=a, subject_b=b, school_class=klass,
+                    type=ST.FORBIDDEN_SEQUENCE)
                 creata += 1
     return creata
 
