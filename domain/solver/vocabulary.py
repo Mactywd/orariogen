@@ -138,6 +138,31 @@ class Vocabulary:
         in testa a domain/analysis/checkers/subject_constraints.py."""
         return day if kind == "day" else day * 2 + self.half_of(slot)
 
+    def subject_literals(self, keys, subject_id, kind, bucket, signature=None):
+        """[(id attivita', letterale)] delle collocazioni di quella materia in
+        quel secchio, sull'unita' `keys`. Base comune di `subject_bucket`
+        (l'indicatore aggregato) e dei builder che devono distinguere le
+        attivita' **congelate** da quelle **libere** dentro un secchio, per
+        ADR-018 — l'aggregato da solo non lo permette."""
+        keys = frozenset(keys)
+        def make():
+            active = (None if signature is None
+                      else self.ctx.states[signature].activities)
+            out = []
+            for aid, act in self.ctx.activities.items():
+                if act.subject_id != subject_id:
+                    continue
+                if not (self.ctx.tokens[aid] & keys):
+                    continue
+                if active is not None and aid not in active:
+                    continue
+                for (day, slot) in sorted(self.ctx.cells[aid]):
+                    if self.bucket_of(kind, day, slot) == bucket:
+                        out.append((aid, self.ctx.x[(aid, day, slot)]))
+            return out
+        return self._memo("subject_literals",
+                          (signature, keys, subject_id, kind, bucket), make)
+
     def subject_bucket(self, keys, subject_id, kind, bucket, signature=None):
         """La materia `subject_id` occorre in quel secchio, sull'unita' `keys`.
         `keys` e' l'espansione dell'unita' della riga di vincolo, gia'
@@ -146,19 +171,8 @@ class Vocabulary:
         def make():
             var = self.model.NewBoolVar(
                 f"subj_{subject_id}_{kind}_{bucket}_{signature}_{id(keys)}")
-            active = (None if signature is None
-                      else self.ctx.states[signature].activities)
-            lits = []
-            for aid, act in self.ctx.activities.items():
-                if act.subject_id != subject_id:
-                    continue
-                if not (self.ctx.tokens[aid] & keys):
-                    continue
-                if active is not None and aid not in active:
-                    continue
-                for (day, slot) in self.ctx.cells[aid]:
-                    if self.bucket_of(kind, day, slot) == bucket:
-                        lits.append(self.ctx.x[(aid, day, slot)])
+            lits = [lit for _, lit in
+                    self.subject_literals(keys, subject_id, kind, bucket, signature)]
             return self._max_or_zero(var, lits)
         return self._memo("subj", (signature, keys, subject_id, kind, bucket), make)
 

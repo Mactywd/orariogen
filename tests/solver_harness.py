@@ -430,6 +430,88 @@ def _derive_max_half_days(w):
     return 1 if peggiore > 0 else 0
 
 
+def _collocazioni(w, aid):
+    """Le fasce di **partenza** ammissibili per un'attivita' in un giorno
+    qualunque: dentro la giornata, e senza scavalcare l'intervallo quando
+    l'attivita' lo rispetta. Stessa regola di `_try_place`."""
+    grid, act = w.env["grid"], w.act(aid)
+    boundary = w.env["break_boundary"]
+    return [s for s in range(grid.slots_per_day - act.duration_slots + 1)
+            if not (act.respects_breaks
+                    and s < boundary < s + act.duration_slots)]
+
+
+def _ci_stanno(w, kind, a, b):
+    """Due attivita' possono partire nello **stesso secchio**, sulla stessa
+    unita' (quindi senza sovrapporsi), in un giorno qualunque?
+
+    Enumerazione esaustiva delle coppie di fasce di partenza — al piu' 36
+    combinazioni — invece di una formula chiusa. La formula chiusa e' stata
+    provata e scartata due volte:
+
+    1. `somma delle durate <= larghezza del secchio` **non e' necessaria**:
+       il secchio si attribuisce alla fascia di **partenza** (regola in testa
+       a domain/analysis/checkers/subject_constraints.py), quindi la seconda
+       attivita' puo' *sconfinare* nel pomeriggio restando attribuita alla
+       mattina. Escludeva righe violabili: su 250 seed ne escludeva 22, di
+       cui **13 violabili**, e zero sui seed 1-5 — invisibile esattamente
+       dove si guarda di solito (Ruling 48);
+    2. la versione corretta di quella formula e' necessaria ma **troppo
+       generosa**: non modella l'intervallo, e riammetteva il seed 2, dove la
+       riga e' inviolabile per via di un `Break` con `respects_breaks`.
+
+    L'enumerazione le copre entrambe, e resta una condizione **necessaria**:
+    se le due attivita' non coesistono nemmeno da sole, a maggior ragione non
+    coesistono con il resto dell'orario addosso. Non e' sufficiente — ignora
+    le altre attivita', le indisponibilita' e i giorni festivi — ma sbagliare
+    in questa direzione costa un caso di banco debole, mentre sbagliare
+    nell'altra costa **copertura persa in silenzio**."""
+    grid = w.env["grid"]
+    da, db = w.act(a).duration_slots, w.act(b).duration_slots
+
+    def secchio(s):
+        return 0 if kind == "day" else s >= grid.morning_end_slot
+
+    for sa in _collocazioni(w, a):
+        for sb in _collocazioni(w, b):
+            if sa + da > sb and sb + db > sa:
+                continue          # si sovrappongono
+            if secchio(sa) == secchio(sb):
+                return True
+    return False
+
+
+def _coppia_violabile(w, kind, aids):
+    """La riga su queste attivita' e' violabile **in linea di principio**?
+    Serve una coppia che sia insieme:
+
+    1. **co-attiva** in qualche firma di settimana — due attivita' con
+       maschere disgiunte non compaiono mai nello stesso `ScheduleState`,
+       quindi `len(la) > 1` e' irraggiungibile e la riga e' inviolabile
+       (quarta forma di vacuita', Ruling 49: assente sui seed 1-5, presente
+       dal seed 8 in poi);
+    2. **collocabile** nello stesso secchio senza sovrapporsi, secondo
+       `_ci_stanno` (che tiene conto anche degli intervalli).
+
+    Copre anche il caso «meno di due attivita'», che era una guardia a se'
+    (con meno di due il ciclo non produce nessuna coppia).
+
+    ⚠ E' una condizione **necessaria per la violabilita', non sufficiente**:
+    ignora le altre attivita' che occupano le fasce, le indisponibilita' e i
+    giorni festivi. Una riga che la supera puo' comunque risultare
+    inviolabile. Va bene cosi': una guardia troppo generosa costa un caso di
+    banco debole, una troppo stretta costa **copertura persa in silenzio**,
+    che e' molto peggio."""
+    for i, a in enumerate(aids):
+        for b in aids[i + 1:]:
+            if not any(rep in w.weeks_of[a] and rep in w.weeks_of[b]
+                       for rep, _ in w.signatures):
+                continue
+            if _ci_stanno(w, kind, a, b):
+                return True
+    return False
+
+
 @deriver(ST.SAME_DAY_INCOMPATIBLE, {"subject_same_day"})
 def _derive_same_day(w):
     """Crea una riga per ogni coppia (classe, materia) del testimone con
@@ -438,23 +520,119 @@ def _derive_same_day(w):
     non violabile — una terza forma di vacuita' scovata in review, distinta
     dal "nessuna coppia trovata" gia' gestito. Non si ferma alla prima
     coppia che qualifica: continua per sommare piu' potere vincolante
-    possibile (Important 2, review Task 5). Restituisce il numero di righe
-    create: zero se nessuna coppia qualifica per questo seed."""
+    possibile (Important 2, review Task 5).
+
+    Le altre due forme di vacuita' — la coppia dev'essere co-attiva in
+    qualche firma di settimana, e le due attivita' devono starci nello stesso
+    giorno — stanno in `_coppia_violabile` (Rulings 48-49, review Task 10).
+    Sul secchio giornata nessuna delle due morde oggi: su 250 seed la
+    condizione geometrica non esclude **mai** nulla, e le maschere disgiunte
+    compaiono dal seed 8 in poi. Sono qui perche' il testimone cambiera'
+    forma, e allora nessuno se ne accorgerebbe.
+
+    Restituisce il numero di righe create: zero se nessuna coppia qualifica
+    per questo seed."""
     creata = 0
     for klass in w.env["classes"]:
         for subject in w.env["subjects"]:
+            aids = [aid for aid in w.placement
+                    if klass.pk in w.tokens[aid]
+                    and w.act(aid).subject_id == subject.pk]
             per_giorno = defaultdict(int)
-            for aid, (day, _slot) in w.placement.items():
-                if klass.pk in w.tokens[aid] and w.act(aid).subject_id == subject.pk:
-                    per_giorno[day] += 1
+            for aid in aids:
+                per_giorno[w.placement[aid][0]] += 1
             if not per_giorno or max(per_giorno.values()) != 1:
                 continue
-            if sum(per_giorno.values()) < 2:
+            if not _coppia_violabile(w, "day", aids):
                 continue
             SubjectConstraint.objects.create(
                 subject_a=subject, subject_b=subject, school_class=klass,
                 type=ST.SAME_DAY_INCOMPATIBLE)
             creata += 1
+    return creata
+
+
+@deriver(ST.SAME_HALF_DAY_INCOMPATIBLE, {"subject_same_half_day"})
+def _derive_same_half_day(w):
+    """Come _derive_same_day, sul secchio mezza giornata invece che giorno:
+    scorre tutte le coppie (classe, materia), accumula invece di fermarsi
+    alla prima. Stessa vacuita' aggiuntiva scovata in review sull'originale:
+    sotto due occorrenze totali il vincolo e' soddisfatto per costruzione e
+    non violabile — una riga creata ma matematicamente impossibile da
+    violare.
+
+    Le altre due forme di vacuita' stanno in `_coppia_violabile` (Rulings
+    48-49): co-attivita' in qualche firma di settimana, e compatibilita'
+    geometrica col secchio. Qui la seconda **morde davvero** — al seed 2 la
+    famiglia salta per questo — mentre sul secchio giornata non e' mai
+    scattata.
+
+    ⚠ Limite strutturale della famiglia, non solo di questo derivatore: il
+    secchio mezza giornata e' due volte piu' fine di quello giornata, quindi
+    una soluzione qualsiasi lo soddisfa per caso piu' spesso, e il potere
+    vincolante e' strutturalmente piu' basso di quello di SAME_DAY. I due
+    numeri misurati stanno nel registro (Rulings 43-44), non qui: in
+    docstring invecchierebbero in silenzio a ogni cambio del banco
+    (Ruling 50).
+
+    Restituisce il numero di righe create: zero se nessuna coppia qualifica
+    per questo seed."""
+    grid = w.env["grid"]
+    creata = 0
+    for klass in w.env["classes"]:
+        for subject in w.env["subjects"]:
+            aids = [aid for aid in w.placement
+                    if klass.pk in w.tokens[aid]
+                    and w.act(aid).subject_id == subject.pk]
+            per_meta = defaultdict(int)
+            for aid in aids:
+                day, slot = w.placement[aid]
+                per_meta[(day, slot >= grid.morning_end_slot)] += 1
+            if not per_meta or max(per_meta.values()) != 1:
+                continue
+            if not _coppia_violabile(w, "half", aids):
+                continue
+            SubjectConstraint.objects.create(
+                subject_a=subject, subject_b=subject, school_class=klass,
+                type=ST.SAME_HALF_DAY_INCOMPATIBLE)
+            creata += 1
+    return creata
+
+
+@deriver(ST.TWO_DAYS_INCOMPATIBLE, {"subject_two_days"})
+def _derive_two_days(w):
+    """Cerca, per ogni classe, una coppia di materie **entrambe presenti** nel
+    testimone che non compaiano mai in giorni consecutivi. Scorre tutte le
+    coppie, accumula invece di fermarsi alla prima.
+
+    Due vacuita' oltre a "nessuna coppia trovata": una materia **assente**
+    dalla classe da' `giorni[pk]` vuoto, e con `defaultdict(set)` l'assenza
+    non si distingue dalla presenza non-consecutiva — `not any(...)` sarebbe
+    banalmente vero pur non esistendoci nulla da violare, e nascerebbe una
+    riga che nessun piazzamento puo' violare. E su un ciclo a un solo giorno
+    non esiste alcun successore (`d + 1` esce sempre dalla settimana), quindi
+    ogni riga sarebbe vacua per costruzione della griglia, non del
+    testimone."""
+    if w.env["grid"].days_per_cycle < 2:
+        return 0
+    creata = 0
+    for klass in w.env["classes"]:
+        giorni = defaultdict(set)
+        for aid, (day, _slot) in w.placement.items():
+            if klass.pk in w.tokens[aid]:
+                giorni[w.act(aid).subject_id].add(day)
+        for a in w.env["subjects"]:
+            if not giorni[a.pk]:
+                continue
+            for b in w.env["subjects"]:
+                if a.pk == b.pk or not giorni[b.pk]:
+                    continue
+                if any(d + 1 in giorni[b.pk] for d in giorni[a.pk]):
+                    continue
+                SubjectConstraint.objects.create(
+                    subject_a=a, subject_b=b, school_class=klass,
+                    type=ST.TWO_DAYS_INCOMPATIBLE)
+                creata += 1
     return creata
 
 

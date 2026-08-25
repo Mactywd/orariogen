@@ -45,9 +45,11 @@ def test_i_builder_tradotti_finora():
     """Non piu' i cinque dello spike: il modello completo li accresce task
     dopo task. Qui si fissa lo stato corrente — dopo il Task 9, i sette del
     Task 6, i tre minimi garantiti del Task 7 (MIN_DISTRIBUTION,
-    ARRIVAL_DEPARTURE, FREE_GUARANTEED), MAX_PRESENCE del Task 8, e le due
-    sedi del Task 9 (MAX_SITE_CHANGES, structural:site_transition) — cosi'
-    una registrazione dimenticata o una di troppo si vede subito, invece di
+    ARRIVAL_DEPARTURE, FREE_GUARANTEED), MAX_PRESENCE del Task 8, le due
+    sedi del Task 9 (MAX_SITE_CHANGES, structural:site_transition), e i due
+    nuovi secchi di materia del Task 10 (SAME_HALF_DAY_INCOMPATIBLE,
+    TWO_DAYS_INCOMPATIBLE, sullo scheletro SubjectBuilder) — cosi' una
+    registrazione dimenticata o una di troppo si vede subito, invece di
     dipendere dalla memoria di chi legge."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
@@ -65,4 +67,6 @@ def test_i_builder_tradotti_finora():
         ResourceTimeConstraint.Type.MAX_PRESENCE,
         ResourceTimeConstraint.Type.MAX_SITE_CHANGES,
         SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE,
+        SubjectConstraint.Type.SAME_HALF_DAY_INCOMPATIBLE,
+        SubjectConstraint.Type.TWO_DAYS_INCOMPATIBLE,
     }
