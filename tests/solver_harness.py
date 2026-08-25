@@ -29,7 +29,8 @@ from domain.analysis.findings import Severity
 from domain.analysis.state import activity_tokens
 from domain.models import (
     Activity, Break, Discipline, Holiday, Period, Placement, Schedule,
-    SchoolClass, SchoolYear, StudyPlan, Subject, Teacher, TimeGrid, Service,
+    SchoolClass, SchoolYear, Site, StudyPlan, Subject, Teacher, TimeGrid,
+    Service,
 )
 from domain.solver.model import apply, solve
 
@@ -112,9 +113,13 @@ def _school(rng):
     teachers = [Teacher.objects.create(name=f"Doc {i}", last_name=f"D{i}",
                                        first_name=str(i))
                 for i in range(4)]
+    # Le sedi (Task 9): create sempre, cosi' _sedi(ctx) ne vede almeno due
+    # appena qualche attivita' ha una sede nota (_make_activities le assegna
+    # a meta').
+    sites = [Site.objects.create(name=n) for n in ("Centrale", "Succursale")]
     return {"grid": grid, "year": year, "period": period, "schedule": schedule,
             "discipline": disc, "subjects": subjects, "plans": plans,
-            "classes": classes, "teachers": teachers,
+            "classes": classes, "teachers": teachers, "sites": sites,
             "break_boundary": break_boundary,
             "holiday": (holiday_week, holiday_day)}
 
@@ -141,6 +146,9 @@ def _make_activities(rng, env):
                 week_mask=rng.choice(MASKS), respects_breaks=sensibile)
             act.teachers.add(rng.choice(env["teachers"]))
             act.classes.add(klass)
+            if rng.random() < 0.5:
+                act.site = rng.choice(env["sites"])
+                act.save()
             service, _ = Service.objects.get_or_create(
                 study_plan=klass.study_plan, subject=subject,
                 defaults={"class_minutes": 0})
@@ -295,7 +303,10 @@ def run_family(key, seed):
     return w
 
 
-from domain.models import ResourceTimeConstraint, ResourceUnavailability, SubjectConstraint
+from domain.models import (
+    InstituteSettings, ResourceTimeConstraint, ResourceUnavailability,
+    SubjectConstraint,
+)
 
 RT = ResourceTimeConstraint.Type
 ST = SubjectConstraint.Type
@@ -552,3 +563,83 @@ def _derive_max_presence(w):
         resource=docente, type=RT.MAX_PRESENCE,
         params={"max_minutes": picco, "days": giorni})
     return 1
+
+
+@deriver(RT.MAX_SITE_CHANGES, {"max_site_changes"})
+def _derive_max_site_changes(w):
+    """I cambi di sede osservati nel testimone per il docente scelto, per
+    giornata e in totale sulla settimana, presi sulla firma peggiore. Con
+    l'uguaglianza il vincolo e' soddisfatto e stretto.
+
+    Vacua (ritorna 0, correzione 3 del brief, Ruling 29) se il docente scelto
+    a caso ha **meno di due sedi distinte** fra le proprie attivita' del
+    testimone (nessuna sede, o una sola): in quel caso «cambio di sede» non
+    e' nemmeno strutturalmente possibile per lui — nessuna coppia di sue
+    attivita' puo' mai differire di sede, qualunque arrangiamento scelga il
+    solver — quindi il tetto, per quanto stretto (anche zero), non potrebbe
+    mai essere violato da un builder rotto (stessa convenzione di
+    _derive_max_half_days: non basta che la riga esista, deve poter essere
+    violata)."""
+    docente = w.rng.choice(w.env["teachers"])
+    sedi_docente = {w.act(aid).site_id for aid in w.placement
+                    if docente.pk in w.tokens[aid]
+                    and w.act(aid).site_id is not None}
+    if len(sedi_docente) < 2:
+        return 0
+    per_giorno, per_settimana = 0, 0
+    for rep, _ in w.signatures:
+        settimana = 0
+        for day, fasce in w.resource_days(docente.pk, rep).items():
+            sequenza = []
+            for f in fasce:
+                for aid, (d, slot) in w.placement.items():
+                    if (d == day and slot == f and docente.pk in w.tokens[aid]
+                            and w.act(aid).site_id is not None
+                            and rep in w.weeks_of[aid]):
+                        sequenza.append(w.act(aid).site_id)
+            cambi = sum(x != y for x, y in zip(sequenza, sequenza[1:]))
+            per_giorno = max(per_giorno, cambi)
+            settimana += cambi
+        per_settimana = max(per_settimana, settimana)
+    ResourceTimeConstraint.objects.create(
+        resource=docente, type=RT.MAX_SITE_CHANGES,
+        params={"per_day": per_giorno, "per_week": per_settimana})
+    return 1
+
+
+@deriver("structural:site_transition", {"site_transition"})
+def _derive_site_transition(w):
+    """Il numero di fasce libere che il testimone garantisce gia' fra due
+    lezioni su sedi diverse che condividono una chiave (stessa classe o
+    stesso docente), nello stesso giorno. Derivato sulle **coppie vicine**,
+    cioe' contro la regola piu' stretta del builder e non contro quella del
+    checker: e' cosi' che «direzione dimostrata» diventa eseguibile (spec
+    §5.2).
+
+    Vacua (ritorna 0, correzione 3 del brief, Ruling 29) quando il minimo
+    osservato produce un `needed` di **zero**: sia perche' nessuna coppia
+    di attivita' con sedi diverse e chiave condivisa esiste nel testimone
+    (`minimo` resta `None`), sia perche' la coppia piu' vicina trovata ha
+    gia' distanza zero (due sedi diverse a fasce adiacenti). In entrambi i
+    casi il builder esce subito (`if not needed: return`,
+    `domain/solver/builders/time_sites.py`): la famiglia e' completamente
+    vacua, non c'e' nulla che un builder rotto potrebbe far fallire."""
+    minimo = None
+    for rep, _ in w.signatures:
+        for aid, (day, slot) in w.placement.items():
+            if w.act(aid).site_id is None or rep not in w.weeks_of[aid]:
+                continue
+            for altro, (day2, slot2) in w.placement.items():
+                if altro == aid or day2 != day or rep not in w.weeks_of[altro]:
+                    continue
+                if w.act(altro).site_id in (None, w.act(aid).site_id):
+                    continue
+                if not (w.tokens[aid] & w.tokens[altro]):
+                    continue
+                distanza = abs(slot2 - slot) - 1
+                minimo = distanza if minimo is None else min(minimo, distanza)
+    needed = 0 if minimo is None else max(0, minimo)
+    settings, _ = InstituteSettings.objects.get_or_create(pk=1)
+    settings.site_transition_slots = needed
+    settings.save()
+    return 0 if needed == 0 else 1
