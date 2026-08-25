@@ -50,9 +50,10 @@ def test_i_builder_tradotti_finora():
     secchi di materia del Task 10 (SAME_HALF_DAY_INCOMPATIBLE,
     TWO_DAYS_INCOMPATIBLE, sullo scheletro SubjectBuilder), i tre del
     Task 11 (MAX_HOURS_DAY, MAX_HOURS_HALF_DAY sulla base comune
-    `_Bucketed`, e FORBIDDEN_SEQUENCE) e WEEKLY_ORDER del Task 12, primo
-    della famiglia d'ordine — cosi' una registrazione dimenticata o una di
-    troppo si vede subito, invece di dipendere dalla memoria di chi legge."""
+    `_Bucketed`, e FORBIDDEN_SEQUENCE), WEEKLY_ORDER del Task 12, primo
+    della famiglia d'ordine, e IMPOSED_SUCCESSION del Task 13, secondo della
+    stessa famiglia — cosi' una registrazione dimenticata o una di troppo si
+    vede subito, invece di dipendere dalla memoria di chi legge."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
     assert set(BUILDERS) == {
@@ -75,4 +76,5 @@ def test_i_builder_tradotti_finora():
         SubjectConstraint.Type.MAX_HOURS_HALF_DAY,
         SubjectConstraint.Type.FORBIDDEN_SEQUENCE,
         SubjectConstraint.Type.WEEKLY_ORDER,
+        SubjectConstraint.Type.IMPOSED_SUCCESSION,
     }

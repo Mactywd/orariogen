@@ -1065,6 +1065,140 @@ def _derive_weekly_order(w):
     return creata
 
 
+def _half_of(w, aid):
+    """La mezza giornata di un'attivita' **piazzata** nel testimone, stessa
+    regola di `_half` nel checker (subject_constraints.py): giorno * 2 +
+    (0 se la fascia di partenza e' mattina, 1 se pomeriggio)."""
+    day, slot = w.placement[aid]
+    return day * 2 + (slot >= w.env["grid"].morning_end_slot)
+
+
+@deriver(ST.IMPOSED_SUCCESSION, {"subject_imposed_succession"})
+def _derive_imposed_succession(w):
+    """Per ogni classe: righe A = B (una per materia presente) e righe
+    A != B (una per coppia ordinata di materie distinte). Accumula su tutte
+    le classi e tutte le coppie, non si ferma alla prima riga.
+
+    ⚠ **Il derivatore del piano e' rotto, misurato**: crea solo righe A = B
+    (il ramo A != B resterebbe senza banco di prova), si ferma alla prima
+    riga con `return`, deriva `param` sull'**unione** delle settimane e non
+    ha guardia di violabilita'. Riscritto per intero, sullo stesso principio
+    gia' visto in `_derive_weekly_order`: il checker valuta uno
+    `ScheduleState` **per firma** (`domain/analysis/conformity.py`,
+    `check_schedule`), quindi `param` va calcolato guardando ogni firma per
+    conto proprio, mai sull'unione.
+
+    **Righe A = B**: per ogni firma, le mezze giornate delle occorrenze di
+    quella materia **attive in quella firma**, ordinate; con meno di due
+    occorrenze quella firma non dice nulla (nessuno scarto da misurare).
+    `param` e' il massimo, su tutte le firme, dello scarto massimo fra mezze
+    giornate di occorrenze consecutive — e almeno 1. Se nessuna firma ha
+    almeno due occorrenze, la materia non produce nessuna riga: e' la stessa
+    vacuita' di "meno di due occorrenze totali" gia' vista in
+    `_derive_same_day`/`_derive_same_half_day`, qui per firma invece che
+    sull'unione.
+
+    **Righe A != B**: il checker (`ImposedSuccessionChecker.violations`,
+    subject_constraints.py righe 191-207) **non ha guardia d'uscita** sul
+    ramo A != B — a differenza di WEEKLY_ORDER, con `b` vuoto `any(...)` su
+    lista vuota e' falso e *ogni* occorrenza di A diventa una violazione.
+    Quindi: per ogni firma dove A ha occorrenze, se B non ne ha in quella
+    stessa firma, il testimone stesso violerebbe la riga appena creata — la
+    coppia **non e' derivabile**, si scarta per intero (non solo quella
+    firma). Altrimenti, per ogni occorrenza di A in quella firma si calcola
+    lo scarto **minimo positivo** verso una occorrenza di B nella stessa
+    firma; se una qualunque occorrenza di A non ha nessuna B strettamente
+    dopo di se' (nella stessa firma), la coppia si scarta — stesso motivo:
+    sarebbe una riga che il testimone viola gia'. `param` e' il massimo di
+    quegli scarti minimi, su tutte le firme e tutte le occorrenze di A, e
+    almeno 1.
+
+    **Guardia di violabilita' comune a entrambe le forme**: scarta se
+    `param >= n - 1` (`n = days_per_cycle * 2`, le mezze giornate del
+    ciclo) — con uno scarto massimo cosi' grande nessuna coppia dentro la
+    settimana puo' mai superarlo, e la riga sarebbe inviolabile per
+    costruzione della griglia, non del testimone (stessa forma della
+    guardia `days_per_cycle < 2` di `_derive_two_days`).
+
+    Stessa precondizione taciuta di `_derive_weekly_order`: il filtro
+    `klass.pk in w.tokens[aid]` usa solo la chiave della classe, mentre il
+    checker espande l'unita' a `_unit_keys(row) = {classe, *parti}`. Con una
+    ClassPart in gioco un'attivita' legata alla sola parte sfuggirebbe al
+    derivatore e non al checker — asserita invece che sperata."""
+    assert not ClassPart.objects.exists(), (
+        "_derive_imposed_succession filtra su klass.pk: con le parti, le "
+        "occorrenze legate alla sola parte sfuggono al derivatore e non "
+        "al checker")
+    grid = w.env["grid"]
+    n = grid.days_per_cycle * 2
+    creata = 0
+    for klass in w.env["classes"]:
+        per_materia = defaultdict(list)
+        for aid in w.placement:
+            if klass.pk in w.tokens[aid]:
+                per_materia[w.act(aid).subject_id].append(aid)
+        materie = sorted(per_materia)
+
+        # --- righe A = B ---------------------------------------------
+        for subj_id in materie:
+            aids = per_materia[subj_id]
+            ha_coppia, param = False, 0
+            for rep, _ in w.signatures:
+                halves = sorted(_half_of(w, aid) for aid in aids
+                                if rep in w.weeks_of[aid])
+                if len(halves) < 2:
+                    continue
+                ha_coppia = True
+                for h1, h2 in zip(halves, halves[1:]):
+                    param = max(param, h2 - h1)
+            if not ha_coppia:
+                continue
+            param = max(param, 1)
+            if param >= n - 1:
+                continue
+            SubjectConstraint.objects.create(
+                subject_a_id=subj_id, subject_b_id=subj_id,
+                school_class=klass, type=ST.IMPOSED_SUCCESSION, param=param)
+            creata += 1
+
+        # --- righe A != B, coppie ordinate ----------------------------
+        for a_id in materie:
+            aa_tutte = per_materia[a_id]
+            for b_id in materie:
+                if a_id == b_id:
+                    continue
+                bb_tutte = per_materia.get(b_id, [])
+                scartata, param = False, 0
+                for rep, _ in w.signatures:
+                    aa = [aid for aid in aa_tutte if rep in w.weeks_of[aid]]
+                    if not aa:
+                        continue
+                    bb = [aid for aid in bb_tutte if rep in w.weeks_of[aid]]
+                    if not bb:
+                        scartata = True
+                        break
+                    b_halves = sorted(_half_of(w, bid) for bid in bb)
+                    for aid in aa:
+                        ha = _half_of(w, aid)
+                        candidati = [hb - ha for hb in b_halves if hb > ha]
+                        if not candidati:
+                            scartata = True
+                            break
+                        param = max(param, min(candidati))
+                    if scartata:
+                        break
+                if scartata or param == 0:
+                    continue
+                param = max(param, 1)
+                if param >= n - 1:
+                    continue
+                SubjectConstraint.objects.create(
+                    subject_a_id=a_id, subject_b_id=b_id,
+                    school_class=klass, type=ST.IMPOSED_SUCCESSION, param=param)
+                creata += 1
+    return creata
+
+
 @deriver(RT.MIN_DISTRIBUTION, {"min_distribution"})
 def _derive_min_distribution(w):
     """Chiede i giorni effettivamente lavorati nella firma **peggiore**: e'

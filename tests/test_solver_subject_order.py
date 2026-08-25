@@ -370,3 +370,165 @@ def test_adr018_ramo_disgiuntivo_vieta_anche_il_pareggio():
     model.Add(ctx.x[(a_free.id, 2, 0)] == 1)   # pareggio esatto con FA
     solver = cp_model.CpSolver()
     assert solver.Solve(model) == cp_model.INFEASIBLE
+
+
+# --- IMPOSED_SUCCESSION (Task 13) ---------------------------------------
+#
+# Griglia di `mini_school`: 5 giorni x 6 fasce, `morning_end_slot = 4`.
+# Quindi la mezza giornata di (giorno, fascia) e' `giorno * 2 + (fascia >= 4)`,
+# e il ciclo ha n = 10 mezze giornate. Le celle usate qui sotto:
+#   (0, 0) -> mezza 0     (0, 4) -> mezza 1     (1, 0) -> mezza 2
+#   (2, 0) -> mezza 4     (2, 4) -> mezza 5
+
+
+def test_imposed_succession_same_morde():
+    """A = B, forma avversaria (Ruling 85): due occorrenze forzate a quattro
+    mezze giornate di distanza con `delay = 1`, e nessuna terza che possa
+    stare in mezzo. La clausola
+    `¬sa[0] ∨ ¬sa[4] ∨ sa[1] ∨ sa[2] ∨ sa[3]` non ha via d'uscita."""
+    env = mini_school()
+    a = [make_activity(env["subject"], teachers=[env["teacher"]],
+                       classes=[env["klass"]]) for _ in range(2)]
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=env["subject"],
+        school_class=env["klass"], type=T.IMPOSED_SUCCESSION, param=1)
+
+    model, ctx = build_model(env["schedule"])
+    model.Add(ctx.x[(a[0].id, 0, 0)] == 1)   # mezza 0
+    model.Add(ctx.x[(a[1].id, 2, 0)] == 1)   # mezza 4
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) == cp_model.INFEASIBLE
+
+
+def test_imposed_succession_same_con_una_in_mezzo_e_legale():
+    """La stessa distanza, ma con una terza occorrenza a colmare il buco:
+    per il checker le coppie **consecutive** diventano (0, 2) e (2, 4), a
+    scarto 2 = `delay`.
+
+    Difende il termine `+ [sa[m] ...]` della clausola: senza, la coppia
+    (0, 4) resterebbe vietata anche con qualcosa in mezzo. Verificato per
+    mutazione."""
+    env = mini_school()
+    a = [make_activity(env["subject"], teachers=[env["teacher"]],
+                       classes=[env["klass"]]) for _ in range(3)]
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=env["subject"],
+        school_class=env["klass"], type=T.IMPOSED_SUCCESSION, param=2)
+
+    model, ctx = build_model(env["schedule"])
+    model.Add(ctx.x[(a[0].id, 0, 0)] == 1)   # mezza 0
+    model.Add(ctx.x[(a[1].id, 1, 0)] == 1)   # mezza 2
+    model.Add(ctx.x[(a[2].id, 2, 0)] == 1)   # mezza 4
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+
+def test_imposed_succession_cross_morde():
+    """A != B, forma avversaria: A in mezza 0 con `delay = 1` esige una B
+    nella mezza 1; la si forza invece nella mezza 4."""
+    env = mini_school()
+    matematica = Subject.objects.create(
+        code="MAT", name="Matematica", discipline=env["discipline"])
+    a = make_activity(env["subject"], classes=[env["klass"]])
+    b = make_activity(matematica, classes=[env["klass"]])
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=matematica,
+        school_class=env["klass"], type=T.IMPOSED_SUCCESSION, param=1)
+
+    model, ctx = build_model(env["schedule"])
+    model.Add(ctx.x[(a.id, 0, 0)] == 1)   # mezza 0
+    model.Add(ctx.x[(b.id, 2, 0)] == 1)   # mezza 4, fuori finestra
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) == cp_model.INFEASIBLE
+
+
+def test_imposed_succession_cross_con_la_b_in_finestra():
+    """Lo stesso scenario con la B **dentro** la finestra: legale. Copre il
+    modo di sbagliare complementare, un builder che vieti tutto."""
+    env = mini_school()
+    matematica = Subject.objects.create(
+        code="MAT", name="Matematica", discipline=env["discipline"])
+    a = make_activity(env["subject"], classes=[env["klass"]])
+    b = make_activity(matematica, classes=[env["klass"]])
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=matematica,
+        school_class=env["klass"], type=T.IMPOSED_SUCCESSION, param=1)
+
+    model, ctx = build_model(env["schedule"])
+    model.Add(ctx.x[(a.id, 0, 0)] == 1)   # mezza 0
+    model.Add(ctx.x[(b.id, 0, 4)] == 1)   # mezza 1, dentro finestra
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+
+def test_adr018_imposed_succession_same_non_pretende_la_riparazione():
+    """ADR-018, ramo A = B: due **congelate** a mezza 0 e mezza 4 con
+    `delay = 1` e niente di congelato in mezzo — la baseline e' gia' in
+    violazione. La coppia (0, 4) si salta: postarla pretenderebbe che la
+    libera si infili fra le due, cioe' che ripari il passato.
+
+    Verificato per mutazione: togliendo il salto, il modello diventa
+    INFEASIBLE — la libera non puo' stare nelle mezze 1, 2 e 3 (glielo
+    vietano le coppie (1,4), (0,2), (0,3), che restano postate perche' hanno
+    un estremo libero) e non ha quindi modo di riparare."""
+    env = mini_school()
+    congelate = [make_activity(env["subject"], classes=[env["klass"]],
+                               immobility="fixed") for _ in range(2)]
+    libera = make_activity(env["subject"], classes=[env["klass"]])
+    place(env["schedule"], congelate[0], day=0, slot=0)   # mezza 0
+    place(env["schedule"], congelate[1], day=2, slot=0)   # mezza 4
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=env["subject"],
+        school_class=env["klass"], type=T.IMPOSED_SUCCESSION, param=1)
+
+    # ⚠ Asserzione **strutturale**, non «risolvi e guarda dove e' finita»:
+    # dove il solver metta la libera di suo e' una lotteria (Ruling 85). Si
+    # fissa la libera **fuori** dall'intervallo fra le due congelate (mezza
+    # 5) e si chiede che il modello resti fattibile: e' esattamente la
+    # negazione della pretesa di riparazione.
+    model, ctx = build_model(env["schedule"])
+    model.Add(ctx.x[(libera.id, 2, 4)] == 1)   # mezza 5, fuori dal buco
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+
+def test_adr018_imposed_succession_cross_e_per_letterale_non_per_secchio():
+    """ADR-018, ramo A != B: il trigger e' il **singolo letterale**, non
+    l'indicatore aggregato della mezza giornata.
+
+    Una congelata di A sta nella mezza 0 e nessuna B puo' salvarla (la B e'
+    forzata fuori finestra): quel finding e' della baseline, e il builder non
+    deve pretendere che una B libera vada a ripararlo — il modello resta
+    fattibile. Ma una **libera** di A nella stessa mezza giornata
+    produrrebbe un finding **nuovo**, col proprio id: il suo letterale resta
+    vincolato, e forzarla li' con la B lontana dev'essere INFEASIBLE.
+
+    ⚠ E' il test che distingue il trattamento corretto da «salta la clausola
+    intera quando una congelata occupa la mezza giornata»: verificato per
+    mutazione, con quel salto il secondo blocco diventa FEASIBLE."""
+    env = mini_school()
+    matematica = Subject.objects.create(
+        code="MAT", name="Matematica", discipline=env["discipline"])
+    a_congelata = make_activity(env["subject"], classes=[env["klass"]],
+                                immobility="fixed")
+    a_libera = make_activity(env["subject"], classes=[env["klass"]])
+    b = make_activity(matematica, classes=[env["klass"]])
+    place(env["schedule"], a_congelata, day=0, slot=1)   # mezza 0
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=matematica,
+        school_class=env["klass"], type=T.IMPOSED_SUCCESSION, param=1)
+
+    # 1) la congelata da sola non rende il modello infattibile, anche se la
+    #    sua violazione non e' riparabile
+    model, ctx = build_model(env["schedule"])
+    model.Add(ctx.x[(b.id, 2, 0)] == 1)   # mezza 4, lontana
+    solver = cp_model.CpSolver()
+    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+
+    # 2) ma la libera nella stessa mezza giornata si', perche' sarebbe un
+    #    finding nuovo
+    model2, ctx2 = build_model(env["schedule"])
+    model2.Add(ctx2.x[(b.id, 2, 0)] == 1)
+    model2.Add(ctx2.x[(a_libera.id, 0, 0)] == 1)   # mezza 0
+    solver2 = cp_model.CpSolver()
+    assert solver2.Solve(model2) == cp_model.INFEASIBLE

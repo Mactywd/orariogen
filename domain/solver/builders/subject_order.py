@@ -149,3 +149,160 @@ class WeeklyOrderBuilder(SubjectBuilder):
         for bid in b:
             if bid in ctx.free:
                 model.Add(v.pos(bid) >= FB + 1).OnlyEnforceIf(riparato.Not())
+
+
+@register(T.IMPOSED_SUCCESSION)
+class ImposedSuccessionBuilder(SubjectBuilder):
+    """Lo scarto fra occorrenze consecutive di una materia (A = B), o fra
+    ogni occorrenza di A e la B piu' vicina che la segue (A != B) —
+    `ImposedSuccessionChecker.violations`, domain/analysis/checkers/
+    subject_constraints.py righe 191-207:
+
+        delay = row.param or 1
+        if row.subject_a_id == row.subject_b_id:
+            halves = [(_half(...), p.activity_id) for p in a]
+            for (h1, a1), (h2, a2) in zip(halves, halves[1:]):
+                if h2 - h1 > delay: yield ...
+        else:
+            b_halves = [_half(...) for p in b]
+            for pa in a:
+                ha = _half(...)
+                if not any(0 < hb - ha <= delay for hb in b_halves):
+                    yield ..., [pa.activity_id], ...
+
+    ⚠ **Il checker ha due semantiche in una riga, e nessuna guardia
+    d'uscita.** A differenza di WEEKLY_ORDER (che esce con `not a or not b`),
+    qui con `b` vuoto il ramo A != B **non esce**: `any(...)` su una lista
+    vuota e' falso, quindi *ogni* occorrenza di A diventa una violazione. Non
+    si ragiona per analogia con WeeklyOrderBuilder: il trattamento sotto lo
+    riflette esplicitamente.
+
+    Sia `n = ctx.grid.days_per_cycle * 2` (le mezze giornate del ciclo).
+
+    **Ramo A = B** (`_post_same`). Il checker guarda gli scarti fra
+    occorrenze **consecutive**. Si traduce senza ordinare esplicitamente le
+    occorrenze: per ogni coppia di mezze giornate `u < w` con letterali
+    (`sa[h] = vocab.subject_bucket(..., "half", h, signature=rep)`) tali che
+    `w > u + delay`,
+
+        AddBoolOr([sa[u].Not(), sa[w].Not()] + [sa[m] per m in (u, w) con
+                                                 letterale])
+
+    Il termine `+ [sa[m] ...]` e' cio' che rende la clausola vera quando
+    esiste un'occorrenza strettamente in mezzo: in quel caso `u` e `w` non
+    sono consecutive per il checker (la coppia consecutiva vera diventa
+    `(u, m)`/`(m, w)`), e la clausola su `(u, w)` diventa un vincolo vero ma
+    ridondante — corretto lasciarlo postato, perche' e' gia' soddisfatto per
+    costruzione, non perche' vada rimosso.
+
+    **ADR-018, ramo A = B.** Si salta la coppia `(u, w)` quando una
+    **congelata** occupa `u`, una occupa `w`, e **nessuna congelata** occupa
+    una mezza giornata strettamente in mezzo. In quel caso `sa[u]` e `sa[w]`
+    sono gia' entrambi forzati a 1 dalle congelate (nessun altro letterale
+    libero puo' cambiarlo), quindi la clausola — se postata — si ridurrebbe
+    a "una libera deve riempire una mezza giornata fra `u` e `w`": una
+    pretesa di riparare una violazione gia' scritta nella baseline, vietata
+    da ADR-018. ⚠ **Non si salta quando uno solo dei due estremi e'
+    congelato**: li' l'altro estremo e' ancora una decisione del solver (una
+    libera che scegliesse di occupare quella mezza giornata creerebbe una
+    violazione **nuova**, con un id di attivita' nuovo in `Finding.key` — non
+    la stessa gia' presente nella baseline), quindi il vincolo resta un
+    divieto legittimo su quella decisione, non una riparazione del passato.
+    Se esiste una congelata strettamente in mezzo, la coppia non viene
+    saltata ma la clausola e' comunque trivialmente vera per costruzione (il
+    termine `sa[m]` di quella congelata vale 1): saltarla o no e' equivalente
+    in quel caso, quindi la guardia si limita al caso in cui salterebbe
+    davvero qualcosa — nessuna congelata in mezzo.
+
+    **Ramo A != B** (`_post_cross`). Il checker chiede, per **ogni
+    occorrenza** di A: esiste una B strettamente dopo, entro `delay` mezze
+    giornate. Il finding e' per occorrenza (`[pa.activity_id]`), quindi il
+    trigger dev'essere il singolo letterale di A, **non** l'indicatore
+    aggregato `subject_bucket` (che confonderebbe congelate e libere nello
+    stesso secchio, perdendo la distinzione che ADR-018 richiede): per ogni
+    mezza giornata `u`, sia `finestra` l'insieme dei letterali di B nelle
+    mezze giornate `(u, min(u + delay, n - 1)]`. Se una **congelata** di B
+    occupa gia' una di quelle mezze giornate, la clausola sarebbe comunque
+    vera per costante — non si posta nulla per `u`. Altrimenti, per ogni
+    occorrenza **libera** di A in `u`:
+
+        AddBoolOr([lit(A, u).Not()] + finestra)
+
+    Le occorrenze **congelate** di A in `u` non generano nessun trigger: la
+    loro eventuale violazione (nessuna B nella finestra) e' gia' scritta
+    nella baseline, e forzare una libera di B a comparire li' sarebbe una
+    riparazione vietata da ADR-018. Una libera di A nella stessa mezza
+    giornata `u` produrrebbe invece un finding **nuovo** (id diverso), quindi
+    il suo letterale resta soggetto al vincolo.
+
+    ⚠ Con `finestra` vuota (nessun letterale di B in quell'intervallo, ne'
+    libero ne' congelato) la clausola diventa `lit(A, u).Not()`: vieta a
+    quella libera di stare li'. Corretto e voluto — e' un divieto su una
+    decisione del solver, non una pretesa di riparare qualcosa che gia'
+    esiste. **Puo' rendere il modello INFEASIBLE** se quella libera non ha
+    altrove dove andare: e' esattamente cio' che ADR-018 concede (stessa
+    proprieta' del ramo disgiuntivo di WeeklyOrderBuilder e del quarto ramo
+    di `_post_cross` in subject_buckets.py).
+
+    Nota di implementazione: questo builder **non** riusa il `_post_cross` di
+    subject_buckets.py — quella funzione posta una cardinalita' aggregata
+    (`ha + hb <= 1`), un vincolo diverso da quello per-occorrenza richiesto
+    qui. Il nome del metodo privato sotto e' volutamente distinto per non
+    suggerire una parentela che non c'e'."""
+    TYPE = T.IMPOSED_SUCCESSION
+
+    def post(self, ctx, model, row, keys, rep):
+        v = ctx.vocab
+        n = ctx.grid.days_per_cycle * 2
+        delay = row.param or 1
+        if row.subject_a_id == row.subject_b_id:
+            self._post_same(ctx, model, v, row.subject_a_id, keys, rep, n, delay)
+        else:
+            self._post_ordered(ctx, model, v, row.subject_a_id, row.subject_b_id,
+                               keys, rep, n, delay)
+
+    def _post_same(self, ctx, model, v, subject_id, keys, rep, n, delay):
+        # sa[h]: indicatore aggregato della materia nella mezza giornata h,
+        # solo per le mezze giornate che hanno almeno un letterale (le altre
+        # sarebbero costanti 0, e la clausola sarebbe banale). frozen[h]:
+        # una congelata occupa gia' quella mezza giornata, nota a build time.
+        sa, frozen = {}, {}
+        for h in range(n):
+            lits = v.subject_literals(keys, subject_id, "half", h, signature=rep)
+            if not lits:
+                continue
+            sa[h] = v.subject_bucket(keys, subject_id, "half", h, signature=rep)
+            frozen[h] = any(aid not in ctx.free for aid, _ in lits)
+        halves = sorted(sa)
+        for u in halves:
+            for hi in halves:
+                if hi <= u + delay:
+                    continue
+                if frozen.get(u) and frozen.get(hi):
+                    # ADR-018: gia' violato dalla baseline (entrambi gli
+                    # estremi congelati, nulla di congelato in mezzo) --
+                    # postare pretenderebbe che una libera ripari il passato.
+                    if not any(frozen.get(m) for m in range(u + 1, hi)):
+                        continue
+                model.AddBoolOr(
+                    [sa[u].Not(), sa[hi].Not()]
+                    + [sa[m] for m in range(u + 1, hi) if m in sa])
+
+    def _post_ordered(self, ctx, model, v, subject_a_id, subject_b_id,
+                      keys, rep, n, delay):
+        for u in range(n):
+            finestra = []
+            b_frozen = False
+            for h in range(u + 1, min(u + delay, n - 1) + 1):
+                lits = v.subject_literals(keys, subject_b_id, "half", h, signature=rep)
+                finestra.extend(lit for _aid, lit in lits)
+                if any(aid not in ctx.free for aid, _ in lits):
+                    b_frozen = True
+            if b_frozen:
+                # la finestra e' gia' coperta da una B congelata: la
+                # clausola sarebbe vera per costante per ogni A in u.
+                continue
+            for aid, lit in v.subject_literals(keys, subject_a_id, "half", u,
+                                               signature=rep):
+                if aid in ctx.free:
+                    model.AddBoolOr([lit.Not()] + finestra)
