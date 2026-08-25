@@ -1,0 +1,190 @@
+# Review package: 6e5050d..HEAD
+
+## Commits
+e4b6f9f fix(solver): documenta il default signature=None e prova che discrimina
+
+## Files changed
+ domain/solver/vocabulary.py     | 32 ++++++++++++++++++++++++---
+ tests/test_solver_vocabulary.py | 49 +++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 78 insertions(+), 3 deletions(-)
+
+## Diff
+diff --git a/domain/solver/vocabulary.py b/domain/solver/vocabulary.py
+index 982b884..082a15a 100644
+--- a/domain/solver/vocabulary.py
++++ b/domain/solver/vocabulary.py
+@@ -43,63 +43,89 @@ class Vocabulary:
+     def half_of(self, slot):
+         return 0 if slot < self.ctx.grid.morning_end_slot else 1
+ 
+     # --- occupazione -----------------------------------------------------
+ 
+     def occupied(self, key, day, slot, signature=None):
+         """La chiave e' occupata in quella cella.
+ 
+         `signature`, se dato, e' il rappresentante di una firma di settimana:
+         il letterale conta solo le attivita' attive in quella firma, come
+-        farebbe ScheduleState.build(schedule, week=rep) per il checker."""
++        farebbe ScheduleState.build(schedule, week=rep) per il checker.
++
++        Omesso (`None`), conta tutte le attivita' che toccano la cella
++        indipendentemente dalla settimana. Per un vincolo di **cardinalita'
++        sulla singola cella** questo e' conservativo: piu' letterali vuol dire
++        un vincolo piu' stretto, mai piu' lasco. Non e' piu' vero appena questo
++        letterale entra in un aggregato per risorsa — vedi `covered`,
++        `day_active`, `half_active`."""
+         def make():
+             var = self.model.NewBoolVar(f"occ_{key}_{day}_{slot}_{signature}")
+             entries = self.ctx.by_cell.get((key, day, slot), ())
+             if signature is not None:
+                 active = self.ctx.states[signature].activities
+                 entries = [(aid, lit) for aid, lit in entries if aid in active]
+             return self._max_or_zero(var, [lit for _, lit in entries])
+         return self._memo("occ", (signature, key, day, slot), make)
+ 
+     def covered(self, key, day, span, signature=None):
+         """{fascia: letterale} — la fascia sta fra la prima e l'ultima
+         occupata **dentro `span`**.
+ 
+         ⚠ `span` non e' un dettaglio: il D.T.B. lo vuole sulla mezza giornata
+         (non conta mai buchi a cavallo del pranzo), MAX_PRESENCE sulla giornata
+         intera (`_presence_minutes` non passa da `_halves`). Sono due cose
+         diverse che si somigliano: qui la differenza e' un argomento visibile
+-        alla chiamata."""
++        alla chiamata.
++
++        ⚠ `signature` va passato quando il chiamante distingue le settimane:
++        qui, a differenza di `occupied` da sola, ometterlo **non** e'
++        conservativo. Un'occupazione che cade dentro il buco ma viene da
++        un'attivita' di un'**altra** firma alza il conteggio senza spostare
++        prima/ultima occupata — chiude nel modello unione un buco che,
++        settimana per settimana, resta aperto. E' esattamente il difetto che
++        MaxGapBuilder aveva prima della correzione del 2026-08-24 (vedi
++        CLAUDE.md, changelog di quella data)."""
+         span = tuple(span)
+         def make():
+             occ = {s: self.occupied(key, day, s, signature) for s in span}
+             out = {}
+             for s in span:
+                 tag = f"{key}_{signature}_{day}_{span[0] if span else 'x'}_{s}"
+                 before = self.model.NewBoolVar(f"before_{tag}")
+                 self._max_or_zero(before, [occ[i] for i in span if i <= s])
+                 after = self.model.NewBoolVar(f"after_{tag}")
+                 self._max_or_zero(after, [occ[j] for j in span if j >= s])
+                 cov = self.model.NewBoolVar(f"covered_{tag}")
+                 self.model.AddMinEquality(cov, [before, after])
+                 out[s] = cov
+             return out
+         return self._memo("covered", (signature, key, day, span), make)
+ 
+     # --- presenza per giornata e mezza giornata --------------------------
+ 
+     def day_active(self, key, day, signature=None):
++        """Vero se la chiave e' occupata in almeno una fascia della giornata.
++
++        ⚠ Stesso avvertimento di `covered`: e' un aggregato per risorsa, non
++        una singola cella. Omettere la firma non e' conservativo — un'attivita'
++        di un'altra firma di settimana puo' far risultare 'attiva' una
++        giornata che, per quella firma, non lo e'."""
+         def make():
+             var = self.model.NewBoolVar(f"dayact_{key}_{signature}_{day}")
+             lits = [self.occupied(key, day, s, signature)
+                     for s in range(self.ctx.grid.slots_per_day)]
+             return self._max_or_zero(var, lits)
+         return self._memo("day_active", (signature, key, day), make)
+ 
+     def half_active(self, key, day, half, signature=None):
+-        """`half`: 0 mattina, 1 pomeriggio."""
++        """`half`: 0 mattina, 1 pomeriggio.
++
++        ⚠ Stesso avvertimento di `covered` e `day_active`: e' un aggregato
++        per risorsa. Omettere la firma non e' conservativo, per lo stesso
++        motivo."""
+         def make():
+             var = self.model.NewBoolVar(f"halfact_{key}_{signature}_{day}_{half}")
+             lits = [self.occupied(key, day, s, signature)
+                     for s in self.halves()[half]]
+             return self._max_or_zero(var, lits)
+         return self._memo("half_active", (signature, key, day, half), make)
+diff --git a/tests/test_solver_vocabulary.py b/tests/test_solver_vocabulary.py
+index fc0e9ce..d24cdf2 100644
+--- a/tests/test_solver_vocabulary.py
++++ b/tests/test_solver_vocabulary.py
+@@ -1,17 +1,18 @@
+ """Le primitive derivate condivise. Il test che conta e' quello su `covered`:
+ il parametro `span` distingue il D.T.B. (mezza giornata) da MAX_PRESENCE
+ (giornata intera), ed e' proprio la differenza che due copie separate del
+ codice avrebbero perso."""
+ import pytest
+ from ortools.sat.python import cp_model
+ 
++from domain import weeks
+ from domain.solver.context import SolverContext
+ from domain.solver.vocabulary import Vocabulary
+ from tests.analysis_helpers import make_activity, mini_school
+ 
+ pytestmark = pytest.mark.django_db
+ 
+ 
+ def _vocab(env):
+     ctx = SolverContext.build(env["schedule"])
+     model = cp_model.CpModel()
+@@ -74,10 +75,58 @@ def test_day_active_e_memoizzazione():
+     ctx, model, vocab = _vocab(env)
+     model.Add(ctx.x[(a.id, 2, 1)] == 1)
+     key = env["klass"].pk
+     attivo, di_nuovo = vocab.day_active(key, 2), vocab.day_active(key, 2)
+     assert attivo is di_nuovo          # memoizzata: una variabile, non due
+     vuoto = vocab.day_active(key, 3)
+     solver = cp_model.CpSolver()
+     assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+     assert solver.Value(attivo) == 1
+     assert solver.Value(vuoto) == 0
++
++
++def test_half_active_caso_positivo_in_mattina():
++    """Il test della meta' vuota (sopra) copre solo il caso a zero. Manca il
++    caso simmetrico: un'attivita' piazzata in mattina deve accendere
++    half_active(..., 0)."""
++    env = mini_school()
++    a = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    ctx, model, vocab = _vocab(env)
++    model.Add(ctx.x[(a.id, 0, 1)] == 1)   # fascia 1 < morning_end_slot (4): mattina
++    key = env["klass"].pk
++    var = vocab.half_active(key, 0, 0)
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert solver.Value(var) == 1
++
++
++def test_day_active_distingue_le_firme():
++    """Due attivita' su firme di settimana diverse (maschere a un solo bit,
++    settimane 0 e 1): A e' attiva solo nella firma della settimana 0, B solo
++    in quella della settimana 1. A e' piazzata al giorno 1, B al giorno 0.
++
++    Con la firma passata, day_active(giorno 0, signature=rep_di_A) non deve
++    essere alzata dall'occupazione di B — B non e' fra le attivita' attive in
++    quella firma, anche se occupa una cella quel giorno. Senza firma, invece,
++    la stessa interrogazione conta anche B: e' esattamente il modo in cui
++    ometterla e' anti-conservativo su un aggregato per risorsa (il difetto
++    gia' trovato in MaxGapBuilder, 2026-08-24)."""
++    env = mini_school()
++    a = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]],
++                       mask=weeks.single_week(0))
++    b = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]],
++                       mask=weeks.single_week(1))
++    ctx, model, vocab = _vocab(env)
++    model.Add(ctx.x[(a.id, 1, 0)] == 1)   # A: giorno 1, non il giorno 0
++    model.Add(ctx.x[(b.id, 0, 4)] == 1)   # B: giorno 0
++
++    rep_a = next(rep for rep, _ in ctx.signatures if a.id in ctx.states[rep].activities)
++    assert b.id not in ctx.states[rep_a].activities   # la firma di A esclude B
++
++    key = env["klass"].pk
++    con_firma = vocab.day_active(key, 0, signature=rep_a)
++    senza_firma = vocab.day_active(key, 0)
++
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert solver.Value(con_firma) == 0     # A non e' al giorno 0: nella sua firma, non e' attivo
++    assert solver.Value(senza_firma) == 1   # B occupa il giorno 0, e senza firma conta comunque

@@ -1,0 +1,184 @@
+# Review package: e4b6f9f..HEAD
+
+## Commits
+ccfd78b feat(solver): il vocabolario, seconda meta'
+
+## Files changed
+ domain/solver/vocabulary.py     | 77 +++++++++++++++++++++++++++++++++++++++++
+ tests/test_solver_vocabulary.py | 66 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 143 insertions(+)
+
+## Diff
+diff --git a/domain/solver/vocabulary.py b/domain/solver/vocabulary.py
+index 082a15a..12ddbd3 100644
+--- a/domain/solver/vocabulary.py
++++ b/domain/solver/vocabulary.py
+@@ -122,10 +122,87 @@ class Vocabulary:
+ 
+         ⚠ Stesso avvertimento di `covered` e `day_active`: e' un aggregato
+         per risorsa. Omettere la firma non e' conservativo, per lo stesso
+         motivo."""
+         def make():
+             var = self.model.NewBoolVar(f"halfact_{key}_{signature}_{day}_{half}")
+             lits = [self.occupied(key, day, s, signature)
+                     for s in self.halves()[half]]
+             return self._max_or_zero(var, lits)
+         return self._memo("half_active", (signature, key, day, half), make)
++
++    # --- materia in un secchio -------------------------------------------
++
++    def bucket_of(self, kind, day, slot):
++        """Il secchio di una collocazione. ⚠ Si usa la fascia di **partenza**
++        dell'attivita', non tutte quelle che occupa: e' la regola dichiarata
++        in testa a domain/analysis/checkers/subject_constraints.py."""
++        return day if kind == "day" else day * 2 + self.half_of(slot)
++
++    def subject_bucket(self, keys, subject_id, kind, bucket, signature=None):
++        """La materia `subject_id` occorre in quel secchio, sull'unita' `keys`.
++        `keys` e' l'espansione dell'unita' della riga di vincolo, gia'
++        precalcolata in ctx.subject_rows."""
++        keys = frozenset(keys)
++        def make():
++            var = self.model.NewBoolVar(
++                f"subj_{subject_id}_{kind}_{bucket}_{signature}_{id(keys)}")
++            active = (None if signature is None
++                      else self.ctx.states[signature].activities)
++            lits = []
++            for aid, act in self.ctx.activities.items():
++                if act.subject_id != subject_id:
++                    continue
++                if not (self.ctx.tokens[aid] & keys):
++                    continue
++                if active is not None and aid not in active:
++                    continue
++                for (day, slot) in self.ctx.cells[aid]:
++                    if self.bucket_of(kind, day, slot) == bucket:
++                        lits.append(self.ctx.x[(aid, day, slot)])
++            return self._max_or_zero(var, lits)
++        return self._memo("subj", (signature, keys, subject_id, kind, bucket), make)
++
++    def subject_activities(self, keys, subject_id, signature=None):
++        """Gli id delle attivita' di quella materia su quell'unita'. Serve ai
++        builder per la regola dell'implicazione di ADR-018 (`any_free`) e per
++        sapere staticamente se una materia e' assente."""
++        keys = frozenset(keys)
++        active = (None if signature is None
++                  else self.ctx.states[signature].activities)
++        return sorted(
++            aid for aid, act in self.ctx.activities.items()
++            if act.subject_id == subject_id
++            and self.ctx.tokens[aid] & keys
++            and (active is None or aid in active))
++
++    # --- posizione e sede -------------------------------------------------
++
++    def pos(self, aid):
++        """giorno * slots_per_day + fascia di inizio, canalizzato da x."""
++        def make():
++            cells = sorted(self.ctx.cells[aid])
++            width = self.ctx.grid.slots_per_day
++            if not cells:
++                # dominio vuoto: build_model ha gia' reso il modello
++                # infattibile in modo esplicito, qui basta non rompere
++                return self.model.NewIntVar(0, 0, f"pos_{aid}")
++            values = [day * width + slot for (day, slot) in cells]
++            var = self.model.NewIntVar(min(values), max(values), f"pos_{aid}")
++            self.model.Add(var == sum(
++                (day * width + slot) * self.ctx.x[(aid, day, slot)]
++                for (day, slot) in cells))
++            return var
++        return self._memo("pos", aid, make)
++
++    def site_occupied(self, key, day, slot, site_id, signature=None):
++        """Un'attivita' di sede `site_id` occupa quella cella."""
++        def make():
++            var = self.model.NewBoolVar(
++                f"site_{site_id}_{key}_{day}_{slot}_{signature}")
++            active = (None if signature is None
++                      else self.ctx.states[signature].activities)
++            lits = [lit for aid, lit in self.ctx.by_cell.get((key, day, slot), ())
++                    if self.ctx.activities[aid].site_id == site_id
++                    and (active is None or aid in active)]
++            return self._max_or_zero(var, lits)
++        return self._memo("site", (signature, key, day, slot, site_id), make)
+diff --git a/tests/test_solver_vocabulary.py b/tests/test_solver_vocabulary.py
+index d24cdf2..3b8c40e 100644
+--- a/tests/test_solver_vocabulary.py
++++ b/tests/test_solver_vocabulary.py
+@@ -123,10 +123,76 @@ def test_day_active_distingue_le_firme():
+     assert b.id not in ctx.states[rep_a].activities   # la firma di A esclude B
+ 
+     key = env["klass"].pk
+     con_firma = vocab.day_active(key, 0, signature=rep_a)
+     senza_firma = vocab.day_active(key, 0)
+ 
+     solver = cp_model.CpSolver()
+     assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+     assert solver.Value(con_firma) == 0     # A non e' al giorno 0: nella sua firma, non e' attivo
+     assert solver.Value(senza_firma) == 1   # B occupa il giorno 0, e senza firma conta comunque
++
++
++def test_subject_bucket_usa_la_fascia_di_partenza():
++    """Un'attivita' di due fasce che inizia alle 3, con la linea di meta'
++    giornata a 4, appartiene alla MATTINA per intero: i vincoli di materia
++    attribuiscono l'attivita' al secchio della fascia di partenza."""
++    env = mini_school()
++    a = make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]], slots=2)
++    ctx, model, vocab = _vocab(env)
++    model.Add(ctx.x[(a.id, 0, 3)] == 1)
++    keys = frozenset({env["klass"].pk})
++    mattina = vocab.subject_bucket(keys, env["subject"].pk, "half", 0 * 2 + 0)
++    pomeriggio = vocab.subject_bucket(keys, env["subject"].pk, "half", 0 * 2 + 1)
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert solver.Value(mattina) == 1
++    assert solver.Value(pomeriggio) == 0
++
++
++def test_subject_bucket_ignora_le_altre_materie_e_le_altre_unita():
++    env = mini_school()
++    from domain.models import SchoolClass, Subject
++    altra_materia = Subject.objects.create(
++        code="MAT", name="Matematica", discipline=env["discipline"])
++    altra_classe = SchoolClass.objects.create(
++        name="1B", study_plan=env["plan"], year=1)
++    a = make_activity(altra_materia, teachers=[env["teacher"]], classes=[env["klass"]])
++    b = make_activity(env["subject"], classes=[altra_classe])
++    ctx, model, vocab = _vocab(env)
++    model.Add(ctx.x[(a.id, 0, 0)] == 1)
++    model.Add(ctx.x[(b.id, 0, 0)] == 1)
++    giorno = vocab.subject_bucket(
++        frozenset({env["klass"].pk}), env["subject"].pk, "day", 0)
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert solver.Value(giorno) == 0
++
++
++def test_pos_canalizza_giorno_e_fascia():
++    env = mini_school()
++    a = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    ctx, model, vocab = _vocab(env)
++    model.Add(ctx.x[(a.id, 2, 3)] == 1)
++    p = vocab.pos(a.id)
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert solver.Value(p) == 2 * env["grid"].slots_per_day + 3
++
++
++def test_site_occupied_distingue_le_sedi():
++    env = mini_school()
++    from domain.models import Site
++    centrale = Site.objects.create(name="Centrale")
++    succursale = Site.objects.create(name="Succursale")
++    a = make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]], site=centrale)
++    ctx, model, vocab = _vocab(env)
++    model.Add(ctx.x[(a.id, 0, 0)] == 1)
++    key = env["klass"].pk
++    qui = vocab.site_occupied(key, 0, 0, centrale.pk)
++    altrove = vocab.site_occupied(key, 0, 0, succursale.pk)
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert solver.Value(qui) == 1
++    assert solver.Value(altrove) == 0

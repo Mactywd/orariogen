@@ -1,0 +1,340 @@
+# Review package: 7e88822..HEAD
+
+## Commits
+04c793f feat(solver): MAX_PRESENCE, sullo span della giornata intera
+
+## Files changed
+ domain/solver/builders/time_presence.py |  80 ++++++++++++++++
+ tests/solver_harness.py                 |  34 +++++++
+ tests/test_solver_max_presence.py       | 157 ++++++++++++++++++++++++++++++++
+ tests/test_solver_registry.py           |  10 +-
+ 4 files changed, 277 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/domain/solver/builders/time_presence.py b/domain/solver/builders/time_presence.py
+index 27c152a..45cc83e 100644
+--- a/domain/solver/builders/time_presence.py
++++ b/domain/solver/builders/time_presence.py
+@@ -65,6 +65,7 @@ le libere abbiano ancora voce in capitolo — l'analogo esatto di
+ from domain.models import ResourceTimeConstraint
+ from domain.solver.builders.base import ResourceBuilder
+ from domain.solver.registry import register
++from domain.solver.residual import frozen_occupies
+ 
+ T = ResourceTimeConstraint.Type
+ 
+@@ -112,3 +113,82 @@ class MaxGapBuilder(ResourceBuilder):
+                     terms.append(cov[s] - v.occupied(key, day, s, signature=rep))
+         if terms:
+             model.Add(grid.slot_minutes * sum(terms) <= cap)
++
++
++def _frozen_presence_minutes(ctx, key, day, rep):
++    """La presenza (in minuti) indotta dalle sole attivita' **congelate** su
++    `key`, nel giorno `day`, per la firma `rep`. Stesso schema di
++    `_frozen_gap_minutes` (celle fisse, note a build time), ma sulla
++    **giornata intera** — non per mezza giornata — perche' e' cosi' che
++    MaxPresenceChecker misura la presenza (`_presence_minutes`, che non passa
++    mai da `_halves`)."""
++    grid, active = ctx.grid, ctx.states[rep].activities
++    occupate = sorted({
++        s for s in range(grid.slots_per_day)
++        for aid, _ in ctx.by_cell.get((key, day, s), ())
++        if aid not in ctx.free and aid in active
++    })
++    if not occupate:
++        return 0
++    return (occupate[-1] - occupate[0] + 1) * grid.slot_minutes
++
++
++@register(T.MAX_PRESENCE)
++class MaxPresenceBuilder(ResourceBuilder):
++    """Presenza != lavoro: la presenza include i buchi, e si misura
++    `ultima - prima + 1` **sulla giornata intera**.
++
++    ⚠ Lo `span` e' la giornata, non la mezza giornata. MaxPresenceChecker usa
++    `_presence_minutes`, che non passa da `_halves` — a differenza del D.T.B.,
++    che i buchi non li conta mai a cavallo del pranzo. Sono due vincoli che si
++    somigliano e non sono la stessa cosa: usare la mezza giornata qui
++    produrrebbe un vincolo piu' largo del checker (due presenze corte a
++    cavallo del pranzo passerebbero, mentre il checker le fonde in una sola).
++
++    ⚠ **ADR-018, correzione al piano (Ruling 23): clampa, non saltare.** Il
++    piano originale faceva `continue` sul giorno in cui le sole congelate
++    avevano gia' sforato il tetto, con l'argomento che «le libere non possono
++    ridurre una presenza, quindi il vincolo e' perso comunque». La premessa e'
++    vera — la presenza e' monotona non decrescente — ma la conclusione e'
++    sbagliata: saltare il vincolo lascia le libere **allargare** la presenza
++    di quel giorno oltre il debito gia' contratto, e il finding porta
++    `minutes=presence` fra le sue `quantities` (`Finding.key`,
++    domain/analysis/findings.py) — una presenza peggiorata e' una violazione
++    **nuova** per l'oracolo differenziale, non la stessa di prima. La forma
++    corretta e' il clamp gia' usato da `MaxGapBuilder` sopra: il tetto
++    effettivo e' `max(cap, presenza_indotta_dalle_sole_congelate)`
++    (`_frozen_presence_minutes`), mai sotto al debito gia' contratto dal
++    passato. Nel caso pulito coincide col tetto dichiarato; nel caso sporco
++    il modello non e' mai infattibile per colpa del passato, ma le libere
++    restano vincolate a non peggiorare ulteriormente la giornata.
++
++    Il ramo `days` non passa da `residual_cap`: i termini sono variabili
++    derivate (`day_active`), non `(peso, id_attivita', letterale)` per
++    attivita' — il caso esplicitamente previsto da `frozen_occupies`
++    (Ruling 25). Il consumo delle congelate si sottrae a mano dal tetto,
++    come gia' fanno i Task 6 e 7."""
++    TYPE = T.MAX_PRESENCE
++
++    def post(self, ctx, model, row, rep):
++        grid, v = ctx.grid, ctx.vocab
++        key = row.resource_id
++        giornata = range(grid.slots_per_day)
++        cap = row.params.get("max_minutes")
++        if cap is not None:
++            for day in range(grid.days_per_cycle):
++                # ADR-018 (Ruling 23): clamp, non salto — vedi il docstring
++                # di classe per l'argomento sulle quantities.
++                cap_effettivo = max(cap, _frozen_presence_minutes(ctx, key, day, rep))
++                cov = v.covered(key, day, giornata, signature=rep)
++                model.Add(grid.slot_minutes * sum(cov[s] for s in giornata)
++                          <= cap_effettivo)
++        max_days = row.params.get("days")
++        if max_days is not None:
++            terms, consumo = [], 0
++            for day in range(grid.days_per_cycle):
++                if frozen_occupies(ctx, key, day, giornata, rep):
++                    consumo += 1
++                else:
++                    terms.append(v.day_active(key, day, signature=rep))
++            if terms:
++                model.Add(sum(terms) <= max(0, max_days - consumo))
+diff --git a/tests/solver_harness.py b/tests/solver_harness.py
+index ff2afc7..88571ee 100644
+--- a/tests/solver_harness.py
++++ b/tests/solver_harness.py
+@@ -518,3 +518,37 @@ def _derive_free_guaranteed(w):
+         resource=docente, type=RT.FREE_GUARANTEED,
+         params={"free_days": min_giorni, "free_half_days": min_mezze})
+     return 1
++
++
++@deriver(RT.MAX_PRESENCE, {"max_presence", "max_presence_days"})
++def _derive_max_presence(w):
++    """Il picco di presenza (`ultima - prima + 1`, sulla **giornata intera**
++    — non per mezza giornata, a differenza del D.T.B.) e il numero di giorni
++    lavorati, per la firma peggiore. Con l'uguaglianza il vincolo e'
++    soddisfatto e stretto.
++
++    Vacua (ritorna 0, correzione 3 del brief, Ruling 24) in due casi:
++    il docente scelto a caso non compare in nessuna firma (`giorni == 0`,
++    stessa convenzione di `_derive_max_half_days` — nessuna soglia potrebbe
++    mai essere violata); oppure il picco copre gia' l'intera giornata **e**
++    i giorni coprono gia' `days_per_cycle`, cioe' entrambi i rami del
++    checker diventano banalmente veri per costruzione (nessuna presenza puo'
++    mai superare la giornata, nessun conteggio di giorni puo' mai superare
++    il ciclo) — un builder rotto non potrebbe farlo fallire."""
++    grid = w.env["grid"]
++    docente = w.rng.choice(w.env["teachers"])
++    picco, giorni = 0, 0
++    for rep, _ in w.signatures:
++        per_firma = w.resource_days(docente.pk, rep)
++        giorni = max(giorni, len(per_firma))
++        for _day, fasce in per_firma.items():
++            picco = max(picco, (fasce[-1] - fasce[0] + 1) * grid.slot_minutes)
++    if giorni == 0:
++        return 0
++    if (picco >= grid.slots_per_day * grid.slot_minutes
++            and giorni >= grid.days_per_cycle):
++        return 0
++    ResourceTimeConstraint.objects.create(
++        resource=docente, type=RT.MAX_PRESENCE,
++        params={"max_minutes": picco, "days": giorni})
++    return 1
+diff --git a/tests/test_solver_max_presence.py b/tests/test_solver_max_presence.py
+new file mode 100644
+index 0000000..1d1f974
+--- /dev/null
++++ b/tests/test_solver_max_presence.py
+@@ -0,0 +1,157 @@
++"""La presenza non e' il lavoro: include i buchi. E si misura sulla giornata
++intera, non per mezza giornata — a differenza del D.T.B.
++
++⚠ Niente `test_max_presence_sul_banco` qui (Ruling 16): `tests/solver_harness.py`
++registra il derivatore `_derive_max_presence` sotto `T.MAX_PRESENCE`, e
++`tests/test_solver_witness.py::test_famiglia` gia' parametrizza su
++`sorted(DERIVERS) × [1..5]` — i cinque seed della famiglia esistono in
++automatico appena il derivatore e' registrato. Scriverli anche qui sarebbe un
++duplicato esatto, come gia' per i tre derivatori del Task 7."""
++import pytest
++
++from domain.models import Activity, Placement, ResourceTimeConstraint
++from domain.solver.model import solve
++from tests.analysis_helpers import make_activity, mini_school
++
++pytestmark = pytest.mark.django_db
++T = ResourceTimeConstraint.Type
++
++
++def test_la_presenza_include_i_buchi_e_attraversa_il_pranzo():
++    """Due attivita' della stessa classe, presenza massima due ore. Su una
++    griglia 5x6 con meta' giornata a 4, il solver non puo' metterle alle fasce
++    0 e 5 (presenza sei ore) ne' alle fasce 3 e 4 (presenza due ore ma **a
++    cavallo del pranzo**, che per la presenza non conta come separazione).
++
++    Se il builder usasse la mezza giornata come span, 3 e 4 risulterebbero due
++    presenze da un'ora ciascuna e passerebbero: e' il modo esatto in cui questo
++    vincolo si confonde con il D.T.B."""
++    env = mini_school()
++    for _ in range(2):
++        make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_PRESENCE, params={"max_minutes": 120})
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE")
++    per_giorno = {}
++    for (day, slot) in soluzione.placements.values():
++        per_giorno.setdefault(day, []).append(slot)
++    for _day, fasce in per_giorno.items():
++        assert (max(fasce) - min(fasce) + 1) * 60 <= 120
++
++
++def test_adr018_presenza_gia_sforata_dalle_congelate_non_blocca():
++    """Due congelate alle fasce 0 e 5 dello stesso giorno: presenza sei ore,
++    tetto due. Con le fasce estreme della griglia il clamp e il vecchio
++    salto (`continue`) coincidono — 360' e' gia' il massimo raggiungibile
++    sulla griglia, quindi non c'e' modo per una libera di peggiorare quella
++    giornata comunque venga trattato il vincolo. Questo test da solo non
++    distingue i due comportamenti: vedi
++    `test_adr018_clamp_impedisce_alla_libera_di_peggiorare_la_giornata` qui
++    sotto per la controprova che morde. Un'attivita' libera resta comunque
++    piazzabile altrove."""
++    env = mini_school()
++    for i, slot in enumerate((0, 5)):
++        act = make_activity(env["subject"], teachers=[env["teacher"]],
++                            classes=[env["klass"]],
++                            immobility=Activity.Immobility.LOCKED_IN_PLACE)
++        Placement.objects.create(schedule=env["schedule"], activity=act,
++                                 day=0, start_slot=slot)
++    libera = make_activity(env["subject"], teachers=[env["teacher"]],
++                           classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_PRESENCE, params={"max_minutes": 120})
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    assert libera.id in soluzione.placements
++
++
++def test_adr018_clamp_impedisce_alla_libera_di_peggiorare_la_giornata():
++    """La controprova che distingue clamp da salto (correzione 1 del brief,
++    Ruling 23). Tre congelate alle fasce 0, 1, 2 dello stesso giorno: presenza
++    gia' 180', tetto dichiarato 120'. Le congelate hanno gia' sforato — per
++    ADR-018 il vincolo non puo' bloccare il solver per colpa del passato — ma
++    non deve nemmeno **sparire**: una libera dello stesso giorno non puo'
++    finire oltre la fascia 2, perche' allargherebbe la presenza da 180' a un
++    valore maggiore, e il finding porta `minutes=presence` nelle sue
++    `quantities` (`Finding.key`) — una presenza peggiorata e' una violazione
++    **nuova** per l'oracolo differenziale, non la stessa di prima.
++
++    Col `continue` del piano (salta il vincolo del giorno) questo test e'
++    rosso: la libera puo' andare alla fascia 5 e portare la presenza a 360'.
++    Col clamp (`cap_effettivo = max(cap, presenza_congelate) = 180`) resta
++    verde. Verificato manualmente reintroducendo il `continue` — vedi il
++    report del task per l'output rosso incollato."""
++    env = mini_school()
++    for slot in (0, 1, 2):
++        act = make_activity(env["subject"], teachers=[env["teacher"]],
++                            classes=[env["klass"]],
++                            immobility=Activity.Immobility.LOCKED_IN_PLACE)
++        Placement.objects.create(schedule=env["schedule"], activity=act,
++                                 day=0, start_slot=slot)
++    libera = make_activity(env["subject"], teachers=[env["teacher"]],
++                           classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_PRESENCE, params={"max_minutes": 120})
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    giorno, fascia = soluzione.placements[libera.id]
++    if giorno == 0:
++        assert fascia <= 2
++
++
++def test_max_presence_giorni_morde():
++    """Il ramo `days`. Un'asserzione «al piu' N giorni» non morde da sola
++    contro questa fixture: CP-SAT, senza alcun vincolo, tende gia' a
++    compattare le attivita' sui primi giorni per costruzione della ricerca —
++    un builder con il ramo `days` disabilitato passerebbe comunque questo
++    test (verificato disabilitandolo davvero). Serve un argomento di
++    capienza: il docente e' indisponibile ovunque tranne una fascia per
++    ciascuno di tre giorni, quindi al piu' un'attivita' al giorno e tre
++    attivita' **richiedono** tre giorni distinti. Con un tetto di due
++    giorni il modello deve risultare INFEASIBLE — l'unico modo per
++    accettare una soluzione sarebbe ignorare il ramo `days`."""
++    from domain.models import ResourceUnavailability
++
++    env = mini_school()
++    docente = env["teacher"]
++    for day in range(3):
++        for slot in range(1, 6):
++            ResourceUnavailability.objects.create(
++                resource=docente, day=day, slot=slot, level="hard")
++    for day in (3, 4):
++        for slot in range(6):
++            ResourceUnavailability.objects.create(
++                resource=docente, day=day, slot=slot, level="hard")
++    for _ in range(3):
++        make_activity(env["subject"], teachers=[docente], classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_PRESENCE, params={"days": 2})
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status == "INFEASIBLE", soluzione.stats
++
++
++def test_il_vincolo_non_si_posta_se_nulla_e_libero():
++    """Rete di sicurezza di ResourceBuilder: entrambi i tetti sono gia'
++    sforati dalle sole congelate, ma la classe non ha nulla da piazzare —
++    e' un fatto, non una decisione, e il solver non deve nemmeno accorgersi
++    del vincolo."""
++    env = mini_school()
++    congelate = [
++        make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]],
++                      immobility=Activity.Immobility.LOCKED_IN_PLACE)
++        for _ in range(2)
++    ]
++    for day, act in enumerate(congelate):
++        Placement.objects.create(schedule=env["schedule"], activity=act,
++                                 day=day, start_slot=0)
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_PRESENCE,
++        params={"max_minutes": 0, "days": 0})
++    from domain.models import Teacher
++    altro = Teacher.objects.create(name="Neri Ugo", last_name="Neri", first_name="Ugo")
++    make_activity(env["subject"], teachers=[altro])
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+diff --git a/tests/test_solver_registry.py b/tests/test_solver_registry.py
+index daffdf8..282fea5 100644
+--- a/tests/test_solver_registry.py
++++ b/tests/test_solver_registry.py
+@@ -43,10 +43,11 @@ def test_ogni_builder_implementa_almeno_un_hook():
+ 
+ def test_i_builder_tradotti_finora():
+     """Non piu' i cinque dello spike: il modello completo li accresce task
+-    dopo task. Qui si fissa lo stato corrente — dopo il Task 7, i sette del
+-    Task 6 piu' i tre minimi garantiti (MIN_DISTRIBUTION, ARRIVAL_DEPARTURE,
+-    FREE_GUARANTEED) — cosi' una registrazione dimenticata o una di troppo si
+-    vede subito, invece di dipendere dalla memoria di chi legge."""
++    dopo task. Qui si fissa lo stato corrente — dopo il Task 8, i sette del
++    Task 6, i tre minimi garantiti del Task 7 (MIN_DISTRIBUTION,
++    ARRIVAL_DEPARTURE, FREE_GUARANTEED) piu' MAX_PRESENCE — cosi' una
++    registrazione dimenticata o una di troppo si vede subito, invece di
++    dipendere dalla memoria di chi legge."""
+     from domain.models import ResourceTimeConstraint, SubjectConstraint
+     all_builders()
+     assert set(BUILDERS) == {
+@@ -59,5 +60,6 @@ def test_i_builder_tradotti_finora():
+         ResourceTimeConstraint.Type.MIN_DISTRIBUTION,
+         ResourceTimeConstraint.Type.ARRIVAL_DEPARTURE,
+         ResourceTimeConstraint.Type.FREE_GUARANTEED,
++        ResourceTimeConstraint.Type.MAX_PRESENCE,
+         SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE,
+     }

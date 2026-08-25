@@ -1,0 +1,663 @@
+# Review package: 6a6d9b0..HEAD
+
+## Commits
+31ff9de test(harness): flusso casuale separato per le sedi
+4035980 feat(solver): MAX_SITE_CHANGES e structural:site_transition
+
+## Files changed
+ domain/solver/builders/__init__.py   |   2 +-
+ domain/solver/builders/time_sites.py | 200 ++++++++++++++++++++++++++++++
+ tests/solver_harness.py              | 105 +++++++++++++++-
+ tests/test_solver_registry.py        |   9 +-
+ tests/test_solver_sites.py           | 232 +++++++++++++++++++++++++++++++++++
+ 5 files changed, 539 insertions(+), 9 deletions(-)
+
+## Diff
+diff --git a/domain/solver/builders/__init__.py b/domain/solver/builders/__init__.py
+index 69ef267..7131391 100644
+--- a/domain/solver/builders/__init__.py
++++ b/domain/solver/builders/__init__.py
+@@ -1,3 +1,3 @@
+ """L'import registra i builder nel BUILDERS."""
+ from . import (grid, occupation, subject_buckets,  # noqa: F401
+-               time_counting, time_presence, unavailability)
++               time_counting, time_presence, time_sites, unavailability)
+diff --git a/domain/solver/builders/time_sites.py b/domain/solver/builders/time_sites.py
+new file mode 100644
+index 0000000..7abba6d
+--- /dev/null
++++ b/domain/solver/builders/time_sites.py
+@@ -0,0 +1,200 @@
++"""Le sedi. Due vincoli che condividono la stessa costruzione: una coppia di
++fasce della stessa giornata, occupate da attivita' di **sedi diverse**, con
++solo occupazioni **senza sede nota** in mezzo.
++
++⚠ Entrambi i checker ragionano su coppie **consecutive nella sottosequenza
++delle occupazioni con sede nota** (`_site_sequence` in
++`domain/analysis/checkers/time_constraints.py`, e la stessa idea in
++`domain/analysis/checkers/sites.py`): un'attivita' **senza sede** interposta
++non spezza l'adiacenza, perche' non entra nemmeno nella sequenza.
++
++⚠ **Correzione al piano (Ruling 27).** La prima stesura di questo file
++chiedeva, per la coppia `(s, t)`, che **tutte** le fasce intermedie fossero
++libere (`occupied(m).Not()`): "tutto vuoto in mezzo". E' la condizione
++sbagliata. Con un'attivita' senza sede alla fascia intermedia, quella fascia
++e' **occupata** ma non ha sede — il checker la salta e vede comunque
++`s` e `t` come adiacenti nella sua sottosequenza, mentre la vecchia
++condizione del builder non trovava mai la coppia (perche' la fascia di mezzo
++non era libera) e quindi **non contava nulla**. E' un *under-count*: il
++solver accettava un orario che il checker boccia — il criterio di riuscita
++(oracolo differenziale) rotto. Riprodotto con un'istanza a tre fasce (sede A
++/ senza sede / sede B, `per_day=0`): il vecchio builder trovava `OPTIMAL`
++piazzando esattamente quell'arrangiamento, e `check_schedule` sulla soluzione
++riportava un `max_site_changes` `HARD` che il solver non aveva visto (vedi il
++report del Task 9 per l'output verbatim). La condizione corretta e' «nessuna
++occupazione **con sede nota** in mezzo»: per ogni fascia `m` fra `s` e `t`,
++nessuna sede la occupa (`site_occupied(..., site).Not()` per ogni sede). Con
++questa condizione la coppia `(s, t)` con `sa != sb` diventa *esattamente*
++l'adiacenza nella sottosequenza del checker, e la costruzione torna a essere
++piu' stretta, mai piu' larga (spec §4.3): per le coppie lontane il vincolo e'
++comunque vacuo (la coppia non forza nulla se in mezzo c'e' un'altra sede
++nota, che a sua volta partecipa alle proprie coppie adiacenti), e le coppie
++vicine includono tutte le consecutive.
++
++⚠ **Caso verificato e non risolto (stesso Ruling, ultimo paragrafo): due
++attivita' di sede diversa sulla STESSA fascia della stessa chiave.** Il
++checker le conta entrambe (appende una voce per **ogni** attivita' che
++occupa la fascia, `state.occupancy[(key, day, s)]`), quindi due attivita' di
++sede diversa simultanee sulla stessa fascia sono un cambio. La costruzione a
++coppie `s < t` (qui sotto) non puo' esprimerlo: non esiste una coppia con
++`s == t`. Di norma e' irraggiungibile perche' la stessa fascia della stessa
++chiave e' gia' vietata da `structural:occupation` (capienza 1) — ma
++**verificato che e' raggiungibile** quando la chiave ha capienza cumulativa
++`simultaneous_capacity > 1` (il campo esiste sulla `Resource` base, quindi
++anche su classi/docenti, anche se il caso d'uso tipico e' aule/materiali):
++costruita un'istanza con una classe a capienza 2, due attivita' di sede
++diversa su docenti diversi piazzate sulla stessa fascia — zero finding di
++occupazione, un `max_site_changes` `HARD` dal checker, nessuna coppia del
++builder in grado di intercettarlo. **Non risolto qui**: e' un'osservazione
++per il controller (il brief lo vieta esplicitamente come task di iniziativa),
++non un difetto corretto in questo giro.
++
++⚠ **ADR-018.** `MaxSiteChangesBuilder` posta somme su variabili derivate
++(i letterali di cambio `c`), non su termini `(peso, id, letterale)`
++separabili: stesso schema di `MaxGapBuilder`/`MaxPresenceBuilder`
++(`time_presence.py`) — un tetto **clampato**, mai un salto del vincolo (il
++`continue` e' stato sbagliato due volte su questo piano: review Task 6
++Important 2, e Ruling 23 sul Task 8). `SiteTransitionBuilder` invece ha gia'
++ADR-018 nella forma della regola dell'implicazione (`any_free`): non
++toccato."""
++
++from domain.models import ResourceTimeConstraint
++from domain.solver.builders.base import ResourceBuilder
++from domain.solver.registry import Builder, register
++from domain.solver.residual import any_free
++
++T = ResourceTimeConstraint.Type
++
++
++def _sedi(ctx):
++    return sorted({a.site_id for a in ctx.activities.values()
++                   if a.site_id is not None})
++
++
++def _coppie_di_sede(ctx, key, day, s, t, sa, sb, rep, sedi):
++    """I letterali di «fascia s sulla sede sa, fascia t sulla sede sb, e
++    nessuna sede nota in mezzo» — l'adiacenza nella sottosequenza dei
++    checker. Vedi la correzione in testa al modulo: non e' «tutto vuoto in
++    mezzo», e' «nessuna sede nota in mezzo»."""
++    v = ctx.vocab
++    lits = [v.site_occupied(key, day, s, sa, signature=rep),
++            v.site_occupied(key, day, t, sb, signature=rep)]
++    for m in range(s + 1, t):
++        for sito in sedi:
++            lits.append(v.site_occupied(key, day, m, sito, signature=rep).Not())
++    return lits
++
++
++def _frozen_site_changes(ctx, key, day, rep, sedi):
++    """I cambi di sede (per giornata) indotti dalle **sole** attivita'
++    congelate su `key`, per la firma `rep`. Le celle delle congelate sono
++    fisse e note a build time (`ctx.by_cell`, filtrato su `aid not in
++    ctx.free` e, se attivo, `aid in ctx.states[rep].activities`): stesso
++    schema di `_frozen_gap_minutes`/`_frozen_presence_minutes` in
++    `time_presence.py`, qui sulla sequenza di sede invece che sui minuti di
++    buco/presenza."""
++    active = ctx.states[rep].activities
++    sequenza = []
++    for slot in range(ctx.grid.slots_per_day):
++        for aid, _lit in ctx.by_cell.get((key, day, slot), ()):
++            if aid in ctx.free or aid not in active:
++                continue
++            sito = ctx.activities[aid].site_id
++            if sito is not None:
++                sequenza.append(sito)
++    return sum(a != b for a, b in zip(sequenza, sequenza[1:]))
++
++
++@register(T.MAX_SITE_CHANGES)
++class MaxSiteChangesBuilder(ResourceBuilder):
++    TYPE = T.MAX_SITE_CHANGES
++
++    def post(self, ctx, model, row, rep):
++        key, sedi = row.resource_id, _sedi(ctx)
++        if len(sedi) < 2:
++            return
++        per_giorno = row.params.get("per_day")
++        per_settimana = row.params.get("per_week")
++        tutti = []
++        consumo_settimana = 0
++        for day in range(ctx.grid.days_per_cycle):
++            cambi = []
++            for s in range(ctx.grid.slots_per_day):
++                for t in range(s + 1, ctx.grid.slots_per_day):
++                    for sa in sedi:
++                        for sb in sedi:
++                            if sa == sb:
++                                continue
++                            lits = _coppie_di_sede(ctx, key, day, s, t,
++                                                   sa, sb, rep, sedi)
++                            c = model.NewBoolVar(
++                                f"chg_{key}_{rep}_{day}_{s}_{t}_{sa}_{sb}")
++                            # la congiunzione implica il cambio; c puo'
++                            # essere 1 in piu' solo a danno del solver (mai a
++                            # suo vantaggio), e i vincoli sotto sono tutti
++                            # «<=»: sovra-contare non introduce mai un
++                            # falso negativo.
++                            model.AddBoolOr([c] + [l.Not() for l in lits])
++                            cambi.append(c)
++            # ADR-018: il tetto giornaliero non scende mai sotto il debito
++            # gia' contratto dalle sole congelate — clamp, non salto (il
++            # `continue` e' stato sbagliato due volte su questo piano).
++            consumo_giorno = _frozen_site_changes(ctx, key, day, rep, sedi)
++            consumo_settimana += consumo_giorno
++            if per_giorno is not None and cambi:
++                model.Add(sum(cambi) <= max(per_giorno, consumo_giorno))
++            tutti += cambi
++        if per_settimana is not None and tutti:
++            model.Add(sum(tutti) <= max(per_settimana, consumo_settimana))
++
++
++@register("structural:site_transition")
++class SiteTransitionBuilder(Builder):
++    """Fra due lezioni su sedi diverse servono `site_transition_slots` fasce
++    libere. Vale su **ogni** chiave di occupazione, non su una riga di
++    vincolo: e' strutturale, come l'occupazione.
++
++    ADR-018 e' gia' presente nella forma della regola dell'implicazione
++    (`any_free`): se nessuna delle attivita' che toccano le due fasce e'
++    libera, il vincolo e' un fatto sul passato e non si posta."""
++
++    def build(self, ctx, model):
++        sedi = _sedi(ctx)
++        if len(sedi) < 2:
++            return
++        needed = ctx.states[ctx.signatures[0][0]].settings.site_transition_slots
++        if not needed:
++            return
++        chiavi = sorted({k for (k, _d, _s) in ctx.by_cell}, key=str)
++        posted = set()
++        for rep, _ in ctx.signatures:
++            active = ctx.states[rep].activities
++            for key in chiavi:
++                for day in range(ctx.grid.days_per_cycle):
++                    for s in range(ctx.grid.slots_per_day):
++                        for t in range(s + 1, ctx.grid.slots_per_day):
++                            if t - s - 1 >= needed:
++                                continue   # gia' abbastanza lontane: vacuo
++                            tocca = {
++                                aid
++                                for m in (s, t)
++                                for aid, _ in ctx.by_cell.get((key, day, m), ())
++                                if aid in active
++                            }
++                            if not any_free(ctx, tocca):
++                                continue
++                            for sa in sedi:
++                                for sb in sedi:
++                                    if sa == sb:
++                                        continue
++                                    firma = (key, day, s, t, sa, sb,
++                                             frozenset(tocca))
++                                    if firma in posted:
++                                        continue
++                                    posted.add(firma)
++                                    model.AddBoolOr([
++                                        ctx.vocab.site_occupied(
++                                            key, day, s, sa, signature=rep).Not(),
++                                        ctx.vocab.site_occupied(
++                                            key, day, t, sb, signature=rep).Not(),
++                                    ])
+diff --git a/tests/solver_harness.py b/tests/solver_harness.py
+index 88571ee..7f041e7 100644
+--- a/tests/solver_harness.py
++++ b/tests/solver_harness.py
+@@ -29,7 +29,8 @@ from domain.analysis.findings import Severity
+ from domain.analysis.state import activity_tokens
+ from domain.models import (
+     Activity, Break, Discipline, Holiday, Period, Placement, Schedule,
+-    SchoolClass, SchoolYear, StudyPlan, Subject, Teacher, TimeGrid, Service,
++    SchoolClass, SchoolYear, Site, StudyPlan, Subject, Teacher, TimeGrid,
++    Service,
+ )
+ from domain.solver.model import apply, solve
+ 
+@@ -112,14 +113,18 @@ def _school(rng):
+     teachers = [Teacher.objects.create(name=f"Doc {i}", last_name=f"D{i}",
+                                        first_name=str(i))
+                 for i in range(4)]
++    # Le sedi (Task 9): create sempre, cosi' _sedi(ctx) ne vede almeno due
++    # appena qualche attivita' ha una sede nota (_make_activities le assegna
++    # a meta').
++    sites = [Site.objects.create(name=n) for n in ("Centrale", "Succursale")]
+     return {"grid": grid, "year": year, "period": period, "schedule": schedule,
+             "discipline": disc, "subjects": subjects, "plans": plans,
+-            "classes": classes, "teachers": teachers,
++            "classes": classes, "teachers": teachers, "sites": sites,
+             "break_boundary": break_boundary,
+             "holiday": (holiday_week, holiday_day)}
+ 
+ 
+-def _make_activities(rng, env):
++def _make_activities(rng, env, seed=0):
+     """Per ogni classe, attivita' fino al 50% della capienza della griglia:
+     il margine serve a rendere il piazzamento casuale quasi sempre possibile
+     al primo tentativo. La prima attivita' di ogni classe attraversa
+@@ -127,6 +132,10 @@ def _make_activities(rng, env):
+     capace di far scattare break_straddled se GridBuilder fosse vacuo
+     (Important 1, review Task 5)."""
+     grid = env["grid"]
++    # Flusso casuale separato per le sedi: pescare dal flusso principale
++    # sposterebbe ogni estrazione successiva e cambierebbe il testimone di
++    # tutti gli altri derivatori a parita' di seed.
++    sedi_rng = random.Random(f"sedi-{seed}")
+     capienza = grid.days_per_cycle * grid.slots_per_day
+     out = []
+     for klass in env["classes"]:
+@@ -141,6 +150,9 @@ def _make_activities(rng, env):
+                 week_mask=rng.choice(MASKS), respects_breaks=sensibile)
+             act.teachers.add(rng.choice(env["teachers"]))
+             act.classes.add(klass)
++            if sedi_rng.random() < 0.5:
++                act.site = sedi_rng.choice(env["sites"])
++                act.save()
+             service, _ = Service.objects.get_or_create(
+                 study_plan=klass.study_plan, subject=subject,
+                 defaults={"class_minutes": 0})
+@@ -191,7 +203,7 @@ def _try_place(rng, activities, tokens, weeks_of, grid, holiday, break_boundary)
+ def build_witness(seed, tentativi=20):
+     rng = random.Random(seed)
+     env = _school(rng)
+-    activities = _make_activities(rng, env)
++    activities = _make_activities(rng, env, seed)
+     tokens = {a.id: activity_tokens(a)[0] for a in activities}
+     weeks_of = {a.id: tuple(w for w in range(N_WEEKS)
+                             if weeks.week_in_mask(a.week_mask, w))
+@@ -295,7 +307,10 @@ def run_family(key, seed):
+     return w
+ 
+ 
+-from domain.models import ResourceTimeConstraint, ResourceUnavailability, SubjectConstraint
++from domain.models import (
++    InstituteSettings, ResourceTimeConstraint, ResourceUnavailability,
++    SubjectConstraint,
++)
+ 
+ RT = ResourceTimeConstraint.Type
+ ST = SubjectConstraint.Type
+@@ -552,3 +567,83 @@ def _derive_max_presence(w):
+         resource=docente, type=RT.MAX_PRESENCE,
+         params={"max_minutes": picco, "days": giorni})
+     return 1
++
++
++@deriver(RT.MAX_SITE_CHANGES, {"max_site_changes"})
++def _derive_max_site_changes(w):
++    """I cambi di sede osservati nel testimone per il docente scelto, per
++    giornata e in totale sulla settimana, presi sulla firma peggiore. Con
++    l'uguaglianza il vincolo e' soddisfatto e stretto.
++
++    Vacua (ritorna 0, correzione 3 del brief, Ruling 29) se il docente scelto
++    a caso ha **meno di due sedi distinte** fra le proprie attivita' del
++    testimone (nessuna sede, o una sola): in quel caso «cambio di sede» non
++    e' nemmeno strutturalmente possibile per lui — nessuna coppia di sue
++    attivita' puo' mai differire di sede, qualunque arrangiamento scelga il
++    solver — quindi il tetto, per quanto stretto (anche zero), non potrebbe
++    mai essere violato da un builder rotto (stessa convenzione di
++    _derive_max_half_days: non basta che la riga esista, deve poter essere
++    violata)."""
++    docente = w.rng.choice(w.env["teachers"])
++    sedi_docente = {w.act(aid).site_id for aid in w.placement
++                    if docente.pk in w.tokens[aid]
++                    and w.act(aid).site_id is not None}
++    if len(sedi_docente) < 2:
++        return 0
++    per_giorno, per_settimana = 0, 0
++    for rep, _ in w.signatures:
++        settimana = 0
++        for day, fasce in w.resource_days(docente.pk, rep).items():
++            sequenza = []
++            for f in fasce:
++                for aid, (d, slot) in w.placement.items():
++                    if (d == day and slot == f and docente.pk in w.tokens[aid]
++                            and w.act(aid).site_id is not None
++                            and rep in w.weeks_of[aid]):
++                        sequenza.append(w.act(aid).site_id)
++            cambi = sum(x != y for x, y in zip(sequenza, sequenza[1:]))
++            per_giorno = max(per_giorno, cambi)
++            settimana += cambi
++        per_settimana = max(per_settimana, settimana)
++    ResourceTimeConstraint.objects.create(
++        resource=docente, type=RT.MAX_SITE_CHANGES,
++        params={"per_day": per_giorno, "per_week": per_settimana})
++    return 1
++
++
++@deriver("structural:site_transition", {"site_transition"})
++def _derive_site_transition(w):
++    """Il numero di fasce libere che il testimone garantisce gia' fra due
++    lezioni su sedi diverse che condividono una chiave (stessa classe o
++    stesso docente), nello stesso giorno. Derivato sulle **coppie vicine**,
++    cioe' contro la regola piu' stretta del builder e non contro quella del
++    checker: e' cosi' che «direzione dimostrata» diventa eseguibile (spec
++    §5.2).
++
++    Vacua (ritorna 0, correzione 3 del brief, Ruling 29) quando il minimo
++    osservato produce un `needed` di **zero**: sia perche' nessuna coppia
++    di attivita' con sedi diverse e chiave condivisa esiste nel testimone
++    (`minimo` resta `None`), sia perche' la coppia piu' vicina trovata ha
++    gia' distanza zero (due sedi diverse a fasce adiacenti). In entrambi i
++    casi il builder esce subito (`if not needed: return`,
++    `domain/solver/builders/time_sites.py`): la famiglia e' completamente
++    vacua, non c'e' nulla che un builder rotto potrebbe far fallire."""
++    minimo = None
++    for rep, _ in w.signatures:
++        for aid, (day, slot) in w.placement.items():
++            if w.act(aid).site_id is None or rep not in w.weeks_of[aid]:
++                continue
++            for altro, (day2, slot2) in w.placement.items():
++                if altro == aid or day2 != day or rep not in w.weeks_of[altro]:
++                    continue
++                if w.act(altro).site_id in (None, w.act(aid).site_id):
++                    continue
++                if not (w.tokens[aid] & w.tokens[altro]):
++                    continue
++                distanza = abs(slot2 - slot) - 1
++                minimo = distanza if minimo is None else min(minimo, distanza)
++    needed = 0 if minimo is None else max(0, minimo)
++    settings, _ = InstituteSettings.objects.get_or_create(pk=1)
++    settings.site_transition_slots = needed
++    settings.save()
++    return 0 if needed == 0 else 1
+diff --git a/tests/test_solver_registry.py b/tests/test_solver_registry.py
+index 282fea5..1dab9d1 100644
+--- a/tests/test_solver_registry.py
++++ b/tests/test_solver_registry.py
+@@ -43,10 +43,11 @@ def test_ogni_builder_implementa_almeno_un_hook():
+ 
+ def test_i_builder_tradotti_finora():
+     """Non piu' i cinque dello spike: il modello completo li accresce task
+-    dopo task. Qui si fissa lo stato corrente — dopo il Task 8, i sette del
++    dopo task. Qui si fissa lo stato corrente — dopo il Task 9, i sette del
+     Task 6, i tre minimi garantiti del Task 7 (MIN_DISTRIBUTION,
+-    ARRIVAL_DEPARTURE, FREE_GUARANTEED) piu' MAX_PRESENCE — cosi' una
+-    registrazione dimenticata o una di troppo si vede subito, invece di
++    ARRIVAL_DEPARTURE, FREE_GUARANTEED), MAX_PRESENCE del Task 8, e le due
++    sedi del Task 9 (MAX_SITE_CHANGES, structural:site_transition) — cosi'
++    una registrazione dimenticata o una di troppo si vede subito, invece di
+     dipendere dalla memoria di chi legge."""
+     from domain.models import ResourceTimeConstraint, SubjectConstraint
+     all_builders()
+@@ -54,6 +55,7 @@ def test_i_builder_tradotti_finora():
+         "structural:grid",
+         "structural:unavailability",
+         "structural:occupation",
++        "structural:site_transition",
+         ResourceTimeConstraint.Type.MAX_GAP_HOURS,
+         ResourceTimeConstraint.Type.MAX_HOURS,
+         ResourceTimeConstraint.Type.MAX_HALF_DAYS,
+@@ -61,5 +63,6 @@ def test_i_builder_tradotti_finora():
+         ResourceTimeConstraint.Type.ARRIVAL_DEPARTURE,
+         ResourceTimeConstraint.Type.FREE_GUARANTEED,
+         ResourceTimeConstraint.Type.MAX_PRESENCE,
++        ResourceTimeConstraint.Type.MAX_SITE_CHANGES,
+         SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE,
+     }
+diff --git a/tests/test_solver_sites.py b/tests/test_solver_sites.py
+new file mode 100644
+index 0000000..caa27c5
+--- /dev/null
++++ b/tests/test_solver_sites.py
+@@ -0,0 +1,232 @@
++"""Le sedi: `MAX_SITE_CHANGES` (cambi contati per giornata e per settimana) e
++`structural:site_transition` (fasce libere richieste fra due lezioni su sedi
++diverse).
++
++⚠ Niente `test_sedi_sul_banco` qui (Ruling 16, correzione 3 del brief Task 9):
++`tests/solver_harness.py` registra `_derive_max_site_changes` sotto
++`T.MAX_SITE_CHANGES` e `_derive_site_transition` sotto
++`"structural:site_transition"`, e `tests/test_solver_witness.py::test_famiglia`
++gia' parametrizza su `sorted(DERIVERS) × [1..5]` — i cinque seed di entrambe
++le famiglie esistono in automatico appena i derivatori sono registrati.
++Scriverli anche qui sarebbe un duplicato esatto, come gia' per i derivatori
++dei Task 7 e 8.
++
++⚠ Il primo test qui sotto e' quello che difende la Correzione 1 (Ruling 27):
++la formulazione originale del piano ('tutto vuoto in mezzo' invece di
++'nessuna sede nota in mezzo') non vedeva nessun cambio in questa istanza —
++vedi `domain/solver/builders/time_sites.py` per la spiegazione e il report
++del Task 9 per la riproduzione verbatim del difetto prima della correzione."""
++import pytest
++
++from domain.models import (
++    Activity, InstituteSettings, Placement, ResourceTimeConstraint, Site,
++)
++from domain.solver.model import solve
++from tests.analysis_helpers import make_activity, mini_school
++
++pytestmark = pytest.mark.django_db
++T = ResourceTimeConstraint.Type
++
++
++def test_max_site_changes_intercetta_il_cambio_con_una_senza_sede_in_mezzo():
++    """La riproduzione della Correzione 1, ora contro il builder corretto.
++    Sede A alla fascia 0, un'attivita' senza sede alla fascia 1, sede B alla
++    fascia 2 — un solo giorno nella griglia, cosi' non c'e' altrove dove
++    andare. Con `per_day = 0` il checker vede sempre la sequenza [A, B] (la
++    senza-sede non entra nella sottosequenza) e boccia sempre, qualunque sia
++    l'ordine scelto per le tre attivita': i due soli siti presenti compaiono
++    sempre in un ordine, mai uguali.
++
++    Col builder sbagliato del piano ('tutto vuoto in mezzo') il solver
++    trovava sempre `OPTIMAL` piazzando esattamente [A, senza sede, B], perche'
++    era l'unico arrangiamento che non innescava nessuna delle sue coppie —
++    e la soluzione, riletta dal checker, falliva. Col builder corretto
++    ('nessuna sede nota in mezzo') quell'arrangiamento e' proprio quello
++    vietato: il modello deve risultare INFEASIBLE, perche' e' l'unica
++    istanza possibile su questa griglia e viola sempre il tetto.
++
++    ⚠ `site_transition_slots` a zero: isola MAX_SITE_CHANGES da
++    `structural:site_transition`, che con tre attivita' tutte adiacenti su
++    un'unica giornata avrebbe anche lui qualcosa da dire (a default 1) — non
++    e' quello sotto esame qui."""
++    env = mini_school()
++    env["grid"].days_per_cycle = 1
++    env["grid"].slots_per_day = 3
++    env["grid"].morning_end_slot = 3
++    env["grid"].save()
++    InstituteSettings.objects.update_or_create(
++        pk=1, defaults={"site_transition_slots": 0})
++
++    a_site = Site.objects.create(name="A")
++    b_site = Site.objects.create(name="B")
++    make_activity(env["subject"], teachers=[env["teacher"]],
++                  classes=[env["klass"]], site=a_site)
++    make_activity(env["subject"], teachers=[env["teacher"]],
++                  classes=[env["klass"]])
++    make_activity(env["subject"], teachers=[env["teacher"]],
++                  classes=[env["klass"]], site=b_site)
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_SITE_CHANGES, params={"per_day": 0})
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status == "INFEASIBLE", soluzione.stats
++
++
++def test_max_site_changes_limita_i_cambi():
++    """Tre attivita' alternate fra due sedi, un solo cambio al giorno
++    consentito: il solver deve raggrupparle per sede.
++
++    ⚠ Verificato che **non discrimina**: passa anche con
++    `MaxSiteChangesBuilder.post` disattivato del tutto, perche' senza alcun
++    vincolo tre attivita' libere trovano comunque posto da qualche parte —
++    e' un test di consistenza (il builder non deve rendere infattibile
++    un'istanza risolvibile), non una controprova. Quella che morde e'
++    `test_max_site_changes_intercetta_il_cambio_con_una_senza_sede_in_mezzo`
++    in cima al file."""
++    env = mini_school()
++    InstituteSettings.objects.update_or_create(
++        pk=1, defaults={"site_transition_slots": 0})
++    centrale = Site.objects.create(name="Centrale")
++    succursale = Site.objects.create(name="Succursale")
++    for sede in (centrale, succursale, centrale):
++        make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]], site=sede)
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_SITE_CHANGES, params={"per_day": 1})
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++
++
++def test_adr018_cambio_gia_prodotto_dalle_congelate_non_blocca():
++    """ADR-018 (correzione 2 del brief, Ruling 28), primo test: le sole
++    congelate non devono bloccare il solver. Due congelate adiacenti di sede
++    diversa (A poi B) sullo stesso giorno: un cambio gia' presente nel
++    passato, tetto giornaliero dichiarato **zero**. Senza il clamp, il
++    letterale di quella coppia e' forzato vero dalle sole congelate e il
++    vincolo grezzo `sum(cambi) <= 0` sarebbe insoddisfacibile a prescindere
++    da qualunque attivita' libera — infattibile per colpa del passato, cio'
++    che ADR-018 vieta. Col clamp (`max(0, consumo_congelate) = 1`) il modello
++    resta risolvibile e l'attivita' libera trova comunque posto.
++
++    ⚠ `site_transition_slots` a zero: e' un test isolato su MAX_SITE_CHANGES,
++    non su `structural:site_transition` (quello ha gia' un guardiano ADR-018
++    proprio, non toccato da questo task — vedi il report per la scoperta
++    fatta scrivendo questo test)."""
++    env = mini_school()
++    InstituteSettings.objects.update_or_create(
++        pk=1, defaults={"site_transition_slots": 0})
++    a_site = Site.objects.create(name="A")
++    b_site = Site.objects.create(name="B")
++    frozen_a = make_activity(env["subject"], teachers=[env["teacher"]],
++                             classes=[env["klass"]], site=a_site,
++                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
++    frozen_b = make_activity(env["subject"], teachers=[env["teacher"]],
++                             classes=[env["klass"]], site=b_site,
++                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
++    Placement.objects.create(schedule=env["schedule"], activity=frozen_a,
++                             day=0, start_slot=0)
++    Placement.objects.create(schedule=env["schedule"], activity=frozen_b,
++                             day=0, start_slot=1)
++    libera = make_activity(env["subject"], teachers=[env["teacher"]],
++                           classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_SITE_CHANGES, params={"per_day": 0})
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    assert libera.id in soluzione.placements
++
++
++def test_adr018_clamp_impedisce_alla_libera_di_aggiungere_un_cambio():
++    """La controprova che distingue clamp da salto (correzione 2 del brief,
++    Ruling 28) — quella che conta davvero. Stesso passato del test sopra (A
++    poi B, adiacenti, giorno 0, debito gia' contratto = 1 cambio), ma la
++    libera ha una **terza** sede (C), diversa da entrambe, ed e' **costretta**
++    sul giorno 0 (indisponibile ovunque altro): qualunque fascia del giorno 0
++    le venga assegnata, la sua sede nota si affianca alla sottosequenza
++    [A, B] gia' presente e produce **almeno un altro** cambio (nessuna sede
++    fra lei e il blocco A/B: le fasce di mezzo, se ce ne sono, sono vuote di
++    sede) — il totale del giorno salirebbe a due, oltre il debito gia'
++    contratto (uno). Col clamp questo e' vietato ovunque sul giorno 0, e
++    siccome non ha altrove dove andare il modello dev'essere INFEASIBLE.
++
++    ⚠ **Perche' costretta, non lasciata libera fra i giorni.** La prima
++    stesura di questo test lasciava la libera scegliere fra tutti i giorni e
++    si limitava ad asserire `giorno != 0`: passava col clamp, ma passava
++    *anche* con un salto (`continue` quando le congelate gia' sforano)
++    mutato apposta — CP-SAT, senza un obiettivo che preferisca il giorno 0,
++    trovava comunque una soluzione su un altro giorno per conto suo, e
++    l'asserzione non discriminava nulla (verificato: la mutazione lasciava la
++    suite verde). Costringendo la libera sul giorno 0 la domanda diventa
++    INFEASIBLE-contro-FEASIBLE, che il salto rovescia davvero: senza il
++    vincolo del giorno 0 (saltato perche' le congelate lo sforano gia' da
++    sole) la libera puo' restarci indisturbata, e il modello torna FEASIBLE —
++    proprio il difetto gia' corretto due volte su questo piano (review Task 6
++    Important 2, Ruling 23 sul Task 8) e vietato da ADR-018.
++
++    ⚠ `site_transition_slots` a zero, stesso motivo del test sopra: isola
++    MAX_SITE_CHANGES da `structural:site_transition`."""
++    env = mini_school()
++    InstituteSettings.objects.update_or_create(
++        pk=1, defaults={"site_transition_slots": 0})
++    a_site = Site.objects.create(name="A")
++    b_site = Site.objects.create(name="B")
++    c_site = Site.objects.create(name="C")
++    frozen_a = make_activity(env["subject"], teachers=[env["teacher"]],
++                             classes=[env["klass"]], site=a_site,
++                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
++    frozen_b = make_activity(env["subject"], teachers=[env["teacher"]],
++                             classes=[env["klass"]], site=b_site,
++                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
++    Placement.objects.create(schedule=env["schedule"], activity=frozen_a,
++                             day=0, start_slot=0)
++    Placement.objects.create(schedule=env["schedule"], activity=frozen_b,
++                             day=0, start_slot=1)
++    from domain.models import ResourceUnavailability
++    for day in range(1, 5):
++        for slot in range(6):
++            ResourceUnavailability.objects.create(
++                resource=env["teacher"], day=day, slot=slot, level="hard")
++    make_activity(env["subject"], teachers=[env["teacher"]],
++                 classes=[env["klass"]], site=c_site)
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.MAX_SITE_CHANGES, params={"per_day": 0})
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status == "INFEASIBLE", soluzione.stats
++
++
++def test_site_transition_impone_le_fasce_libere():
++    """Due attivita' della stessa classe su sedi diverse, con due fasce di
++    trasferimento richieste: non possono stare a meno di tre fasce di
++    distanza nello stesso giorno."""
++    env = mini_school()
++    InstituteSettings.objects.update_or_create(
++        pk=1, defaults={"site_transition_slots": 2})
++    centrale = Site.objects.create(name="Centrale")
++    succursale = Site.objects.create(name="Succursale")
++    a = make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]], site=centrale)
++    b = make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]], site=succursale)
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    (ga, sa), (gb, sb) = soluzione.placements[a.id], soluzione.placements[b.id]
++    if ga == gb:
++        assert abs(sa - sb) - 1 >= 2
++
++
++# ⚠ Un tentativo di test in piu' e' stato scartato qui, non aggiunto: una
++# variante dell'istanza sopra con **due** giorni invece di uno (cosi' il
++# solver trova sempre una soluzione, per un test in stile oracolo con
++# apply()+check_schedule()). Verificato che **non discrimina** il difetto
++# della Correzione 1: con due giorni a disposizione, il solver evita
++# l'adiacenza A/B semplicemente separandole di giornata, sia col builder
++# corretto sia con quello sbagliato — il difetto vive tutto **dentro** la
++# stessa giornata (l'iterazione e' per-day), quindi appena il solver ha una
++# via di fuga fra giorni diversi il test passa comunque, senza dire nulla sul
++# builder. Confermato mutando davvero il builder alla formulazione sbagliata
++# e rilanciando: verde in entrambi i casi (vedi il report del Task 9). La
++# dimostrazione che *invece* morde e' `test_max_site_changes_intercetta_il_
++# cambio_con_una_senza_sede_in_mezzo` sopra: la stessa istanza ristretta a un
++# solo giorno, dove non c'e' via di fuga, e l'asserzione e' INFEASIBLE.

@@ -1,0 +1,312 @@
+# Review package: ccfd78b..HEAD
+
+## Commits
+316f38c feat(solver): ADR-018, il residuo e l'oracolo differenziale
+
+## Files changed
+ domain/solver/residual.py     | 48 +++++++++++++++++++++++++++++++++++
+ tests/test_solver_oracle.py   | 37 +++++++++++++++++----------
+ tests/test_solver_residual.py | 59 +++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 131 insertions(+), 13 deletions(-)
+
+## Diff
+diff --git a/domain/solver/residual.py b/domain/solver/residual.py
+new file mode 100644
+index 0000000..a61ccf9
+--- /dev/null
++++ b/domain/solver/residual.py
+@@ -0,0 +1,48 @@
++"""ADR-018 — l'input sporco non blocca il solver.
++
++Un'attivita' congelata ha ctx.cells[aid] di cardinalita' uno e riceve comunque
++AddExactlyOne: il suo letterale vale 1, ed e' noto al momento della
++costruzione. Quindi ogni espressione lineare del modello si spezza
++**esattamente** in «parte costante + parte libera», e da li' discendono due
++casi soli.
++
++Sui **tetti**: `costante + libere <= tetto` equivale a
++`libere <= tetto - costante`, e quel residuo puo' essere negativo — e' il caso
++in cui le congelate sono gia' in violazione. ADR-018 impone di clamparlo a
++zero invece di lasciare il modello infattibile per colpa del passato.
++
++Sui **minimi garantiti**: `costante + libere >= soglia` equivale a
++`libere >= soglia - costante`, che non e' mai infattibile per colpa del
++passato — se le congelate gia' bastano, il requisito e' vacuo. Nessun clamp."""
++
++
++def split(ctx, terms):
++    """terms: iterabile di (peso, id attivita', letterale).
++    → (termini liberi come (peso, letterale), consumo delle congelate)."""
++    free, frozen = [], 0
++    for weight, aid, lit in terms:
++        if aid in ctx.free:
++            free.append((weight, lit))
++        else:
++            frozen += weight
++    return free, frozen
++
++
++def residual_cap(ctx, terms, cap):
++    """Per un vincolo «<= cap». Il tetto residuo e' clampato a zero."""
++    free, frozen = split(ctx, terms)
++    return free, max(0, cap - frozen)
++
++
++def residual_floor(ctx, terms, floor):
++    """Per un vincolo «>= floor». Nessun clamp: una soglia residua <= 0
++    significa che le congelate gia' bastano, ed e' corretto che il vincolo
++    risulti vacuo."""
++    free, frozen = split(ctx, terms)
++    return free, floor - frozen
++
++
++def any_free(ctx, activity_ids):
++    """La regola dell'implicazione: un vincolo i cui letterali vengono tutti da
++    attivita' congelate non si posta — e' un fatto, non una decisione."""
++    return any(aid in ctx.free for aid in activity_ids)
+diff --git a/tests/test_solver_oracle.py b/tests/test_solver_oracle.py
+index 9634929..228fde0 100644
+--- a/tests/test_solver_oracle.py
++++ b/tests/test_solver_oracle.py
+@@ -23,23 +23,34 @@ pytestmark = pytest.mark.django_db
+ # le causali delle cinque famiglie modellate, e solo quelle
+ CODICI = {
+     "resource_occupied", "resource_occupied_locked", "resource_peak",   # occupazione
+     "unavailability",                                                   # indisponibilita'
+     "slot_out_of_grid", "break_straddled", "holiday",                   # griglia
+     "max_gap",                                                          # D.T.B.
+     "subject_same_day",                                                 # materia
+ }
+ 
+ 
+-def violazioni(schedule):
+-    return [f for f in check_schedule(schedule)
+-            if f.severity == Severity.HARD and f.code in CODICI]
++def violazioni(schedule, codici=CODICI):
++    """L'insieme delle chiavi dei finding HARD nelle famiglie modellate.
++    Un insieme, non una lista: il criterio di riuscita e' il **contenimento**
++    (ADR-018), non l'uguaglianza."""
++    return {f.key for f in check_schedule(schedule)
++            if f.severity == Severity.HARD and f.code in codici}
++
++
++def nuove(schedule, prima, codici=CODICI):
++    """I finding HARD comparsi **dopo** il solve. Il solver puo' anche
++    riparare una violazione preesistente spostando un'attivita' libera: quello
++    e' un successo, non una discrepanza, ed e' per questo che il criterio e'
++    il contenimento e non l'uguaglianza."""
++    return violazioni(schedule, codici) - prima
+ 
+ 
+ def _scuola_media():
+     """Tre classi, tre docenti, tutte e cinque le famiglie attive. Dimensionata
+     con margine: se risulta infattibile, il bug e' nella traduzione, non
+     nell'istanza."""
+     env = mini_school()
+     Break.objects.create(grid=env["grid"], boundary_slot=4)
+     italiano = env["subject"]
+     matematica = Subject.objects.create(
+@@ -92,79 +103,79 @@ def _scuola_media():
+     env["docenti"] = docenti
+     env["ita_activities"] = ita_activities
+     return env
+ 
+ 
+ def test_oracolo_sulla_scuola_media():
+     env = _scuola_media()
+     soluzione = solve(env["schedule"], time_limit=30)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+     apply(soluzione, env["schedule"])
+-    assert violazioni(env["schedule"]) == []
++    assert violazioni(env["schedule"]) == set()
+ 
+ 
+ def test_oracolo_sul_fermi_per_una_classe():
+     """Le attivita' di 2A libere, tutto il resto fuori dal modello. 2A e' la
+     classe che passa dal docente D09, indisponibile tre giorni su cinque."""
+     dataset = fermi.build()
+     classe = dataset["classes"]["2A"]
+     estrazione = Extraction.objects.create(name="2A")
+     estrazione.activities.set(classe.activities.all())
+     soluzione = solve(dataset["schedule"], extraction=estrazione, time_limit=60)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+     assert len(soluzione.placements) == classe.activities.count()
+     apply(soluzione, dataset["schedule"])
+-    assert violazioni(dataset["schedule"]) == []
++    assert violazioni(dataset["schedule"]) == set()
+ 
+ 
+ def test_oracolo_puo_fallire():
+     """L'oracolo deve poter fallire, non solo passare sempre. Senza questo
+     test, un oracolo diventato vacuo — per esempio perche' l'insieme CODICI
+     perde un codice, o un checker smette di essere registrato — passerebbe
+     silenziosamente per sempre: gli altri test dell'oracolo continuerebbero a
+-    dare 'violazioni() == []' anche se non stessero piu' verificando niente.
++    dare 'violazioni() == set()' anche se non stessero piu' verificando niente.
+     Qui corrompiamo deliberatamente due Placement dopo un solve+apply andato a
+     buon fine, e verifichiamo che violazioni() veda ciascuna corruzione con il
+     codice atteso, in due famiglie diverse: occupazione (due attivita' dello
+     stesso docente sulla stessa cella) e indisponibilita' (un'attivita'
+     spostata su una fascia rossa)."""
+     env = _scuola_media()
+     soluzione = solve(env["schedule"], time_limit=30)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+     apply(soluzione, env["schedule"])
+-    assert violazioni(env["schedule"]) == []
++    assert violazioni(env["schedule"]) == set()
+ 
+     ita = env["ita_activities"]  # [1A×2, 1B×2, 1C×2], stesso docente per tutte
+     docente_ita = env["docenti"]["ITA"]
+ 
+     # Famiglia "occupazione": due attivita' dello stesso docente (classi
+     # diverse, 1A e 1B) forzate sulla stessa cella.
+     p_a = Placement.objects.get(schedule=env["schedule"], activity=ita[0])
+     p_b = Placement.objects.get(schedule=env["schedule"], activity=ita[2])
+     giorno_orig, fascia_orig = p_b.day, p_b.start_slot
+     p_b.day, p_b.start_slot = p_a.day, p_a.start_slot
+     p_b.save()
+-    codici = {f.code for f in violazioni(env["schedule"])}
++    codici = {codice for codice, *_ in violazioni(env["schedule"])}
+     assert "resource_occupied" in codici
+ 
+     # Ripristino: la corruzione precedente non deve contaminare la successiva.
+     p_b.day, p_b.start_slot = giorno_orig, fascia_orig
+     p_b.save()
+-    assert violazioni(env["schedule"]) == []
++    assert violazioni(env["schedule"]) == set()
+ 
+     # Famiglia "indisponibilita'": un'attivita' del docente ITA spostata sulla
+     # fascia (giorno=0, fascia=1), dichiarata indisponibile hard per lui.
+     assert ResourceUnavailability.objects.filter(
+         resource=docente_ita, day=0, slot=1, level="hard").exists()
+     p_a.day, p_a.start_slot = 0, 1
+     p_a.save()
+-    codici = {f.code for f in violazioni(env["schedule"])}
++    codici = {codice for codice, *_ in violazioni(env["schedule"])}
+     assert "unavailability" in codici
+ 
+ 
+ def _scuola_multi_firma():
+     """Due settimane con firme diverse, per disciplinare la dimensione che il
+     Fermi non esercita (una sola firma, tutto annuale). Un docente con
+     D.T.B. = 0 sulla classe; due attivita' della prima settimana forzate da
+     indisponibilita' **datate** su (giorno 0, fascia 0) e (giorno 0, fascia
+     2); una terza attivita', libera, attiva solo nella seconda settimana.
+ 
+@@ -296,36 +307,36 @@ def _scuola_multi_firma_fattibile():
+     ResourceTimeConstraint.objects.create(
+         resource=klass, type=ResourceTimeConstraint.Type.MAX_GAP_HOURS,
+         params={"max_gap_minutes": 0})
+ 
+     return {"schedule": schedule, "attivita": attivita}
+ 
+ 
+ def test_oracolo_su_istanza_multi_firma_fattibile():
+     """L'altra meta' della dimensione «settimane»: non l'istanza infattibile
+     che il solver deve rifiutare, ma una **fattibile** portata per intero lungo
+-    la catena solve -> apply -> check_schedule -> violazioni() == [].
++    la catena solve -> apply -> check_schedule -> violazioni() == set().
+ 
+     E' il caso che il criterio di riuscita dello spike descrive davvero, e che
+     prima di questo test nessun banco di prova copriva: la scuola giocattolo,
+     il Fermi per una classe e il Fermi intero hanno tutti **una sola** firma di
+     settimana, perche' al Fermi ogni attivita' e' annuale. Da li' e' passato il
+     difetto del D.T.B. trovato il 2026-08-24."""
+     env = _scuola_multi_firma_fattibile()
+     # se la fixture smettesse di avere due firme il test diventerebbe vacuo
+     assert len(week_signatures(env["schedule"])) == 2
+ 
+     soluzione = solve(env["schedule"], time_limit=30)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+     assert len(soluzione.placements) == len(env["attivita"])
+     apply(soluzione, env["schedule"])
+-    assert violazioni(env["schedule"]) == []
++    assert violazioni(env["schedule"]) == set()
+ 
+     # la prova diretta che le due firme non sono state fuse: due attivita' di
+     # settimane diverse condividono docente, classe e collocazione
+     celle = {
+         nome: (p.day, p.start_slot)
+         for nome, att in env["attivita"].items()
+         for p in [Placement.objects.get(schedule=env["schedule"], activity=att)]
+     }
+     assert celle["A5"] == (1, 0)
+     assert celle["A6"] == (1, 0)
+@@ -337,11 +348,11 @@ def test_fermi_intero_misurato():
+     """Il Fermi ha le classi del triennio a 30 ore su una griglia di 30 fasce:
+     non e' noto se sia fattibile. Qualunque cosa il solver restituisca, deve
+     essere corretta — e le misure vanno riportate."""
+     dataset = fermi.build()
+     soluzione = solve(dataset["schedule"], time_limit=120)
+     print("\nFermi intero:", soluzione.status, soluzione.stats)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNKNOWN")
+     if soluzione.status in ("OPTIMAL", "FEASIBLE"):
+         assert soluzione.placements
+         apply(soluzione, dataset["schedule"])
+-        assert violazioni(dataset["schedule"]) == []
++        assert violazioni(dataset["schedule"]) == set()
+diff --git a/tests/test_solver_residual.py b/tests/test_solver_residual.py
+new file mode 100644
+index 0000000..62bd20f
+--- /dev/null
++++ b/tests/test_solver_residual.py
+@@ -0,0 +1,59 @@
++"""ADR-018: i letterali delle attivita' congelate sono costanti note a build
++time, quindi ogni espressione lineare si spezza in «parte costante + parte
++libera». Sui tetti il residuo puo' essere negativo e va clampato a zero; sui
++minimi garantiti no."""
++import pytest
++
++from domain.solver.residual import any_free, residual_cap, residual_floor, split
++
++pytestmark = pytest.mark.django_db
++
++
++class _Ctx:
++    def __init__(self, free):
++        self.free = set(free)
++
++
++def test_split_separa_libere_e_congelate():
++    ctx = _Ctx({1, 2})
++    termini = [(60, 1, "x1"), (60, 2, "x2"), (60, 3, "x3"), (30, 4, "x4")]
++    liberi, congelate = split(ctx, termini)
++    assert liberi == [(60, "x1"), (60, "x2")]
++    assert congelate == 90
++
++
++def test_residual_cap_sottrae_il_consumo_delle_congelate():
++    ctx = _Ctx({1})
++    liberi, tetto = residual_cap(ctx, [(60, 1, "x1"), (60, 2, "x2")], 180)
++    assert liberi == [(60, "x1")]
++    assert tetto == 120
++
++
++def test_residual_cap_clampa_a_zero_invece_di_andare_negativo():
++    """Il caso di ADR-018: le congelate hanno gia' sforato. Il vincolo resta
++    postabile e le libere non possono aggiungere nulla, ma il modello non
++    diventa infattibile per colpa di una violazione preesistente."""
++    ctx = _Ctx({1})
++    liberi, tetto = residual_cap(ctx, [(60, 1, "x1"), (300, 2, "x2")], 180)
++    assert liberi == [(60, "x1")]
++    assert tetto == 0
++
++
++def test_residual_floor_non_clampa():
++    """Su un minimo garantito il residuo negativo e' corretto e va lasciato
++    passare: significa che le congelate gia' bastano e il vincolo e' vacuo.
++    Clamparlo a zero non cambierebbe nulla qui, ma clamparlo *dal basso* a un
++    valore positivo imporrebbe alle libere un dovere gia' assolto."""
++    ctx = _Ctx({1})
++    liberi, soglia = residual_floor(ctx, [(1, 1, "x1"), (1, 2, "x2"), (1, 3, "x3")], 2)
++    assert liberi == [(1, "x1")]
++    assert soglia == 0
++    _, soglia_vacua = residual_floor(ctx, [(1, 2, "x2"), (1, 3, "x3")], 1)
++    assert soglia_vacua == -1
++
++
++def test_any_free_e_la_regola_dell_implicazione():
++    ctx = _Ctx({7})
++    assert any_free(ctx, [7, 8]) is True
++    assert any_free(ctx, [8, 9]) is False
++    assert any_free(ctx, []) is False
