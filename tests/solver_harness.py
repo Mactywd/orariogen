@@ -11,6 +11,20 @@ builder vacuo (che postasse `1 == 0`, o che non postasse nulla) non puo'
 passare: nel primo caso non trova il testimone, nel secondo lascia passare un
 orario che il checker boccia.
 
+⚠ **«Orario valido» ha un limite preciso, e va detto.** Il testimone e'
+costruito valido per la **griglia** (festivi, intervalli, durate) e per
+l'**occupazione** delle risorse; `run_family` ne verifica poi la validita'
+sulle sole causali della famiglia sotto esame. Non e' invece pulito a tutto
+campo: `structural:coverage` produce `coverage_mismatch` su tutti i seed del
+banco, perche' i `Service` della fixture sono per (piano, materia) mentre
+`student_units` attribuisce il monte ore alle **parti** quando la classe ne
+ha. Non tocca la premessa del passo 2 — `structural:coverage` e' l'unico
+checker senza builder, deliberatamente (e' `PLACEMENT_INDEPENDENT`: il solver
+non crea ne' distrugge attivita'), quindi non compare mai nel modello e non
+puo' rendere infattibile nulla. Ma un oracolo differenziale a tutto campo su
+questo testimone lo incontrerebbe: si riparerebbe **nella fixture**, non in
+`domain/analysis/`.
+
 Le maschere di settimana sono randomizzate insieme al resto, cosi' ogni
 famiglia esercita piu' di una firma fin dal primo test. E' deliberato: il
 difetto del D.T.B. del 2026-08-24 e' passato proprio perche' ogni banco di
@@ -28,9 +42,9 @@ from domain.analysis.conformity import check_schedule, week_signatures
 from domain.analysis.findings import Severity
 from domain.analysis.state import activity_tokens
 from domain.models import (
-    Activity, Break, Discipline, Holiday, Period, Placement, Schedule,
-    SchoolClass, SchoolYear, Site, StudyPlan, Subject, Teacher, TimeGrid,
-    Service,
+    Activity, Break, Discipline, Holiday, InstituteSettings, Period,
+    Placement, Schedule, SchoolClass, SchoolYear, Site, StudyPlan, Subject,
+    Teacher, TimeGrid, Service,
 )
 from domain.solver.model import apply, solve
 
@@ -117,10 +131,34 @@ def _school(rng):
     # appena qualche attivita' ha una sede nota (_make_activities le assegna
     # a meta').
     sites = [Site.objects.create(name=n) for n in ("Centrale", "Succursale")]
+    # ⚠ `site_transition_slots` ha default **1** sul modello, e
+    # `_make_activities` assegna una sede a meta' delle attivita' a caso: il
+    # testimone violava quindi `site_transition` prima ancora che un
+    # derivatore girasse (misurato: 4 seed su 5 del banco). Non e' un
+    # dettaglio estetico — rende **falsa** la premessa del passo 2 di
+    # `run_family` («c'era un testimone, quindi INFEASIBLE e' un fallimento
+    # duro»): con quella soglia il testimone non e' un punto ammissibile del
+    # modello completo, perche' `structural:site_transition` e' registrato e
+    # attivo in ogni `solve()`. Si parte da zero — nessun vincolo — e
+    # `_derive_site_transition` alza la soglia per conto proprio quando tocca
+    # alla sua famiglia.
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"site_transition_slots": 0})
+    # Uno sdoppiamento vero (Task 15a): una sola partizione sulla **prima**
+    # classe, due parti. Con una partizione sola AtomMap non costruisce alcun
+    # atomo (ne servono almeno due, ADR-017), quindi le due parti restano
+    # disgiunte fra loro e confliggono solo con la classe intera — che e'
+    # esattamente la proprieta' dello sdoppiamento che nessun banco di prova
+    # esercitava prima. La seconda classe resta senza parti, cosi' ogni
+    # derivatore attraversa tutti e due i casi nello stesso testimone.
+    partizione = ClassPartition.objects.create(
+        school_class=classes[0], name="LINGUA")
+    parts = [ClassPart.objects.create(name=nm, partition=partizione)
+             for nm in ("1A_ING", "1A_TED")]
     return {"grid": grid, "year": year, "period": period, "schedule": schedule,
             "discipline": disc, "subjects": subjects, "plans": plans,
             "classes": classes, "teachers": teachers, "sites": sites,
-            "break_boundary": break_boundary,
+            "parts": parts, "break_boundary": break_boundary,
             "holiday": (holiday_week, holiday_day)}
 
 
@@ -159,6 +197,25 @@ def _make_activities(rng, env, seed=0):
             service.class_minutes += duration_slots * 60
             service.save()
             out.append(act)
+    # Un'attivita' per parte (Task 15a). Sta in coda per non spostare nessuna
+    # estrazione delle attivita' di classe: il flusso casuale principale e'
+    # condiviso, e pescare prima avrebbe cambiato il testimone di tutte le
+    # famiglie a parita' di seed senza che la fixture sia davvero diversa.
+    # Durata 1 e nessuna sede: la forma minima che basta a far entrare le
+    # parti nelle chiavi di occupazione.
+    for part in env["parts"]:
+        subject = rng.choice(env["subjects"])
+        act = Activity.objects.create(
+            subject=subject, duration_slots=1, duration_minutes=60,
+            week_mask=rng.choice(MASKS))
+        act.teachers.add(rng.choice(env["teachers"]))
+        act.parts.add(part)
+        service, _ = Service.objects.get_or_create(
+            study_plan=part.effective_study_plan, subject=subject,
+            defaults={"class_minutes": 0})
+        service.class_minutes += 60
+        service.save()
+        out.append(act)
     return out
 
 
@@ -308,13 +365,30 @@ def run_family(key, seed):
 
 
 from domain.models import (
-    ClassPart, InstituteSettings, ResourceTimeConstraint,
+    ClassPart, ClassPartition, InstituteSettings, ResourceTimeConstraint,
     ResourceUnavailability, SubjectConstraint,
 )
 from domain.models.resources import Resource
 
 RT = ResourceTimeConstraint.Type
 ST = SubjectConstraint.Type
+
+
+def _chiavi_unita(w, klass):
+    """L'espansione dell'unita' «classe» come la fa il checker (`_unit_keys`,
+    domain/analysis/checkers/subject_constraints.py): la classe **piu' tutte
+    le sue parti**. Filtrare sul solo `klass.pk` perderebbe le attivita'
+    legate alla sola parte, che il checker invece vede — e una riga derivata
+    senza vederle nasce gia' violata.
+
+    Vale solo per le righe `SubjectConstraint` con `school_class`: le righe
+    `ResourceTimeConstraint` sono ancorate alla **risorsa**
+    (`row.resource_id`, domain/analysis/checkers/time_constraints.py), che per
+    una classe e' la sola `klass.pk` — li' l'espansione sarebbe sbagliata, e
+    infatti quei derivatori continuano a leggere `w.resource_days(klass.pk)`."""
+    parti = ClassPart.objects.filter(
+        partition__school_class=klass).values_list("pk", flat=True)
+    return frozenset({klass.pk, *parti})
 
 
 @deriver("structural:grid", {"slot_out_of_grid", "break_straddled", "holiday"})
@@ -444,7 +518,16 @@ def _collocazioni(w, aid):
 
 def _ci_stanno(w, kind, a, b):
     """Due attivita' possono partire nello **stesso secchio**, sulla stessa
-    unita' (quindi senza sovrapporsi), in un giorno qualunque?
+    unita', in un giorno qualunque?
+
+    ⚠ «Senza sovrapporsi» vale solo se le due attivita' **confliggono**
+    davvero (Task 15a). Due attivita' su parti diverse della stessa
+    partizione non condividono nessuna chiave di occupazione: possono
+    partire nella **stessa** fascia, e il checker le conta comunque
+    entrambe nel secchio (`_unit_keys` espande l'unita' alle parti). La
+    sovrapposizione si vieta quindi solo quando i token si intersecano —
+    che e' anche il caso, sulle stesse parti, di due attivita' che
+    condividono il docente.
 
     Enumerazione esaustiva delle coppie di fasce di partenza — al piu' 36
     combinazioni — invece di una formula chiusa. La formula chiusa e' stata
@@ -469,14 +552,15 @@ def _ci_stanno(w, kind, a, b):
     nell'altra costa **copertura persa in silenzio**."""
     grid = w.env["grid"]
     da, db = w.act(a).duration_slots, w.act(b).duration_slots
+    confliggono = bool(w.tokens[a] & w.tokens[b])
 
     def secchio(s):
         return 0 if kind == "day" else s >= grid.morning_end_slot
 
     for sa in _collocazioni(w, a):
         for sb in _collocazioni(w, b):
-            if sa + da > sb and sb + db > sa:
-                continue          # si sovrappongono
+            if confliggono and sa + da > sb and sb + db > sa:
+                continue          # si sovrappongono su una chiave condivisa
             if secchio(sa) == secchio(sb):
                 return True
     return False
@@ -535,9 +619,10 @@ def _derive_same_day(w):
     per questo seed."""
     creata = 0
     for klass in w.env["classes"]:
+        chiavi = _chiavi_unita(w, klass)
         for subject in w.env["subjects"]:
             aids = [aid for aid in w.placement
-                    if klass.pk in w.tokens[aid]
+                    if w.tokens[aid] & chiavi
                     and w.act(aid).subject_id == subject.pk]
             per_giorno = defaultdict(int)
             for aid in aids:
@@ -581,9 +666,10 @@ def _derive_same_half_day(w):
     grid = w.env["grid"]
     creata = 0
     for klass in w.env["classes"]:
+        chiavi = _chiavi_unita(w, klass)
         for subject in w.env["subjects"]:
             aids = [aid for aid in w.placement
-                    if klass.pk in w.tokens[aid]
+                    if w.tokens[aid] & chiavi
                     and w.act(aid).subject_id == subject.pk]
             per_meta = defaultdict(int)
             for aid in aids:
@@ -618,9 +704,10 @@ def _derive_two_days(w):
         return 0
     creata = 0
     for klass in w.env["classes"]:
+        chiavi = _chiavi_unita(w, klass)
         giorni = defaultdict(set)
         for aid, (day, _slot) in w.placement.items():
-            if klass.pk in w.tokens[aid]:
+            if w.tokens[aid] & chiavi:
                 giorni[w.act(aid).subject_id].add(day)
         for a in w.env["subjects"]:
             if not giorni[a.pk]:
@@ -666,16 +753,30 @@ def _massimo_pacchetto(opzioni):
     return rec(0, 0)
 
 
-def _capienza_secchio(w, kind, rep, aids):
-    """Il massimo di minuti che possono **partire** nello stesso secchio, in
-    un giorno qualunque, senza sovrapporsi — fra le attivita' di `aids` che
-    sono co-attive nella firma `rep`. Stessa forma di `_ci_stanno`:
-    enumerazione esaustiva sulle collocazioni ammissibili di ciascuna
-    attivita' (`_collocazioni`), non formula chiusa — la formula chiusa su
-    questo branch e' stata provata e scartata due volte (Ruling 51).
+def _strato(w, aid):
+    """A quale strato di simultaneita' appartiene un'attivita' dentro l'unita'
+    «classe»: `None` se e' di livello classe (i suoi token contengono la
+    chiave di una classe), altrimenti l'insieme delle parti che tocca.
 
-    E' un **limite superiore esatto sulla sola geometria** (Ruling 63): non
-    vede le altre attivita' che occupano le fasce (di altre materie o
+    Due attivita' dello **stesso** strato non possono sovrapporsi (stessa
+    parte, o stessa classe intera); due attivita' di strati diversi si',
+    quando sono parti diverse della stessa partizione — e senza atomi in
+    gioco non condividono nessuna chiave di occupazione."""
+    classi = {k.pk for k in w.env["classes"]}
+    if w.tokens[aid] & classi:
+        return None
+    return frozenset(w.tokens[aid] & {p.pk for p in w.env["parts"]})
+
+
+def _capienza_secchio(w, kind, rep, aids):
+    """Un **limite superiore** ai minuti che possono **partire** nello stesso
+    secchio, in un giorno qualunque, fra le attivita' di `aids` co-attive
+    nella firma `rep`. Enumerazione esaustiva sulle collocazioni ammissibili
+    di ciascuna attivita' (`_collocazioni`), non formula chiusa — la formula
+    chiusa su questo branch e' stata provata e scartata due volte
+    (Ruling 51).
+
+    Non vede le altre attivita' che occupano le fasce (di altre materie o
     classi), le indisponibilita', le sedi, i giorni festivi. Un secchio che
     qui risulta riempibile oltre `param` puo' quindi risultare comunque
     inviolabile per via del resto del modello — stabilirlo richiede di
@@ -684,43 +785,43 @@ def _capienza_secchio(w, kind, rep, aids):
     per eccesso costa un caso di banco debole, sbagliare per difetto costa
     copertura persa in silenzio.
 
-    ⚠ **Ma «generosa, mai stretta» ha due precondizioni, e sono proprieta'
-    del testimone, non del dominio** (Important 2, ri-review Task 11).
-    `_massimo_pacchetto` vieta la **sovrapposizione**, e questo e' un limite
-    superiore vero solo finche':
+    ⚠ **Con le parti in gioco non e' piu' un massimo esatto sulla geometria,
+    ed e' voluto** (Task 15a). `_massimo_pacchetto` vieta la
+    sovrapposizione, ma due attivita' su parti diverse della stessa
+    partizione non condividono nessuna chiave di occupazione: sono
+    legittimamente simultanee, e il checker le somma comunque tutte e due
+    nello stesso secchio (`_unit_keys` espande l'unita' alle parti). Tenere
+    il divieto di sovrapposizione avrebbe reso la guardia **stretta**,
+    scartando righe violabili. Quindi la capienza si calcola per **strati**
+    (`_strato`) e si sommano:
 
-    1. la capienza simultanea delle risorse vale 1 — il default di
-       `Resource.simultaneous_capacity`, che l'harness non tocca mai. Con
-       capienza cumulativa (`OccupationBuilder` la supporta, ed e' feature
-       EDT documentata) due attivita' co-attive della stessa materia possono
-       **condividere** la fascia e sommarsi entrambe nello stesso secchio;
-    2. la classe non ha **partizioni**. Il checker prende
-       `keys = {classe, *tutte le sue parti}` (`_unit_keys`,
-       subject_constraints.py righe 17-24): due attivita' su parti diverse
-       (sdoppiamento, `_REL`/`_ALT`) sono legittimamente simultanee e cadono
-       **tutte e due** nella stessa somma di secchio.
+        capienza = pacchetto massimo delle attivita' di livello classe
+                 + somma, su ogni parte, del pacchetto massimo di quella parte
 
-    In entrambi i casi il massimo reale supera questa capienza, la guardia
-    diventa **stretta**, e scarta righe violabili — cioe' esattamente il
-    modo di sbagliare che il capoverso qui sopra dichiara di evitare. Oggi
-    non morde (misurato: capienza 1 ovunque, zero partizioni nel testimone),
-    ma il testimone cambiera' forma: le due condizioni sono asserite sotto,
-    cosi' chi le rompe se ne accorge invece di perdere copertura in
-    silenzio."""
+    La somma ignora i conflitti fra strati (una attivita' di classe intera e
+    una di parte confliggono davvero, e cosi' due attivita' che condividono
+    il docente), quindi e' `>=` della capienza vera **per costruzione** — e
+    resta molto piu' fine della somma nuda dei minuti, che e' cio' che conta
+    per la guardia. Il costo dichiarato: qualche riga inviolabile rientra nel
+    banco, cioe' un caso di banco debole invece di copertura persa in
+    silenzio.
+
+    **Una precondizione resta**, e resta asserita: la capienza simultanea
+    delle risorse vale 1 — il default di `Resource.simultaneous_capacity`,
+    che l'harness non tocca mai. Con capienza cumulativa
+    (`OccupationBuilder` la supporta, ed e' feature EDT documentata) due
+    attivita' dello **stesso** strato potrebbero condividere la fascia, e il
+    massimo di ogni strato supererebbe il proprio pacchetto."""
     grid = w.env["grid"]
-    # Le due precondizioni del capoverso qui sopra. Asserite invece che
-    # sperate: se il testimone acquista capienza cumulativa o partizioni,
-    # questa guardia smette di essere un limite superiore e comincia a
-    # scartare righe violabili — un modo di sbagliare che non si vede dai
-    # verdi, perche' si manifesta come copertura che non c'e' piu'.
+    # La precondizione del capoverso qui sopra. Asserita invece che sperata:
+    # se il testimone acquista capienza cumulativa, questa guardia smette di
+    # essere generosa e comincia a scartare righe violabili — un modo di
+    # sbagliare che non si vede dai verdi, perche' si manifesta come
+    # copertura che non c'e' piu'.
     assert not Resource.objects.filter(simultaneous_capacity__gt=1).exists(), (
         "_capienza_secchio presuppone capienza simultanea 1: con risorse "
         "cumulative due attivita' possono condividere la fascia, e il "
         "massimo reale supera questo limite")
-    assert not ClassPart.objects.exists(), (
-        "_capienza_secchio presuppone classi senza partizioni: due attivita' "
-        "su parti diverse sono simultanee e cadono entrambe nella stessa "
-        "somma di secchio (_unit_keys)")
 
     def secchio(s):
         return 0 if kind == "day" else int(s >= grid.morning_end_slot)
@@ -728,15 +829,18 @@ def _capienza_secchio(w, kind, rep, aids):
     buckets = (0,) if kind == "day" else (0, 1)
     migliore = 0
     for b in buckets:
-        opzioni = []
+        per_strato = defaultdict(list)
         for aid in aids:
             if rep not in w.weeks_of[aid]:
                 continue
             starts = [s for s in _collocazioni(w, aid) if secchio(s) == b]
             if starts:
-                opzioni.append((w.act(aid).duration_minutes,
-                               w.act(aid).duration_slots, starts))
-        migliore = max(migliore, _massimo_pacchetto(opzioni))
+                per_strato[_strato(w, aid)].append(
+                    (w.act(aid).duration_minutes,
+                     w.act(aid).duration_slots, starts))
+        totale = sum(_massimo_pacchetto(opzioni)
+                     for opzioni in per_strato.values())
+        migliore = max(migliore, totale)
     return migliore
 
 
@@ -796,13 +900,24 @@ def _derive_max_hours_subject(w, tipo, kind):
 
     **Correzione 3: accumula su tutte le coppie (classe, materia)**, non
     `return` alla prima — come i tre derivatori di SAME_DAY/SAME_HALF_DAY/
-    TWO_DAYS qui sopra."""
+    TWO_DAYS qui sopra.
+
+    ⚠ **Con le parti (Task 15a) `_capienza_secchio` non e' piu' un massimo
+    esatto sulla geometria ma un limite superiore per strati**: cambia il
+    dettaglio, non l'argomento. La sussunzione regge lo stesso — se la
+    capienza supera `param` servono ancora almeno due attivita' (ogni
+    attivita' da sola e' dominata dal proprio `param`, che il testimone
+    misura per costruzione), e due attivita' di strati diversi «ci stanno»
+    a maggior ragione, perche' possono perfino partire nella stessa fascia.
+    Le occorrenze si filtrano con `_chiavi_unita`, come le altre famiglie di
+    materia."""
     grid = w.env["grid"]
     creata = 0
     for klass in w.env["classes"]:
+        chiavi = _chiavi_unita(w, klass)
         for subject in w.env["subjects"]:
             aids = [aid for aid in w.placement
-                    if klass.pk in w.tokens[aid]
+                    if w.tokens[aid] & chiavi
                     and w.act(aid).subject_id == subject.pk]
             if not aids:
                 continue
@@ -894,18 +1009,19 @@ def _derive_forbidden_sequence(w):
        stesse regole di `_try_place` invece di riscriverle)."""
     creata = 0
     for klass in w.env["classes"]:
+        chiavi = _chiavi_unita(w, klass)
         per_materia = defaultdict(list)
         for aid in w.placement:
-            if klass.pk in w.tokens[aid]:
+            if w.tokens[aid] & chiavi:
                 per_materia[w.act(aid).subject_id].append(aid)
         adiacenti = set()
         for aid, (day, slot) in w.placement.items():
-            if klass.pk not in w.tokens[aid]:
+            if not (w.tokens[aid] & chiavi):
                 continue
             fine = slot + w.act(aid).duration_slots
             for altro, (day2, slot2) in w.placement.items():
                 if (altro != aid and day2 == day and slot2 == fine
-                        and klass.pk in w.tokens[altro]):
+                        and w.tokens[altro] & chiavi):
                     adiacenti.add((w.act(aid).subject_id, w.act(altro).subject_id))
         for a in w.env["subjects"]:
             aids_a = per_materia.get(a.pk, [])
@@ -1009,29 +1125,20 @@ def _derive_weekly_order(w):
 
     Accumula su tutte le classi e tutte le coppie ordinate, non si ferma
     alla prima: restituisce il numero di righe create (il potere
-    vincolante)."""
-    # Precondizione taciuta, sullo stesso modello di _capienza_secchio:
-    # il filtro `klass.pk in w.tokens[aid]` (sotto) usa solo la chiave
-    # della classe, mentre il checker espande l'unita' a _unit_keys(row) =
-    # {classe, *parti} (subject_constraints.py). Con una ClassPart in gioco,
-    # un'attivita' legata alla sola parte ha tokens senza klass.pk: il
-    # derivatore la perde, il checker no. Su A la perdita allarga la
-    # guardia (innocuo); su B la stringe, e puo' scartare righe violabili —
-    # esattamente il modo di sbagliare che questa funzione dichiara di
-    # evitare. Asserita invece che sperata: se il testimone acquista
-    # partizioni, questa guardia smette di essere quella descritta sopra e
-    # comincia a scartare righe violabili senza che si veda dai verdi.
-    assert not ClassPart.objects.exists(), (
-        "_derive_weekly_order filtra su klass.pk: con le parti, le "
-        "occorrenze legate alla sola parte sfuggono al derivatore e non "
-        "al checker")
+    vincolante).
+
+    Le occorrenze si filtrano con `_chiavi_unita` (Task 15a): il filtro sul
+    solo `klass.pk` perdeva le attivita' legate alla sola parte, che il
+    checker invece vede — su A la perdita allargava la guardia (innocuo), su
+    B la stringeva, e poteva scartare righe violabili."""
     grid = w.env["grid"]
     width = grid.slots_per_day
     creata = 0
     for klass in w.env["classes"]:
+        chiavi = _chiavi_unita(w, klass)
         per_materia = defaultdict(list)
         for aid in w.placement:
-            if klass.pk in w.tokens[aid]:
+            if w.tokens[aid] & chiavi:
                 per_materia[w.act(aid).subject_id].append(aid)
         materie = sorted(per_materia)
         for a_id in materie:
@@ -1120,22 +1227,17 @@ def _derive_imposed_succession(w):
     costruzione della griglia, non del testimone (stessa forma della
     guardia `days_per_cycle < 2` di `_derive_two_days`).
 
-    Stessa precondizione taciuta di `_derive_weekly_order`: il filtro
-    `klass.pk in w.tokens[aid]` usa solo la chiave della classe, mentre il
-    checker espande l'unita' a `_unit_keys(row) = {classe, *parti}`. Con una
-    ClassPart in gioco un'attivita' legata alla sola parte sfuggirebbe al
-    derivatore e non al checker — asserita invece che sperata."""
-    assert not ClassPart.objects.exists(), (
-        "_derive_imposed_succession filtra su klass.pk: con le parti, le "
-        "occorrenze legate alla sola parte sfuggono al derivatore e non "
-        "al checker")
+    Come `_derive_weekly_order`, le occorrenze si filtrano con
+    `_chiavi_unita` (Task 15a): il filtro sul solo `klass.pk` perdeva le
+    attivita' legate alla sola parte, che il checker invece vede."""
     grid = w.env["grid"]
     n = grid.days_per_cycle * 2
     creata = 0
     for klass in w.env["classes"]:
+        chiavi = _chiavi_unita(w, klass)
         per_materia = defaultdict(list)
         for aid in w.placement:
-            if klass.pk in w.tokens[aid]:
+            if w.tokens[aid] & chiavi:
                 per_materia[w.act(aid).subject_id].append(aid)
         materie = sorted(per_materia)
 
@@ -1248,22 +1350,22 @@ def _derive_half_day_gap(w):
     Accumula su tutte le classi e tutte le coppie ordinate, non si ferma
     alla prima: restituisce il numero di righe create.
 
-    Stessa precondizione taciuta di `_derive_weekly_order`/
-    `_derive_imposed_succession`: il filtro `klass.pk in w.tokens[aid]` usa
-    solo la chiave della classe; con una ClassPart in gioco le occorrenze
-    legate alla sola parte sfuggirebbero al derivatore e non al checker —
-    asserita invece che sperata."""
-    assert not ClassPart.objects.exists(), (
-        "_derive_half_day_gap filtra su klass.pk: con le parti, le "
-        "occorrenze legate alla sola parte sfuggono al derivatore e non "
-        "al checker")
+    Come `_derive_weekly_order`/`_derive_imposed_succession`, le occorrenze
+    si filtrano con `_chiavi_unita` (Task 15a): il filtro sul solo
+    `klass.pk` perdeva le attivita' legate alla sola parte, che il checker
+    invece vede. ⚠ Qui la perdita era particolarmente cattiva: due attivita'
+    su parti diverse possono cadere nella **stessa** mezza giornata, e allora
+    lo scarto minimo osservato e' zero — cioe' nessuna riga derivabile.
+    Vedendone una sola, il derivatore avrebbe creato una riga che il
+    testimone stesso viola."""
     grid = w.env["grid"]
     n = grid.days_per_cycle * 2
     creata = 0
     for klass in w.env["classes"]:
+        chiavi = _chiavi_unita(w, klass)
         per_materia = defaultdict(list)
         for aid in w.placement:
-            if klass.pk in w.tokens[aid]:
+            if w.tokens[aid] & chiavi:
                 per_materia[w.act(aid).subject_id].append(aid)
         materie = sorted(per_materia)
         for a_id in materie:
