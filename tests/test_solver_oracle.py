@@ -1,6 +1,9 @@
 """Il criterio di riuscita: solve → apply → check_schedule → zero HARD nelle
-cinque famiglie modellate. Il registro dei predicati e' l'oracolo del solver:
-le due facce sono state scritte dai lati opposti dello stesso dato."""
+famiglie modellate. Il registro dei predicati e' l'oracolo del solver: le due
+facce sono state scritte dai lati opposti dello stesso dato.
+
+Dal Task 17 le famiglie sono **ventisei**, non le cinque dello spike: vedi
+`CODICI` qui sotto e la guardia che gli impedisce di invecchiare."""
 import datetime as dt
 
 import pytest
@@ -20,14 +23,48 @@ from tests.analysis_helpers import make_activity, mini_school, place
 
 pytestmark = pytest.mark.django_db
 
-# le causali delle cinque famiglie modellate, e solo quelle
+# Le causali di **tutte** le ventisei famiglie modellate. Fino al Task 16
+# questo insieme elencava le sole cinque dello spike, e l'oracolo del Fermi
+# era percio' cieco su ventuno famiglie su ventisei: un `check_schedule` che
+# gira su tutto ma di cui si guardava un ventesimo.
 CODICI = {
-    "resource_occupied", "resource_occupied_locked", "resource_peak",   # occupazione
-    "unavailability",                                                   # indisponibilita'
-    "slot_out_of_grid", "break_straddled", "holiday",                   # griglia
-    "max_gap",                                                          # D.T.B.
-    "subject_same_day",                                                 # materia
+    # strutturali
+    "resource_occupied", "resource_occupied_locked", "resource_peak",
+    "unavailability",
+    "slot_out_of_grid", "break_straddled", "holiday",
+    "site_transition",
+    "weight_day", "weight_morning", "weight_afternoon", "weight_week",
+    # orari sulla risorsa
+    "min_distribution", "max_hours_day", "max_hours_morning",
+    "max_hours_afternoon", "max_presence", "max_presence_days",
+    "arrival_departure", "free_guaranteed", "max_half_days", "only_half_day",
+    "max_site_changes", "max_gap",
+    # di materia
+    "subject_same_half_day", "subject_same_day", "subject_two_days",
+    "subject_forbidden_sequence", "subject_max_hours_half_day",
+    "subject_max_hours_day", "subject_weekly_order",
+    "subject_imposed_succession", "subject_half_day_gap",
+    "subject_parts_order",
 }
+
+# Le tre causali del catalogo che restano **deliberatamente** fuori.
+FUORI = {
+    # nessun builder: PLACEMENT_INDEPENDENT, il solver non crea ne' distrugge
+    # attivita' (vedi tests/test_solver_registry_completo.py)
+    "coverage_mismatch",
+    # non sono HARD: violazioni() le filtrerebbe comunque per severita', ma
+    # elencarle qui rende la scelta leggibile invece che implicita
+    "unavailability_optional", "preference",
+}
+
+
+def test_codici_copre_tutto_il_catalogo():
+    """La guardia contro la deriva: una causale nuova in
+    `domain/analysis/causali.py` deve finire in CODICI oppure in FUORI, per
+    decisione esplicita. Senza questo test l'insieme invecchia in silenzio —
+    ed e' esattamente quello che gli e' successo per ventuno famiglie."""
+    from domain.analysis import causali
+    assert set(causali.CAUSALI) == CODICI | FUORI
 
 
 def violazioni(schedule, codici=CODICI):
@@ -439,8 +476,27 @@ def test_nuove_vede_una_violazione_ripetuta_su_unaltra_settimana():
 def test_fermi_intero_misurato():
     """Il Fermi ha le classi del triennio a 30 ore su una griglia di 30 fasce:
     non e' noto se sia fattibile. Qualunque cosa il solver restituisca, deve
-    essere corretta — e le misure vanno riportate."""
+    essere corretta — e le misure vanno riportate.
+
+    ⚠⚠ **E qui la misura dice meno di quanto sembri, misurato al Task 17.** Il
+    dataset Fermi ha **zero** righe `ResourceTimeConstraint`, **zero**
+    `SubjectConstraint` e i quattro tetti di peso a `None`: delle ventisei
+    famiglie modellate ne esercita **cinque** — griglia, indisponibilita' (42
+    righe), occupazione, sedi e D.T.B. — e ventuno builder su ventisei non
+    postano nulla. Il numero lo dimostra: **8140 variabili e 1082 constraint,
+    identici a quelli dello spike a cinque vincoli** del 2026-08-09, e lo
+    stesso 0,56s.
+
+    Quindi «OPTIMAL sul Fermi col modello completo» **non e' una misura del
+    modello completo**: e' una misura del dataset. La misura del modello sta
+    in `tests/test_solver_witness.py::test_modello_completo`, dove ogni
+    famiglia porta le proprie righe.
+
+    Questo test resta per l'altra meta' — la scala. 284 attivita' su una
+    griglia stretta sono il volume vero; il banco a testimone ne ha 14-32."""
     dataset = fermi.build()
+    assert ResourceTimeConstraint.objects.count() == 0
+    assert SubjectConstraint.objects.count() == 0
     soluzione = solve(dataset["schedule"], time_limit=120)
     print("\nFermi intero:", soluzione.status, soluzione.stats)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNKNOWN")

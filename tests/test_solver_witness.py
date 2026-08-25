@@ -6,7 +6,9 @@ import pytest
 
 from domain.solver import builders  # noqa: F401 — forza la registrazione
 from domain.solver.registry import BUILDERS
-from tests.solver_harness import DERIVERS, build_witness, run_family
+from tests.solver_harness import (
+    DERIVERS, build_witness, run_family, run_tutte_le_famiglie,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -83,3 +85,29 @@ def test_due_parti_della_stessa_partizione_condividono_una_cella():
 @pytest.mark.parametrize("key", sorted(DERIVERS, key=str))
 def test_famiglia(key, seed):
     run_family(key, seed)
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_modello_completo(seed):
+    """⚠ Il test che mancava: **tutte le famiglie insieme**, non una per volta.
+
+    `test_famiglia` prova ventisei modelli da una famiglia ciascuno. Nessuno di
+    quei test — e nemmeno l'oracolo del Fermi, che di righe di vincolo non ne
+    ha nessuna — verifica che i ventisei builder convivano: che due traduzioni
+    corrette separatamente non si contraddicano una volta postate insieme.
+
+    Il testimone regge la congiunzione per costruzione, perche' ogni riga e'
+    derivata dal fatto che *lui* la soddisfa. Quindi INFEASIBLE qui e' un
+    fallimento duro come in `run_family`, e vale su tutte e ventisei le
+    famiglie in un colpo solo.
+
+    ⚠ L'ordine dei derivatori conta: vedi `MUTANTI` in `solver_harness`. Se
+    qualcuno lo rompe, l'assert sul testimone sporco lo dice per nome."""
+    w, soluzione, poteri = run_tutte_le_famiglie(seed)
+    vive = [k for k, v in poteri.items() if v]
+    assert len(vive) >= 20, (
+        f"solo {len(vive)} famiglie portano righe al seed {seed}: la misura "
+        f"del modello completo si sta svuotando")
+    print(f"\nmodello completo, seed {seed}: {len(vive)}/26 famiglie, "
+          f"{sum(poteri.values())} righe, {soluzione.status} "
+          f"{soluzione.stats}")

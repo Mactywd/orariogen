@@ -364,6 +364,83 @@ def run_family(key, seed):
     return w
 
 
+# ⚠ **I derivatori non sono componibili in ordine qualunque.** Due di loro
+# sono in formulazione **densa** (Ruling 34): non osservano il testimone, lo
+# **riparano** per rendere la propria famiglia non vacua. E la riparazione si
+# vede dalle altre famiglie.
+#
+# - `_derive_site_transition` riassegna la **sede** a tutte le attivita', e
+#   le sedi sono cio' che `max_site_changes` conta;
+# - i quattro `parts_*` (`_sintonizza_parti`) riassegnano la **materia**
+#   dell'attivita' di ogni parte, e la materia e' cio' su cui ogni riga
+#   `SubjectConstraint` e' ancorata.
+#
+# Nessuna delle due tocca griglia od occupazione, ed e' per questo che le loro
+# docstring dichiaravano di non disturbare nessuno: e' vero per il testimone
+# *in se'*, falso per le **righe gia' derivate** da altri. Misurato mettendoli
+# in ordine alfabetico: `parts_*` sporca `subject_half_day_gap`,
+# `subject_imposed_succession`, `subject_max_hours_day/half_day`;
+# `structural:site_transition` sporca `max_site_changes` — e la composizione
+# risponde INFEASIBLE su 2 seed su 3.
+#
+# Non e' un difetto da riparare: e' una **precedenza**. Chi ripara il
+# testimone va per primo, prima che qualcun altro derivi righe sullo stato che
+# sta per cambiare.
+MUTANTI = ("structural:site_transition", "parts_before_class",
+           "parts_after_class", "parts_before_or_after_class_h",
+           "parts_before_or_after_class_ab")
+
+
+def ordine_derivatori():
+    """Le chiavi dei derivatori con i **mutanti in testa**: vedi il commento
+    qui sopra. Fuori da questo ordine la composizione non regge."""
+    per_nome = {str(k): k for k in DERIVERS}
+    testa = [per_nome[n] for n in MUTANTI if n in per_nome]
+    return testa + [k for k in sorted(DERIVERS, key=str) if k not in testa]
+
+
+def run_tutte_le_famiglie(seed, time_limit=120):
+    """Il banco a **modello completo**: tutte le famiglie attive insieme sullo
+    stesso testimone, invece di una per volta.
+
+    E' la misura che il Fermi non puo' dare. Il dataset Fermi ha **zero** righe
+    `ResourceTimeConstraint` e **zero** `SubjectConstraint`, e i quattro tetti
+    di peso a `None`: ventuno builder su ventisei non postano nulla, e il
+    modello «completo» sul Fermi e' identico byte per byte a quello dello
+    spike a cinque vincoli. Qui invece ogni famiglia porta le proprie righe.
+
+    Il testimone resta il testimone: ogni riga e' derivata perche' *lui* la
+    soddisfa, quindi soddisfa anche la loro **congiunzione** — INFEASIBLE
+    resta un fallimento duro, esattamente come in `run_family`.
+
+    Restituisce `(w, soluzione, poteri)`."""
+    w = build_witness(seed)
+    poteri, codici = {}, set()
+    for key in ordine_derivatori():
+        d = DERIVERS[key]
+        poteri[str(key)] = d.fn(w)
+        codici |= set(d.codes)
+
+    sporco = _hard(w.schedule, codici)
+    assert sporco == set(), (
+        f"il testimone viola la congiunzione delle righe derivate "
+        f"(seed {seed}): {sorted(sporco)} — un derivatore ha sporcato le "
+        f"righe di un altro, vedi ordine_derivatori()")
+
+    Placement.objects.filter(schedule=w.schedule).delete()
+    soluzione = solve(w.schedule, time_limit=time_limit)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), (
+        f"modello completo INFEASIBLE con un testimone disponibile "
+        f"(seed {seed}): {soluzione.stats}")
+
+    apply(soluzione, w.schedule)
+    dopo = _hard(w.schedule, codici)
+    assert dopo == set(), (
+        f"il modello completo accetta un piazzamento che il checker boccia "
+        f"(seed {seed}): {sorted(dopo)}")
+    return w, soluzione, poteri
+
+
 from domain.models import (
     ClassPart, ClassPartition, InstituteSettings, ResourceTimeConstraint,
     ResourceUnavailability, SubjectConstraint,
@@ -1672,8 +1749,7 @@ def _derive_site_transition(w):
     — chiude anche l'Important 2 per costruzione, non solo qui); (ii)
     assegnare una sede a **tutte** le attivita' del testimone (sovrascrive
     l'assegnazione al 50% di `_make_activities`, ma solo su questa copia del
-    testimone: non tocca `_make_activities`, e nessun altro derivatore ne
-    risente); (iii) finche' esiste una coppia a distanza <= 0, togliere la
+    testimone: non tocca `_make_activities`); (iii) finche' esiste una coppia a distanza <= 0, togliere la
     sede, greedy, a una delle due (converge sempre: ogni rimozione riduce di
     uno il numero di attivita' con sede, quindi il ciclo e' limitato da
     `len(w.activities)`); (iv) `needed` = minimo superstite, vacua
@@ -1681,7 +1757,15 @@ def _derive_site_transition(w):
     correzione 1, builder reso no-op, 15 seed, piu' esecuzioni per il non
     determinismo di CP-SAT): **12-14/15** a seconda dell'esecuzione, contro
     l'1/15 della formulazione osservativa — in linea con la misura della
-    review (12/15)."""
+    review (12/15).
+
+    ⚠ **Correzione al Task 17**: «nessun altro derivatore ne risente» era
+    scritto qui, ed e' falso. Riassegnare le sedi non tocca ne' la griglia ne'
+    l'occupazione — vero — ma le sedi sono esattamente cio' che
+    `max_site_changes` conta, quindi una riga gia' derivata da
+    `_derive_max_site_changes` diventa violata. Invisibile finche' il banco
+    provava una famiglia per volta. Vedi `MUTANTI` e
+    `run_tutte_le_famiglie`."""
     sites = w.env["sites"]
     if len(sites) < 2:
         return 0
@@ -1872,7 +1956,15 @@ def _sintonizza_parti(w, tipo, kind):
 
     Il monte ore del `Service` segue la materia, cosi' la fixture non
     accumula uno scarto di copertura in piu' di quello gia' dichiarato in
-    testa a questo modulo (Ruling 102)."""
+    testa a questo modulo (Ruling 102).
+
+    ⚠ **Correzione al Task 17**: «il testimone resta valido esattamente com'era»
+    vale per la griglia e per l'occupazione, **non** per le righe gia' derivate
+    da altre famiglie. La materia e' cio' su cui ogni `SubjectConstraint` e'
+    ancorata, quindi riassegnarla fa violare le righe di
+    `subject_half_day_gap`, `subject_imposed_succession` e
+    `subject_max_hours_day/half_day`. Vedi `MUTANTI` e
+    `run_tutte_le_famiglie`."""
     classi_pk = {k.pk for k in w.env["classes"]}
     for part in w.env["parts"]:
         aids = [aid for aid in w.placement
