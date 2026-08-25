@@ -277,7 +277,19 @@ class SiteTransitionBuilder(Builder):
                             continue
                         for sa in per_fascia[s]:
                             for sb in per_fascia[s]:
-                                if sa == sb:
+                                # `sb <= sa`, non `sb == sa`: qui s e t sono
+                                # la stessa fascia, quindi la clausola e'
+                                # simmetrica in (sa, sb) — `AddBoolOr` lo e'
+                                # per costruzione — e `posted`, che tiene
+                                # conto dell'ordine, non la deduplica. Senza
+                                # questo ogni coppia di sedi veniva postata
+                                # due volte identica (Minor 2 della ri-review
+                                # del giro 1: sul Fermi 5604 -> 4806
+                                # constraint a 2 sedi, 21830 -> 17042 a 4).
+                                # ⚠ Nel blocco `s < t` sotto la simmetria non
+                                # c'e': (s, sa) e (t, sb) sono fasce diverse,
+                                # e scambiare le sedi e' un'altra clausola.
+                                if sb <= sa:
                                     continue
                                 firma = (key, day, s, s, sa, sb,
                                          frozenset(tocca))

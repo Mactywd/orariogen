@@ -603,9 +603,13 @@ def _derive_max_site_changes(w):
     testimone e' gia' completo, e ogni `run_family` costruisce il proprio
     testimone da zero — nessun altro derivatore vede questo cambiamento.
 
-    Vacua (ritorna 0) solo se il docente piu' carico ha **meno di due
-    attivita'** nel testimone: con una sola, «cambio di sede» non e'
-    strutturalmente possibile per lui, qualunque cosa scelga il solver."""
+    Vacua (ritorna 0) in due casi, non uno solo. Il primo: il docente piu'
+    carico ha **meno di due attivita'** nel testimone — con una sola, «cambio
+    di sede» non e' strutturalmente possibile per lui. Il secondo, che la
+    prima stesura di questo derivatore aveva perso: le sue attivita' cadono in
+    **meno giorni distinti** di quante sono le sedi, e allora l'alternanza non
+    riesce ad assegnargliene due — con una sede sola `per_day = per_week = 0`
+    e' inviolabile, e il caso passerebbe anche col builder spento."""
     conteggio = defaultdict(int)
     for aid in w.placement:
         for t in w.act(aid).teachers.all():
@@ -618,13 +622,22 @@ def _derive_max_site_changes(w):
         return 0
 
     sites = w.env["sites"]
+    # ⚠ Le sedi si alternano sui giorni **realmente usati** dal docente, non
+    # sul numero del giorno. Con `sites[day % len(sites)]` un docente che
+    # lavora solo in giorni della stessa parita' riceveva **una sola sede**, e
+    # allora `per_day = per_week = 0` e' inviolabile: nessun piazzamento puo'
+    # produrre un cambio, e il caso passa anche col builder spento. Era il
+    # seed 1, cioe' dentro il banco (Important 1 della ri-review del giro 1).
+    giorni_usati = sorted({w.placement[aid][0] for aid in attivita_docente})
+    if len(giorni_usati) < len(sites):
+        return 0   # non abbastanza giorni per esibire due sedi distinte
     for act in w.activities:
         act.site = None
         act.save()
     for aid in attivita_docente:
         day, _slot = w.placement[aid]
         act = w.act(aid)
-        act.site = sites[day % len(sites)]
+        act.site = sites[giorni_usati.index(day) % len(sites)]
         act.save()
 
     per_giorno, per_settimana = 0, 0
