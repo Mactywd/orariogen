@@ -2,12 +2,108 @@
 quante mezze giornate nella settimana. Nessuno di questi guarda *quali* fasce:
 la prima e l'ultima sono affare di time_presence.py."""
 
+from collections import defaultdict
+
+from domain.analysis.checkers.time_constraints import (
+    FreeGuaranteedChecker, MinDistributionChecker,
+)
 from domain.models import ResourceTimeConstraint
 from domain.solver.builders.base import ResourceBuilder
 from domain.solver.registry import register
 from domain.solver.residual import frozen_occupies, residual_cap
 
 T = ResourceTimeConstraint.Type
+
+
+# --- ADR-018 sui due minimi non separabili ------------------------------
+#
+# MIN_DISTRIBUTION e FREE_GUARANTEED contano una quantita' che **non e'** una
+# somma di contributi per attivita': giorni qualificanti, giorni liberi, mezze
+# giornate libere. Il residuo non e' quindi additivo — una congelata non
+# «consuma una quota», toglie gradi di liberta' — e ne' `residual_cap` ne'
+# `residual_floor` lo esprimono. Il trattamento e' quello gia' in uso su
+# `WeeklyOrderBuilder` (domain/solver/builders/subject_order.py), con lo
+# stesso principio della spec §9.5:
+#
+#     INFEASIBLE che nasce dal **vietare un peggioramento** e' ammesso;
+#     INFEASIBLE che nasce dal **pretendere una riparazione** non lo e'.
+#
+# Per ogni riga e per ogni firma si calcola `B`, il valore che la quantita'
+# **contata dal checker** assume sul piazzamento corrente, e si sceglie fra tre
+# esiti: soglia grezza se `B` gia' la soddisfa (il passato non e' il problema);
+# soglia grezza se nessuna congelata tocca la risorsa (istanza infattibile per
+# conto proprio, o solve da zero: clampare la spegnerebbe); altrimenti la
+# disgiunzione reificata «ripara **oppure** non peggiorare».
+
+
+def _quantita_baseline(checker, state, row, days):
+    """Le `quantities` del finding che **il checker** produce su `days`, o
+    `None` se `days` non viola la riga.
+
+    Si chiama il checker di `domain/analysis` invece di riscriverne la
+    condizione: se il conteggio del builder e quello del checker divergessero
+    di uno, il residuo sarebbe peggio del difetto che corregge. `days` ha la
+    forma di `ScheduleState.resource_days` — la stessa che `_TimeChecker.check`
+    passa a `violations`."""
+    for finding in checker.violations(state, row, days):
+        return finding.quantities
+    return None
+
+
+def _congelate_sulla_risorsa(ctx, key, rep):
+    """Almeno una congelata tocca questa risorsa in questa firma?"""
+    fasce = range(ctx.grid.slots_per_day)
+    return any(frozen_occupies(ctx, key, day, fasce, rep)
+               for day in range(ctx.grid.days_per_cycle))
+
+
+def _libere_sulla_risorsa(ctx, key, rep):
+    attive = ctx.states[rep].activities
+    return [aid for aid in ctx.free
+            if aid in attive and key in ctx.tokens.get(aid, frozenset())]
+
+
+def _status_quo_rappresentabile(ctx, key, rep):
+    """Il piazzamento corrente e' riproducibile dentro il modello?
+
+    Il ramo «non peggiorare» e' soddisfacibile **solo** se ogni attivita'
+    libera che tocca la risorsa puo' restare dov'e'. Non puo' se non e'
+    piazzata affatto (solve da zero, o parziale) o se un pre-filtro
+    strutturale — griglia, festivo, indisponibilita' rossa — ha tolto dal
+    dominio la cella dove si trova adesso. In quel caso chiedere di
+    conservare `B` sarebbe una pretesa, non un divieto: e' il caveat
+    sollevato dalla review, ed e' verificato qui invece che assunto."""
+    placed = ctx.states[rep].placed
+    for aid in _libere_sulla_risorsa(ctx, key, rep):
+        pl = placed.get(aid)
+        if pl is None or (pl.day, pl.start_slot) not in ctx.cells.get(aid, ()):
+            return False
+    return True
+
+
+def _giorni_garantiti(ctx, key, rep):
+    """`{giorno: [fasce]}` sulla risorsa contando **solo** le attivita' la cui
+    collocazione attuale sopravvive nel modello: le congelate (dominio di
+    cardinalita' uno per costruzione di `SolverContext.build`) e le libere
+    gia' piazzate in una cella ammissibile.
+
+    Serve a MIN_DISTRIBUTION, dove l'occupazione e' **monotona**: aggiungere
+    ore a un giorno non puo' toglierlo dai qualificati. Il conteggio su un
+    sottoinsieme dell'occupazione finale e' quindi un valore *raggiungibile*
+    da ogni assegnazione, non solo osservato su questa — che e' cio' che
+    rende sempre soddisfacibile il ramo status quo. Su FREE_GUARANTEED lo
+    stesso trucco non vale (li' piu' occupazione **toglie** giorni liberi):
+    la' serve la rappresentabilita' piena, vedi
+    `_status_quo_rappresentabile`."""
+    stato = ctx.states[rep]
+    per_giorno = defaultdict(set)
+    for aid, pl in stato.placed.items():
+        if aid not in stato.activities or key not in stato.tokens[aid]:
+            continue
+        if aid in ctx.free and (pl.day, pl.start_slot) not in ctx.cells.get(aid, ()):
+            continue
+        per_giorno[pl.day].update(pl.slots)
+    return {d: sorted(s) for d, s in sorted(per_giorno.items())}
 
 
 @register(T.MAX_HOURS)
@@ -94,12 +190,6 @@ class MinDistributionBuilder(ResourceBuilder):
     `len(slots) * slot_minutes >= min_minutes_per_day` e ne vuole almeno
     `min_days`.
 
-    ⚠ Minimo garantito, non tetto (spec §3.1, vedi `residual.py`): niente
-    `residual_cap`. Le attivita' congelate contribuiscono alla somma dentro
-    `occupied` come qualunque altra — se da sole bastano gia' a soddisfare
-    `min_days`, il vincolo `sum(qualificati) >= min_days` e' vacuo per
-    costruzione, mai infattibile.
-
     ⚠ Qui vale una proprieta' **locale al singolo giorno** che gli altri due
     minimi di questo file non hanno (review Task 7, Important 2 — corregge
     un'affermazione precedente che diceva troppo): una congelata puo' solo
@@ -115,15 +205,34 @@ class MinDistributionBuilder(ResourceBuilder):
     distinti raggiungibili (quello congelato e quello dell'unica libera
     residua): `INFEASIBLE`, per colpa del passato.
 
-    `ArrivalDepartureBuilder` e `FreeGuaranteedBuilder` non hanno nemmeno la
-    proprieta' locale: li' una congelata puo' *consumare* il minimo gia' a
-    livello di un singolo giorno (occupare una fascia vietata, o un
-    giorno/meta' che doveva restare libero), e serve il residuo per
-    forzatura (`frozen_occupies`, non `residual_cap`). La differenza e'
-    nella forma del predicato: qui e' una soglia di **presenza cumulativa
-    per giorno** (piu' occupazione nello stesso giorno aiuta sempre quel
-    giorno), la' una soglia di **assenza** (piu' occupazione puo' sempre
-    nuocere)."""
+    ⚠ Quel controesempio era scritto qui e il vincolo si postava **grezzo**
+    lo stesso, fino alla review finale (Finding 1) che l'ha misurato: il
+    modello rifiutava perfino lo *status quo*. Ora il trattamento ADR-018 e'
+    quello descritto in testa al modulo, con `B` = i giorni qualificanti su
+    `_giorni_garantiti` — non su tutto il piazzamento corrente, perche' il
+    ramo «non peggiorare» dev'essere soddisfacibile e le libere che siedono
+    su una cella tolta dai pre-filtri non ci sarebbero piu'. Per la
+    monotonia dell'occupazione un giorno qualificante in `_giorni_garantiti`
+    resta qualificante in **ogni** assegnazione: `sum(qualificati) >= B` e'
+    quindi soddisfatto per costruzione dal presente, mai una pretesa sul
+    futuro.
+
+    ⚠ Costo consapevole del ramo disgiuntivo, misurato e non nascosto: il
+    solver **puo'** scegliere di non riparare anche quando potrebbe, perche'
+    il modello non ha funzione di costo e i due rami sono alla pari. Nel
+    caso «poche congelate + molte libere non ancora piazzate» la baseline
+    del checker e' quasi sempre gia' violata (nulla e' piazzato) e `B` vale
+    quanto le sole congelate qualificano: il ramo status quo diventa allora
+    vacuo e la riga, di fatto, non vincola. E' una perdita di *qualita'*, non
+    di correttezza (nessun finding nuovo), e vale per l'intera famiglia
+    d'ordine di questo branch — `WeeklyOrderBuilder` ha la stessa forma.
+    Vedi il report di questo giro.
+
+    `ArrivalDepartureBuilder` resta invece sul residuo **per forzatura**: li'
+    una congelata puo' *consumare* il minimo gia' a livello di un singolo
+    giorno (occupare una fascia vietata), e nessuna libera puo' recuperare
+    quel giorno — la soglia si abbassa a quanto resta raggiungibile senza
+    bisogno di guardare il piazzamento corrente."""
     TYPE = T.MIN_DISTRIBUTION
 
     def post(self, ctx, model, row, rep):
@@ -137,7 +246,17 @@ class MinDistributionBuilder(ResourceBuilder):
             model.Add(sm * sum(occ) >= soglia).OnlyEnforceIf(q)
             model.Add(sm * sum(occ) < soglia).OnlyEnforceIf(q.Not())
             qualificati.append(q)
-        model.Add(sum(qualificati) >= row.params["min_days"])
+
+        minimo = row.params["min_days"]
+        quantita = _quantita_baseline(MinDistributionChecker(),
+                                      ctx.states[rep], row,
+                                      _giorni_garantiti(ctx, key, rep))
+        if quantita is None or not _congelate_sulla_risorsa(ctx, key, rep):
+            model.Add(sum(qualificati) >= minimo)
+            return
+        riparato = model.NewBoolVar(f"mindist_fix_{row.pk}_{key}_{rep}")
+        model.Add(sum(qualificati) >= minimo).OnlyEnforceIf(riparato)
+        model.Add(sum(qualificati) >= quantita["days"]).OnlyEnforceIf(riparato.Not())
 
 
 @register(T.ARRIVAL_DEPARTURE)
@@ -232,56 +351,93 @@ class FreeGuaranteedBuilder(ResourceBuilder):
     "attivo" — `libero` non potra' mai valere 1 li'; una congelata in una
     meta' specifica forza quella meta' "occupata" — `libera` non potra' mai
     valere 1 li', anche se l'altra meta' dello stesso giorno resta
-    negoziabile. Residuo per forzatura (`frozen_occupies`, non
-    `residual_cap`): i termini gia' persi non generano letterali, le
-    soglie si abbassano a quanto resta raggiungibile."""
+    negoziabile. I termini gia' persi non generano letterali: restano fuori
+    dalle due somme perche' varrebbero 0 comunque.
+
+    ⚠ **Le due soglie non si clampano una per volta** (review finale,
+    Finding 2). Fino al 2026-08-25 il residuo era
+    `min(free_days, days_per_cycle - giorni_persi)` e
+    `min(free_half_days, days_per_cycle - giorni_interamente_persi)`,
+    calcolati **indipendentemente**. Ma i due conteggi si escludono a
+    vicenda: `libera = attivo AND NOT meta` conta una mezza giornata solo se
+    il **giorno lavora**, quindi un giorno che la soglia dei *giorni*
+    obbliga a lasciare vuoto contribuisce **zero** mezze — mentre
+    `days_per_cycle - giorni_interamente_persi` lo contava come se potesse
+    contribuirne una. Ciascuna soglia era raggiungibile da sola, la
+    congiunzione no, e il modello rispondeva INFEASIBLE per colpa del solo
+    passato.
+
+    Percio' il trattamento ADR-018 e' quello descritto in testa al modulo, e
+    i due rami stanno sotto **lo stesso** booleano `riparato`: o si riparano
+    entrambe le soglie, o si conservano entrambi i valori della baseline. Due
+    booleani indipendenti riprodurrebbero esattamente il difetto.
+
+    `B` viene dal **checker**, sul piazzamento corrente
+    (`ScheduleState.resource_days`), e si usa **grezzo**, non clampato alla
+    soglia. Il finding e' uno solo per entrambe le quantita', quindi una puo'
+    essere gia' conforme (`B >= soglia`) mentre l'altra viola: clampare a
+    `min(B, soglia)` renderebbe ciascun ramo implicato dall'altro e la
+    disgiunzione collasserebbe in `>= min(B, soglia)` per quantita' — cioe'
+    esattamente i due booleani indipendenti che il Finding 2 vieta
+    (verificato: con il clamp,
+    `test_free_guaranteed_le_due_soglie_stanno_sotto_un_solo_booleano`
+    diventa rosso). `B` grezzo non autorizza mai una violazione nuova: su una
+    quantita' conforme vale gia' `B >= soglia`, quindi il ramo status quo e'
+    piu' stretto della soglia, non piu' largo.
+    ⚠ A differenza di MIN_DISTRIBUTION qui non basta un
+    sottoinsieme dell'occupazione: piu' occupazione **toglie** giorni e
+    mezze libere, quindi `B` e' un valore osservato e non raggiungibile per
+    monotonia. Se lo status quo non e' rappresentabile
+    (`_status_quo_rappresentabile` falso: una libera non piazzata, o su una
+    cella tolta dai pre-filtri) il ramo scende a zero — vacuo, mai una
+    pretesa. Nella pratica quel caso si presenta di rado con la baseline
+    gia' violata: con le libere non piazzate l'occupazione e' minima e i
+    giorni liberi sono **tanti**, quindi la baseline e' quasi sempre pulita
+    e si posta la soglia grezza."""
     TYPE = T.FREE_GUARANTEED
 
     def post(self, ctx, model, row, rep):
         v, key = ctx.vocab, row.resource_id
         grid = ctx.grid
         giorni_liberi, mezze_libere = [], []
-        giorni_persi, giorni_interamente_persi = 0, 0
         halves = v.halves()
         for day in range(grid.days_per_cycle):
             attivo = v.day_active(key, day, signature=rep)
-            if frozen_occupies(ctx, key, day, range(grid.slots_per_day), rep):
-                giorni_persi += 1  # il giorno e' gia' occupato dal passato
-            else:
+            if not frozen_occupies(ctx, key, day, range(grid.slots_per_day), rep):
                 libero = model.NewBoolVar(f"freeday_{key}_{rep}_{day}")
                 model.Add(libero + attivo == 1)
                 giorni_liberi.append(libero)
-            meta_perse_nel_giorno = 0
             for half, span in enumerate(halves):
                 if frozen_occupies(ctx, key, day, span, rep):
-                    meta_perse_nel_giorno += 1  # quella meta' e' gia' occupata
-                    continue
+                    continue  # quella meta' e' gia' occupata dal passato
                 meta = v.half_active(key, day, half, signature=rep)
                 libera = model.NewBoolVar(f"freehalf_{key}_{rep}_{day}_{half}")
                 # libera  <->  giorno attivo AND mezza giornata scarica
                 model.AddBoolAnd([attivo, meta.Not()]).OnlyEnforceIf(libera)
                 model.AddBoolOr([attivo.Not(), meta]).OnlyEnforceIf(libera.Not())
                 mezze_libere.append(libera)
-            # Se entrambe le meta' di questo giorno sono gia' occupate dal
-            # passato, il giorno non puo' contribuire nessuna mezza libera:
-            # e' un giorno interamente perso (review Task 7, Important 1).
-            if meta_perse_nel_giorno == len(halves):
-                giorni_interamente_persi += 1
+
         minimo_giorni = row.params.get("free_days", 0)
-        if minimo_giorni:
-            soglia_giorni = min(minimo_giorni, grid.days_per_cycle - giorni_persi)
-            model.Add(sum(giorni_liberi) >= soglia_giorni)
         minimo_mezze = row.params.get("free_half_days", 0)
+        stato = ctx.states[rep]
+        quantita = _quantita_baseline(FreeGuaranteedChecker(), stato, row,
+                                      stato.resource_days(key))
+        if quantita is None or not _congelate_sulla_risorsa(ctx, key, rep):
+            if minimo_giorni:
+                model.Add(sum(giorni_liberi) >= minimo_giorni)
+            if minimo_mezze:
+                model.Add(sum(mezze_libere) >= minimo_mezze)
+            return
+
+        if _status_quo_rappresentabile(ctx, key, rep):
+            b_giorni = quantita["free_days"]
+            b_mezze = quantita["free_half_days"]
+        else:
+            b_giorni = b_mezze = 0
+        riparato = model.NewBoolVar(f"freeguar_fix_{row.pk}_{key}_{rep}")
+        if minimo_giorni:
+            model.Add(sum(giorni_liberi) >= minimo_giorni).OnlyEnforceIf(riparato)
+            model.Add(sum(giorni_liberi) >= b_giorni).OnlyEnforceIf(riparato.Not())
         if minimo_mezze:
-            # Il bound e' per **giorno**, non per meta': `libera = attivo AND
-            # NOT meta` puo' valere 1 al piu' una volta per giorno (se il
-            # giorno e' attivo, almeno una delle due meta' e' occupata; se e'
-            # inattivo entrambe valgono 0). Il massimo teorico e'
-            # `days_per_cycle`, non `2 * days_per_cycle` — il bound
-            # precedente sovrastimava di un fattore 2 (review Task 7,
-            # Important 1). Si sottrae poi un giorno per ciascun giorno
-            # **interamente** perso al passato (entrambe le meta' congelate):
-            # li' il massimo raggiungibile e' 0, non 1.
-            soglia_mezze = min(minimo_mezze,
-                               grid.days_per_cycle - giorni_interamente_persi)
-            model.Add(sum(mezze_libere) >= soglia_mezze)
+            model.Add(sum(mezze_libere) >= minimo_mezze).OnlyEnforceIf(riparato)
+            model.Add(sum(mezze_libere) >= b_mezze).OnlyEnforceIf(riparato.Not())
