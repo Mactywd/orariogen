@@ -5,7 +5,9 @@ import pytest
 
 from domain.analysis.capacity import analyze_capacity
 from domain.analysis.hall import STATEMENT_SINGOLA, analyze_hall
-from domain.models import Activity, ResourceUnavailability, Teacher
+from domain.models import (
+    Activity, ActivityMaterialRequirement, Material, ResourceUnavailability, Teacher,
+)
 from tests.analysis_helpers import make_activity, mini_school, place
 
 pytestmark = pytest.mark.django_db
@@ -124,3 +126,35 @@ def test_l_incrociata_la_classe_satura_i_docenti_restringono():
     assert f.required_minutes == 7 * 60
     assert f.placeable_minutes == 6 * 60
     assert f.binding_label == env["klass"].name         # satura la classe, non un docente
+
+
+def test_la_capienza_cumulativa_si_pesa_per_quantita():
+    # Carrello da 6 posti: un'immobile ne occupa 3, e due attivita' libere
+    # ne vogliono 2 ciascuna sull'unica fascia che i loro docenti concedono.
+    # Presa una per volta ognuna entra (3 + 2 = 5 <= 6), quindi
+    # `admissible_starts` non le scarta: e' l'insieme a non entrare, 3 + 2 + 2
+    # = 7 > 6. Contando le attivita' invece delle quantita' il residuo
+    # risulterebbe 5 e la diagnosi si perderebbe.
+    env = mini_school()
+    carrello = Material.objects.create(name="Carrello tablet",
+                                       simultaneous_capacity=6)
+
+    immobile = make_activity(env["subject"], slots=1,
+                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
+    ActivityMaterialRequirement.objects.create(
+        activity=immobile, material=carrello, quantity=3)
+    place(env["schedule"], immobile, day=0, slot=0)
+
+    for i in range(2):
+        docente = Teacher.objects.create(
+            name=f"Docente carrello {i}", last_name=f"Cog{i}", first_name=f"Nom{i}")
+        _blocca(docente, giorni=(1, 2, 3, 4),
+                celle=[(0, s) for s in range(1, 6)])   # resta la sola (0,0)
+        libera = make_activity(env["subject"], teachers=[docente], slots=1)
+        ActivityMaterialRequirement.objects.create(
+            activity=libera, material=carrello, quantity=2)
+
+    findings = analyze_hall(env["schedule"])
+    assert len(findings) == 1
+    assert findings[0].n_activities == 2
+    assert findings[0].binding_label == "Carrello tablet"

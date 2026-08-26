@@ -81,9 +81,16 @@ def _footprint(activity, starts):
 
 
 def _cell_capacity(state, key, cell):
+    """Stessa somma di `OccupationChecker.check` (checkers/occupation.py riga
+    25): un materiale cumulativo consuma la sua *quantità*, non un'unità per
+    attività. Contare le attività invece delle quantità sovrastimerebbe la
+    capienza residua ogni volta che un'immobile già piazzata ne occupa più di
+    una — divergere da lì di uno rende il residuo peggiore del difetto che
+    doveva evitare."""
     day, slot = cell
+    acts = state.occupancy.get((key, day, slot), ())
+    used = sum(state.material_quantity.get((aid, key), 1) for aid in acts)
     base = state.capacity.get(key, 1)
-    used = len(state.occupancy.get((key, day, slot), ()))
     return max(0, base - used)
 
 
