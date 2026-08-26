@@ -62,8 +62,8 @@ def test_lato_sorgente_esclude_le_celle_irraggiungibili():
 
 
 def test_sorgente_e_pozzo_coincidenti_alzano():
-    # Prima alzava, questo ciclo non terminava mai: `_augment` restituisce
-    # `limit` senza consumare capacita', e `max_flow` non esce dal while.
+    # Prima non alzava, e questo ciclo non terminava mai: `_augment` restituisce
+    # `limit` senza consumare capacita', quindi `max_flow` non esce dal while.
     f = MaxFlow(3)
     f.add_edge(0, 1, 5)
     with pytest.raises(ValueError):
