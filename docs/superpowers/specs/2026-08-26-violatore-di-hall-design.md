@@ -200,14 +200,21 @@ tutti continuerebbero a passare. Ha un test dedicato (§6.1).
 
 ### 4.2 Il costo
 
-~12 ms per attività (misura del piano 2: la colonna S.P. di 26 attività in
-~0,3 s), quindi ~3,5 s sul Fermi intero per firma di settimana. I domini si
-calcolano **una volta per attività** e si condividono fra tutte le risorse,
-perché non dipendono da `r`; il flusso sopra è trascurabile.
+⚠ **Misurato al Task 7, e la previsione qui sotto era sbagliata di un ordine
+di grandezza.** La proiezione originale — ~12 ms per attività (dal piano 2: la
+colonna S.P. di 26 attività in ~0,3 s), quindi ~3,5 s sul Fermi intero per
+firma di settimana — era un'estrapolazione lineare mai verificata. Misurato
+`analyze_hall` sul Fermi intero (284 attività, `tests/test_analysis_hall.py::
+test_fermi_intero_misurato`): **~0,4 s**, non ~3,5 s. La stima del piano 2
+misurava `residual_domain` attività per attività con query ripetute; qui i
+domini si calcolano **una volta per attività** dentro un solo `ScheduleState`
+e si condividono fra tutte le risorse (perché non dipendono da `r`), e il
+flusso per gruppo lavora su reti piccole — l'estrapolazione lineare ignorava
+entrambi gli effetti.
 
-Per una fase diagnostica lanciata a mano va bene. In EDT la fase 5 è
-dichiaratamente la più lenta delle cinque: l'ordine di grandezza è quello
-giusto.
+Per una fase diagnostica lanciata a mano va benissimo — è anzi la più veloce
+delle famiglie di analisi misurate su questo dataset, non la più lenta come la
+proiezione originale suggeriva.
 
 ## 5. Il finding
 
@@ -249,7 +256,7 @@ verificabile a posteriori, non un troncamento arbitrario. I 25 di EDT
 suggeriscono che è la forma in cui l'informazione è ancora leggibile.
 
 Costa O(|T|²) ricalcoli di `N(T)` su insiemi piccoli: irrilevante accanto ai
-3,5 s dei domini.
+~0,4 s dei domini sul Fermi intero (misurato, §4.2).
 
 ### 5.2 Deduplicazione e caso singolo
 
@@ -330,9 +337,10 @@ i builder.
 **Nel comando** la fase 5 esce dopo la 4, stesso formato `enunciato → dettaglio
 → soluzione → azioni`, e i suoi finding entrano nel riepilogo e nell'exit code.
 Il flag `--no-hall` la spegne: EDT le fasi le fa spuntare singolarmente, tutte
-attive di default, e i ~3,5 s sul Fermi sono accettabili ma non da imporre a
-chi vuole solo la fase 4 in CI. Senza `--schedule` la fase 5 non si esegue
-affatto (§2.1) e il comando lo scrive.
+attive di default, e — anche ai ~0,4 s misurati sul Fermi (§4.2), non ai
+~3,5 s previsti — resta un costo in più da non imporre a chi vuole solo la
+fase 4 in CI. Senza `--schedule` la fase 5 non si esegue affatto (§2.1) e il
+comando lo scrive.
 
 ## 8. Fuori scope, dichiarato
 

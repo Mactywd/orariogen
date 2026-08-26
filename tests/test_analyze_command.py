@@ -5,7 +5,7 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from domain.models import SubjectConstraint
+from domain.models import ResourceUnavailability, SubjectConstraint
 from tests.analysis_helpers import make_activity, mini_school, place
 
 pytestmark = pytest.mark.django_db
@@ -56,3 +56,31 @@ def test_conformita_e_sp_con_schedule():
     text = out.getvalue()
     assert "già occupata in un'attività" in text
     assert "S.P." in text and "Italiano" in text      # la colonna delle non piazzate
+
+
+def test_la_fase_5_esce_sotto_schedule():
+    env = mini_school()
+    for day in (1, 2, 3, 4):
+        for slot in range(6):
+            ResourceUnavailability.objects.create(
+                resource=env["teacher"], day=day, slot=slot, level="hard")
+    for _ in range(7):
+        make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+
+    out = StringIO()
+    with pytest.raises(CommandError):
+        call_command("analyze", "--schedule", str(env["schedule"].pk), stdout=out)
+    testo = out.getvalue()
+    assert "Insiemi non piazzabili" in testo
+    assert "Durata piazzabile" in testo
+
+
+def test_no_hall_spegne_la_fase_5():
+    env = mini_school()
+    out = _run("--schedule", str(env["schedule"].pk), "--no-hall")
+    assert "Insiemi non piazzabili" not in out
+
+
+def test_senza_schedule_la_fase_5_si_dichiara_saltata():
+    mini_school()
+    assert "richiede --schedule" in _run()

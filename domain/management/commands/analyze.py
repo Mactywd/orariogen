@@ -9,6 +9,7 @@ from domain.analysis.capacity import analyze_capacity
 from domain.analysis.conformity import check_schedule
 from domain.analysis.domain_size import residual_domain
 from domain.analysis.findings import Severity
+from domain.analysis.hall import analyze_hall
 from domain.analysis.state import ScheduleState
 from domain.models import Schedule
 
@@ -23,6 +24,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--schedule", type=int,
                             help="pk dello Schedule di cui verificare la conformità")
+        parser.add_argument("--no-hall", action="store_true",
+                            help="salta la fase 5 (insiemi non piazzabili)")
 
     def handle(self, *args, **options):
         capacity = analyze_capacity()
@@ -48,6 +51,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"      - {remedy}")
 
         hard = 0
+        hall = []
         if options["schedule"]:
             schedule = Schedule.objects.get(pk=options["schedule"])
             findings = check_schedule(schedule)
@@ -70,9 +74,35 @@ class Command(BaseCommand):
                         f"  S.P. {size.placements:3d}  Nr G. {size.days}  "
                         f"{act.subject.name} ({_hm(act.duration_minutes)})")
 
+            if not options["no_hall"]:
+                hall = analyze_hall(schedule)
+                self.stdout.write("\n== Insiemi non piazzabili (fase 5) ==")
+                if not hall:
+                    self.stdout.write("Nessun insieme deficiente.")
+                for i, f in enumerate(hall, 1):
+                    self.stdout.write(f"\n[{i}] {f.statement}")
+                    self.stdout.write(
+                        "    " + ", ".join(f.resource_labels))
+                    self.stdout.write(f"    Risorsa satura: {f.binding_label}")
+                    self.stdout.write(f"    Numero di attività: {f.n_activities}")
+                    self.stdout.write(
+                        f"    Durata da piazzare: {_hm(f.required_minutes)}")
+                    self.stdout.write(
+                        f"    Durata piazzabile:  {_hm(f.placeable_minutes)}")
+                    gap = f.required_minutes - f.placeable_minutes
+                    self.stdout.write(f"    » {_hm(gap)} non potrà essere piazzata")
+                    self.stdout.write("    Azioni:")
+                    for remedy in f.remedies:
+                        self.stdout.write(f"      - {remedy}")
+        elif not options["no_hall"]:
+            self.stdout.write(
+                "\n== Insiemi non piazzabili (fase 5) ==\n"
+                "Saltata: richiede --schedule (legge lo stato, non solo l'anagrafica).")
+
         self.stdout.write("\n== Riepilogo ==")
         self.stdout.write(f"  {len(capacity)} problemi di capienza, "
+                          f"{len(hall)} insiemi non piazzabili, "
                           f"{hard} violazioni hard.")
-        if capacity or hard:
+        if capacity or hall or hard:
             raise CommandError("Rimangono delle incoerenze.")
         self.stdout.write("Verifica terminata: nessuna incoerenza.")

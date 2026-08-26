@@ -60,7 +60,7 @@ results.md             output dell'ultima esecuzione del prototipo
 requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
-  analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza
+  analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza, il violatore di Hall (fase 5, hall.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
@@ -135,8 +135,11 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > (`domain/analysis/`); e il **modello CP-SAT hard è completo**
 > (`domain/solver/`): **ventisei builder su ventisette checker**, e il
 > ventisettesimo (`structural:coverage`) non ne ha uno per costruzione —
-> `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. **436 test
-> verdi**, 16 skip tutti misurati e attribuiti (`venv/bin/pytest`).
+> `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. Il
+> **violatore di Hall** (fase 5 dell'Analisi dei vincoli, `domain/analysis/hall.py`)
+> **è anch'esso implementato**: nessun solver, teorema di Hall in forma
+> deficitaria su flusso massimo e taglio minimo. **481 test verdi**, 16 skip
+> tutti misurati e attribuiti (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
 > righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
@@ -147,10 +150,9 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > testimone: 22–23 famiglie con righe su 26, 48–73 righe, `OPTIMAL` su tutti e
 > cinque i seed, oracolo pulito.
 >
-> Restano i **tre pezzi dichiarati fuori**: l'assegnazione delle aule, gli
-> alleggerimenti a quota con l'ottimizzazione lessicografica, e il violatore di
-> Hall (che non usa il solver: è un conteggio di capienza). Più i punti aperti
-> elencati sotto.
+> Restano i **due pezzi dichiarati fuori**: l'assegnazione delle aule e gli
+> alleggerimenti a quota con l'ottimizzazione lessicografica. Più i punti
+> aperti elencati sotto.
 
 ### Prototipo solver — parcheggiato
 
@@ -170,10 +172,10 @@ Questo script **resta parcheggiato ed è superato**: il codice vivo del solver
 è `domain/solver/` (vedi la nota di stato sopra), che ne riprende l'idea sullo
 schema del dominio approvato invece che sui dati grezzi. Il **modello hard è
 ora completo** — ventisei builder su ventisette checker. Ciò che manca non è
-più la traduzione dei vincoli, ma i tre pezzi dichiarati fuori dal piano: gli
-alleggerimenti a quota con l'ottimizzazione lessicografica, l'assegnazione
-delle aule e il violatore di Hall. Vedi
-[ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md).
+più la traduzione dei vincoli, ma i due pezzi dichiarati fuori dal piano: gli
+alleggerimenti a quota con l'ottimizzazione lessicografica e l'assegnazione
+delle aule (il violatore di Hall è implementato, vedi la nota di stato sopra
+e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md).
 
 ### Aperto / da verificare
 
@@ -408,6 +410,103 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, hall)** — **Il violatore di Hall: la fase 5,
+  implementata senza solver.** Sette task sul branch `hall-violator`, sopra
+  [`docs/superpowers/specs/2026-08-26-violatore-di-hall-design.md`](docs/superpowers/specs/2026-08-26-violatore-di-hall-design.md).
+  `domain/analysis/hall.py` risponde alla domanda che la fase 4 non sa porre:
+  non «questo vincolo impedisce il piazzamento», ma «questo *insieme* di
+  attività non entra nella finestra di disponibilità comune delle sue risorse,
+  anche se nessuna presa da sola è impossibile». Il metodo è il **teorema di
+  Hall in forma deficitaria**: flusso massimo su una rete (attività → celle →
+  risorsa `r`) per ogni (risorsa, firma di settimana) in `domain/analysis/flow.py`
+  (nuovo, generico, senza semantica di orario — la stessa separazione che
+  `domain/solver` ha fra `model.py` e i builder), e il **taglio minimo è
+  l'insieme colpevole**. Una passata di riduzione greedy (`_reduce`) lo tiene
+  **irriducibile** invece che massimale: senza, sul Fermi un finding
+  nominerebbe centinaia di attività, una diagnosi che nessuno legge. Esposto
+  in `manage.py analyze` come fase 5, dopo la fase 4, col flag `--no-hall` per
+  spegnerla e la dichiarazione esplicita quando la salta (richiede
+  `--schedule`, a differenza della fase 4 che lavora sull'anagrafica grezza).
+
+  🔑 **Prima volta su questo progetto: due trappole scritte in spec *prima* di
+  implementarle, non scoperte dopo.** Il pattern ricorrente qui (`CLAUDE.md`
+  ne conta almeno sette istanze fra il 2026-07-26 e il 2026-08-25) è sempre lo
+  stesso: il documento dichiara vera una proprietà che si rivela falsa solo
+  controllandola contro il checker o i dati. Questa volta la spec (§2, §4.1)
+  ha **previsto** due falsi positivi specifici e ha chiesto un test dedicato
+  per ciascuno, prima che il codice esistesse. Tengono entrambi.
+  **§2 — le firme di settimana.** Due attività di settimane disgiunte non
+  competono per la stessa cella; trattarle come concorrenti produrrebbe
+  deficienze fantasma — il difetto peggiore possibile per una fase che dice
+  «impossibile» e manda l'utente a smontare vincoli sani. `analyze_hall` riusa
+  `week_signatures` di `conformity.py` (non `_week_groups` di `capacity.py`:
+  la prima include le indisponibilità datate ed è la stessa firma su cui posta
+  il modello CP-SAT), e `test_le_settimane_disgiunte_non_competono` lo tiene
+  fermo.
+  **§4.1 — lo spiazzamento.** Le attività candidate già piazzate (le
+  «sorelle») vanno **tutte** spiazzate prima di calcolare i domini: se restano
+  piazzate si tolgono il dominio a vicenda, la capienza calcolata scende sotto
+  il vero e produce falsi positivi — un difetto che nessun caso positivo
+  avrebbe rivelato. `_split` lo fa, e
+  `test_le_sorelle_gia_piazzate_non_si_tolgono_il_dominio` lo dimostra.
+
+  **Cinque scoperte durante l'esecuzione, non previste dalla spec.**
+  `MaxFlow.max_flow` sollevava un loop infinito quando sorgente e pozzo
+  coincidono (misurato: `exit 124`); irraggiungibile dalla rete di Hall così
+  com'è costruita, ma un hang è il modo peggiore di fallire in uno strumento
+  da riga di comando — ora solleva `ValueError`.
+  `_cell_capacity` pesa le **quantità** dei materiali cumulativi, come
+  `OccupationChecker.check` (`checkers/occupation.py` riga 25): contare le
+  attività invece delle quantità avrebbe sovrastimato la capienza residua ogni
+  volta che un'immobile già piazzata ne occupa più di una.
+  Il banco a testimone del Task 6 ha allargato i seed da 5 a 40 in review, non
+  nel piano originale.
+  I due test del Task 4 non dimostravano davvero il ciclo sulle firme — tre
+  mutazioni realistiche passavano indisturbate, incluso il codice pre-task —
+  corretti spostando la deficienza alla settimana 1 e aggiungendo un test
+  portante sulla condivisione di `seen`.
+  E un test del Task 3 non testava ciò che il suo nome diceva
+  (`test_l_insieme_nominato_e_irriducibile` non esercitava `_reduce`, perché
+  in quello scenario il taglio minimo restituisce già l'insieme irriducibile):
+  rinominato, e aggiunto `test_la_riduzione_toglie_la_terza_di_tre_sulla_stessa_cella`,
+  costruito apposta perché il taglio minimo sia strettamente più largo
+  dell'irriducibile.
+
+  ⚠ **L'oracolo (Task 6) misura la precisione, mai il richiamo — per
+  costruzione, non per pigrizia.** `tests/test_hall_oracle.py` verifica due
+  direzioni: ogni finding dev'essere confermato dal solver (`INFEASIBLE`), e
+  su istanze fattibili per costruzione (i testimoni di `solver_harness`) la
+  fase 5 deve tacere. Il richiamo — trovare *tutti* i sottoinsiemi infattibili
+  — non si promette da nessuna parte: enumerare tutti i sottoinsiemi di
+  risorse è esponenziale, ed è la ragione per cui l'alternativa è stata
+  scartata già in §1.2 della spec. Il risultato: **zero finding sui 40 semi**.
+  Ma la review del Task 6 ha qualificato il dato, e la qualificazione conta
+  quanto il numero — i testimoni di `build_witness` non aggiungono mai
+  indisponibilità e lasciano circa metà griglia libera, quindi i 40 semi
+  misurano **l'assenza di rumore su istanze lasche**, non la tenuta sul
+  confine di Hall. Quel confine lo dimostrano solo i due casi scritti a mano
+  (`test_un_finding_e_confermato_dal_solver`,
+  `test_il_solver_conferma_anche_il_confine`).
+
+  ⚠ **La proiezione di costo della spec era sbagliata di un ordine di
+  grandezza, ed è stata corretta invece del changelog.** §4.2 stimava ~3,5 s
+  sul Fermi intero, estrapolati linearmente dalla colonna S.P. di 26 attività
+  (~12 ms/attività). Misurato (`test_fermi_intero_misurato` in
+  `tests/test_analysis_hall.py`): **~0,4 s** su 284 attività — l'estrapolazione
+  ignorava che i domini si calcolano una volta per attività dentro un solo
+  `ScheduleState` condiviso fra tutte le risorse, non ricalcolati risorsa per
+  risorsa. Come per il modello CP-SAT hard, sul Fermi questo misura il
+  **costo**, mai la **copertura**: il dataset non ha righe di vincolo, quindi
+  zero finding è l'esito atteso, non un risultato.
+
+  Suite **misurata a fine task** (non prevista): `venv/bin/pytest -q` →
+  **481 test verdi**, 16 skip. Corretto anche il **436** dichiarato nella nota
+  di stato più sopra: era la misura di prima dei due commit di review della
+  PR #1 (`modello-hard-completo`), non il numero corrente neppure a inizio di
+  questo lavoro. E i **tre pezzi dichiarati fuori** nella nota di stato
+  diventano **due**: resta l'assegnazione delle aule e gli alleggerimenti a
+  quota con l'ottimizzazione lessicografica.
 
 - **2026-08-26 (notte)** — **La review della PR #1, e il gemello del difetto
   nella famiglia che il banco non poteva vedere.** Quattro rilievi sistemati

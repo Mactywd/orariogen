@@ -366,6 +366,15 @@ I rimedi proposti cambiano di conseguenza: `Diminuire le indisponibilità delle
 risorse` · `Diminuire le indisponibilità delle risorse **comuni**` · `Diminuire la
 durata delle attività`.
 
+**Implementata** — `domain/analysis/hall.py`, senza solver: teorema di Hall in
+forma deficitaria, flusso massimo su (risorsa × firma di settimana) e taglio
+minimo come insieme colpevole, con una passata di riduzione greedy per tenere
+il finding irriducibile invece che massimale. Il design è in
+[`docs/superpowers/specs/2026-08-26-violatore-di-hall-design.md`](../superpowers/specs/2026-08-26-violatore-di-hall-design.md).
+⚠ Misura solo **precisione**, mai **richiamo**: un finding è una dimostrazione
+di infattibilità, ma il silenzio non dimostra fattibilità — è incompleto per
+costruzione (§3.4 della spec).
+
 ### 🔑 Il riquadro `Soluzione` è operativo, non illustrativo
 
 Non mostra il vincolo: lo **rende modificabile lì**.

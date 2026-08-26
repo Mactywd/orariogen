@@ -1,6 +1,8 @@
 """La fase 5: il sottoinsieme infattibile. Meta' dei casi sono negativi, e
 contano di piu' — il difetto temuto e' il falso positivo, che manda l'utente a
 smontare vincoli sani."""
+import time
+
 import pytest
 
 from domain.analysis.capacity import analyze_capacity
@@ -8,6 +10,7 @@ from domain.analysis.hall import STATEMENT_SINGOLA, analyze_hall
 from domain.models import (
     Activity, ActivityMaterialRequirement, Material, ResourceUnavailability, Teacher,
 )
+from tests import fermi
 from tests.analysis_helpers import make_activity, mini_school, place
 
 pytestmark = pytest.mark.django_db
@@ -283,3 +286,20 @@ def test_la_riduzione_toglie_la_terza_di_tre_sulla_stessa_cella():
     assert f.n_activities == 2
     assert f.required_minutes == 2 * 60
     assert f.placeable_minutes == 1 * 60
+
+
+def test_fermi_intero_misurato():
+    """Come `test_fermi_intero_misurato` in `tests/test_solver_oracle.py`, ma
+    per la fase 5: qui il Fermi misura il **costo** (secondi su 284 attivita'),
+    mai la **copertura**. Il dataset non ha righe di vincolo — nessuna
+    `ResourceTimeConstraint`, nessun `SubjectConstraint` — quindi i domini di
+    `admissible_starts` sono larghi e zero finding e' il risultato atteso, non
+    una prova di correttezza. Misurato: ~0,4s, un ordine di grandezza sotto i
+    ~3,5s che la spec (§4.2) estrapolava dal piano a 26 attivita' — la
+    proiezione era una previsione, non una misura, ed e' stata corretta li'."""
+    dataset = fermi.build()
+    t0 = time.perf_counter()
+    findings = analyze_hall(dataset["schedule"])
+    elapsed = time.perf_counter() - t0
+    print(f"\nFermi hall: {elapsed:.3f}s, {len(findings)} findings")
+    assert elapsed < 5.0
