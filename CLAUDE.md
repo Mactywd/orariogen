@@ -138,7 +138,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. Il
 > **violatore di Hall** (fase 5 dell'Analisi dei vincoli, `domain/analysis/hall.py`)
 > **è anch'esso implementato**: nessun solver, teorema di Hall in forma
-> deficitaria su flusso massimo e taglio minimo. **524 test verdi**, 16 skip
+> deficitaria su flusso massimo e taglio minimo. **525 test verdi**, 16 skip
 > tutti misurati e attribuiti (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -547,8 +547,9 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   **Corretto** estraendo da `run_tutte_le_famiglie` la metà che **non chiama il
   solver** — `costruisci_tutte_le_famiglie(seed)`, che deriva le righe di tutte
   e ventisei le famiglie e **asserisce** che il testimone le soddisfi insieme.
-  Su quei testimoni densi la fase 5 era rossa **40 semi su 40**, da 6 a 15
-  falsi positivi ciascuno; e l'oracolo resta a **~26 s** per i quaranta semi,
+  Su quei testimoni densi la fase 5 era rossa **40 semi su 40** — da **1 a 29**
+  falsi positivi per seme, **14,1 di media**; e l'oracolo resta a **~26 s** per
+  i quaranta semi,
   perché alla fase 5 il solver non serve e non lo si paga.
 
   **La correzione**: `Checker.PLACEMENT_MONOTONE`, dichiarato nella stessa
@@ -578,11 +579,26 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   non congela niente — lo stesso buco che il 2026-08-26 (sera) aveva già
   costretto a costruire il banco che congela per il solver. La stessa cecità,
   su un banco diverso, sei giorni dopo.
-  ⚠ E in senso opposto: `ARRIVAL_DEPARTURE`, la quarta dell'elenco, a lettura
-  è **monotona** — `compliant` non può che calare piazzando, quindi ogni cambio
-  di chiave è un peggioramento causato dalla prova. Marcarla non cambia un
-  finding su quaranta semi (misurato). Resta monotona, e la divergenza è
-  dichiarata invece che appianata.
+  ⚠ E in senso opposto: `ARRIVAL_DEPARTURE`, la quarta dell'elenco, **non lo
+  è**. La prova è per lettura del checker: `compliant` è **non crescente** sotto piazzamento, per due
+  ragioni indipendenti: una giornata **vuota** contribuisce 1 e piazzandoci
+  può solo restare 1 o passare a 0; una giornata **già occupata** ha `slots[0]`
+  che può solo calare e `slots[-1]` che può solo crescere, quindi le due
+  condizioni `>= not_before` e `< not_after` possono solo passare da vero a
+  falso. Nessuna riparazione è possibile, e ogni cambio di chiave è un
+  peggioramento causato dalla prova.
+  Resta monotona, e la divergenza è dichiarata invece che appianata.
+  ⛔ **E la misura che avevo messo a sostegno era vacua** — «marcandola non
+  monotona, zero semi su quaranta cambiano esito» **non poteva dare altro
+  risultato**: marcare una famiglia non monotona *allarga* i domini, e
+  l'oracolo attende zero finding, quindi quel verde era incapace di fallire in
+  entrambe le direzioni (42 passed con e senza). È la settima forma di vacuità
+  di questo progetto, dentro la voce che si congratula di averle imparate a
+  riconoscere — scritta qui invece che tolta in silenzio.
+  ⚠ La misura **simmetrica** invece dice qualcosa: rimettere `MaxGapChecker` a
+  monotono lascia anch'esso 42 passed, e lì il verde *poteva* fallire (marcarlo
+  restringe i domini). Quel dato non è vacuo: è la misura di una **cecità del
+  banco**, non di una proprietà del checker.
   ⚠ Su `WEEKLY_ORDER` e sui quattro `PARTS_*` il rilassamento costa richiamo e
   **oggi non compra precisione**: i loro builder trattano ADR-018 vietando ai
   liberi il secchio già sporco, quindi rispondono `INFEASIBLE` esattamente dove
@@ -631,8 +647,8 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   secondo è l'ultima porta prima di Dinic, dove una capacità negativa non
   fallirebbe — produrrebbe un certificato che non torna, in silenzio.
 
-  **Suite a fine lavoro**: `venv/bin/pytest -q` → **524 test verdi**, 16 skip
-  in ~86 s.
+  **Suite a fine lavoro**: `venv/bin/pytest -q` → **525 test verdi**, 16 skip
+  in ~85 s.
 
 - **2026-08-26 (notte)** — **La review della PR #1, e il gemello del difetto
   nella famiglia che il banco non poteva vedere.** Quattro rilievi sistemati

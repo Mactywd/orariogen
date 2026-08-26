@@ -8,7 +8,8 @@ import pytest
 from domain.analysis.capacity import analyze_capacity
 from domain.analysis.hall import STATEMENT_SINGOLA, analyze_hall
 from domain.models import (
-    Activity, ActivityMaterialRequirement, Material, ResourceUnavailability, Teacher,
+    Activity, ActivityMaterialRequirement, ClassPart, ClassPartition, Material,
+    ResourceUnavailability, Teacher,
 )
 from tests import fermi
 from tests.analysis_helpers import make_activity, mini_school, place
@@ -293,6 +294,38 @@ def test_la_riduzione_toglie_la_terza_di_tre_sulla_stessa_cella():
     assert len(f.activities) == 2
     assert f.required_minutes == 2 * 60
     assert f.placeable_minutes == 1 * 60
+
+
+def test_le_etichette_non_ripetono_lo_stesso_nome():
+    """⚠ `resource_labels` e' l'UX del finding — la frase che l'utente legge —
+    e senza deduplica una classe partizionata ci ripete il proprio nome una
+    volta per **atomo** di ADR-017 piu' una per ogni `ClassPart`. Con due
+    partizioni da due parti gli atomi sono quattro: il nome della classe
+    uscirebbe cinque volte.
+
+    Misurato: rimettendo la versione non deduplicata la suite restava
+    **verde** — la deduplica non era affermata da nessun test."""
+    env = mini_school()
+    for nome, parti in (("Lingue", ("L1", "L2")), ("Informatica", ("I1", "I2"))):
+        partizione = ClassPartition.objects.create(
+            school_class=env["klass"], name=nome)
+        for parte in parti:
+            ClassPart.objects.create(partition=partizione, name=parte)
+
+    _blocca(env["teacher"], giorni=(1, 2, 3, 4))       # resta il solo giorno 0
+    for _ in range(7):
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]], slots=1)
+
+    findings = analyze_hall(env["schedule"])
+    assert len(findings) == 1
+    etichette = findings[0].resource_labels
+
+    assert len(etichette) == len(set(etichette)), etichette
+    assert env["klass"].name in etichette
+    assert env["teacher"].name in etichette
+    # e l'ordine resta quello di `resource_sort_key`, non quello di un set
+    assert etichette == analyze_hall(env["schedule"])[0].resource_labels
 
 
 def test_fermi_intero_misurato():

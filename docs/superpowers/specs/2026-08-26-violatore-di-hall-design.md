@@ -292,10 +292,23 @@ La fase 5 è l'opposto — il suo verdetto negativo è una dimostrazione.
 ⚠ Le prime tre erano nell'elenco della review, misurato su dieci semi. Le
 altre vengono dalla **lettura**, e la misura non le vede: hanno bisogno di
 un'attività **congelata** per manifestarsi, e il banco a testimone non congela
-niente. `ARRIVAL_DEPARTURE`, che l'elenco della review dava come quarta, a
-lettura è **monotona** — `compliant` non può che calare piazzando, quindi ogni
-cambio di chiave è un peggioramento causato dalla prova — e marcarla non
-cambia un finding su quaranta semi (misurato). Resta monotona.
+niente. `ARRIVAL_DEPARTURE`, che l'elenco della review dava come quarta,
+**non lo è**, e la prova è per lettura del checker: `compliant` è **non
+crescente** sotto piazzamento, per due ragioni indipendenti — una giornata
+**vuota** contribuisce 1 e piazzandoci può solo restare 1 o passare a 0; una
+giornata **già occupata** ha `slots[0]` che può solo calare e `slots[-1]` che
+può solo crescere, quindi `>= not_before` e `< not_after` possono solo passare
+da vero a falso. Nessuna riparazione è possibile. Resta monotona.
+
+⛔ **La misura messa a sostegno di questa conclusione era vacua**, e va detto:
+«marcandola non monotona, zero semi su quaranta cambiano esito» non poteva
+dare altro risultato, perché marcare una famiglia non monotona *allarga* i
+domini e l'oracolo attende zero finding — verde incapace di fallire in
+entrambe le direzioni (42 passed con e senza). La conclusione regge per
+lettura, non per quella misura. ⚠ La misura **simmetrica** è invece
+significativa: `MaxGapChecker` rimesso a monotono lascia anch'esso 42 passed,
+e lì il verde *poteva* fallire — quel dato misura una **cecità del banco**,
+non una proprietà del checker.
 
 **Rilassare fa perdere richiamo, mai precisione**: domini più larghi
 significano più capienza, quindi meno deficienze trovate. È il verso giusto in
@@ -435,7 +448,8 @@ pagarlo tiene il file a **~26 s** per quaranta semi invece dei minuti che il
 `solve(time_limit=120)` costerebbe.
 
 Su quei testimoni densi, prima della correzione di §4.3, la fase 5 era rossa
-su **40 seed su 40** — da 6 a 15 falsi positivi per seed.
+su **40 seed su 40** — da **1 a 29** falsi positivi per seed, **14,1 di
+media**.
 
 ## 7. Struttura dei file
 

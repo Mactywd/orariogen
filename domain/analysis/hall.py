@@ -204,7 +204,16 @@ def _labels(state, group):
     proprio nome una volta per atomo e una per parte, e la frase che l'utente
     legge — che è il punto di questa fase — diventa illeggibile su una scuola
     vera. L'ordine resta quello di `resource_sort_key`, quindi deterministico:
-    si tiene la prima occorrenza."""
+    si tiene la prima occorrenza.
+
+    ⚠ **Effetto collaterale dichiarato, non corretto**: due risorse
+    *distinte* che portano lo stesso nome visualizzato collassano in
+    un'etichetta sola. Va bene qui e solo qui — `resource_labels` è un campo di
+    sola presentazione, consumato dal solo comando `analyze` per la frase che
+    l'utente legge, e l'identità delle risorse vive in `binding_label` e in
+    `activities`. Deduplicare per chiave invece che per nome rimetterebbe in
+    piedi la ripetizione che questa funzione esiste per togliere, perché gli
+    atomi *sono* chiavi distinte con lo stesso nome."""
     keys = set()
     for a in group:
         keys |= state.tokens[a.id]
