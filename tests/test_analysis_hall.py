@@ -177,6 +177,8 @@ def test_le_settimane_disgiunte_non_competono():
 
 
 def test_una_deficienza_in_una_sola_settimana_esce_lo_stesso():
+    # Deficienza nella settimana 1, non nella 0: con la deficienza nella prima
+    # firma il test resterebbe verde anche ignorando il rappresentante del ciclo.
     from domain import weeks
 
     env = mini_school()
@@ -184,8 +186,30 @@ def test_una_deficienza_in_una_sola_settimana_esce_lo_stesso():
             celle=[(0, s) for s in range(1, 6)])
     for _ in range(2):
         make_activity(env["subject"], teachers=[env["teacher"]], slots=1,
-                      mask=weeks.single_week(0))
+                      mask=weeks.single_week(1))
 
     findings = analyze_hall(env["schedule"])
     assert len(findings) == 1
     assert findings[0].n_activities == 2
+
+
+def test_lo_stesso_insieme_in_due_firme_e_un_problema_solo():
+    # Due firme distinte per una sola indisponibilita' DATATA su un docente
+    # estraneo, che non tocca ne' le attivita' ne' i loro domini: l'insieme
+    # colpevole e' identico nelle due firme. Con `seen` condiviso esce un
+    # finding solo; ricreandolo per firma l'utente vedrebbe due volte lo
+    # stesso problema.
+    import datetime as dt
+
+    env = mini_school()
+    _blocca(env["teacher"], giorni=(1, 2, 3, 4))       # resta il solo giorno 0
+    for _ in range(7):
+        make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+
+    estraneo = Teacher.objects.create(
+        name="Estraneo", last_name="Estraneo", first_name="E")
+    ResourceUnavailability.objects.create(
+        resource=estraneo, day=0, slot=0, level="hard",
+        date=dt.date(2026, 9, 21))                     # settimana 1
+
+    assert len(analyze_hall(env["schedule"])) == 1
