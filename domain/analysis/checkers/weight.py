@@ -23,6 +23,17 @@ def _student_keys(state, activity_id):
 
 @register("structural:didactic_weight")
 class DidacticWeightChecker(Checker):
+    """⚠ Non monotono per **deriva d'identità**. `acts[key]` raccoglie tutte le
+    attività piazzate dell'unità-studente, e `emit` le mette in `activities` di
+    *ogni* finding — anche di quelli per giorno e per mezza giornata. Un
+    piazzamento di lunedì cambia quindi la chiave della violazione di venerdì
+    senza peggiorarla di un punto. E il tetto settimanale porta in più il caso
+    già noto in CLAUDE.md («il tetto inevadibile»): il suo secchio contiene
+    ogni attività dell'unità, quindi ogni piazzamento lo muove.
+    Vedi `admissible_starts`."""
+
+    PLACEMENT_MONOTONE = False
+
     def check(self, state, resources=None):
         s = state.settings
         per_day, per_half, per_week = (defaultdict(int), defaultdict(int),

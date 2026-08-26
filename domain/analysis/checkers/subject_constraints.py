@@ -177,7 +177,15 @@ class MaxHoursDayChecker(_MaxHours):
 
 @register(T.WEEKLY_ORDER)
 class WeeklyOrderChecker(_SubjectChecker):
+    """⚠ Non monotono per **deriva d'identità**: il finding nomina `a[0]` e
+    `b[0]`, cioè le due occorrenze *argmin*, non il secchio intero. Piazzare
+    un'occorrenza di A più presto può ripararlo del tutto, oppure — se non
+    basta a scavalcare B — lasciare la violazione identica cambiando *quale*
+    attività è l'argmin: chiave nuova senza nessun peggioramento. È la stessa
+    causa a monte del tie-break di `_placed_of` già dichiarata in CLAUDE.md.
+    Vedi `admissible_starts`."""
     TYPE, CODE = T.WEEKLY_ORDER, "subject_weekly_order"
+    PLACEMENT_MONOTONE = False
 
     def violations(self, state, row, a, b):
         if row.subject_a_id == row.subject_b_id or not a or not b:
@@ -190,7 +198,14 @@ class WeeklyOrderChecker(_SubjectChecker):
 
 @register(T.IMPOSED_SUCCESSION)
 class ImposedSuccessionChecker(_SubjectChecker):
+    """⚠ Non monotono in **entrambi** i rami. Con A = B la violazione è su una
+    coppia consecutiva, e infilare un'occorrenza *dentro* lo scarto lo spezza
+    in due: riparazione. Con A ≠ B non c'è la guardia di vacuità che
+    `WeeklyOrder` ha, quindi con B assente **ogni** occorrenza di A è in
+    violazione — e piazzare una B le ripara tutte insieme. Vedi
+    `admissible_starts`."""
     TYPE, CODE = T.IMPOSED_SUCCESSION, "subject_imposed_succession"
+    PLACEMENT_MONOTONE = False
 
     def violations(self, state, row, a, b):
         delay = row.param or 1
@@ -230,8 +245,15 @@ class HalfDayGapChecker(_SubjectChecker):
 
 
 class _PartsOrder(_SubjectChecker):
+    """⚠ Non monotono per **deriva d'identità**, e vale per tutte e quattro le
+    sottoclassi. Il finding nomina `entries` — *tutte* le attività del secchio,
+    non quelle che realizzano il disordine — quindi aggiungere al secchio
+    un'occorrenza già ben ordinata cambia la chiave senza peggiorare niente.
+    Vedi `admissible_starts`."""
+
     CODE = "subject_parts_order"
     MODE = None  # "before" | "after" | "homogeneous"
+    PLACEMENT_MONOTONE = False
 
     def bucket(self, state, pl):
         return pl.day

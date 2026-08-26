@@ -99,7 +99,22 @@ def _cell_capacity(state, key, cell):
     attività. Contare le attività invece delle quantità sovrastimerebbe la
     capienza residua ogni volta che un'immobile già piazzata ne occupa più di
     una — divergere da lì di uno rende il residuo peggiore del difetto che
-    doveva evitare."""
+    doveva evitare.
+
+    ⚠ **Il `max(0, ...)` è irraggiungibile per costruzione, e resta lo
+    stesso.** Misurato: togliendolo la suite resta verde, e una sonda che alza
+    su `base - used < 0` non scatta su nessuno dei banchi. Non è fortuna. Le
+    celle che arrivano qui vengono **solo** da `cells_of`, cioè dalle impronte
+    degli avvii che `admissible_starts` ha dichiarato ammissibili per
+    un'attività che ha `key` fra i propri token — e `structural:occupation` è
+    **monotono**, quindi resta nel loop di prova anche col rilassamento. Una
+    cella dove le immobili saturano o sforano la capienza produce lì una
+    chiave nuova e viene scartata. Per ogni cella che arriva fin qui vale
+    dunque `used ≤ base − quantità della candidata`, cioè `base - used ≥ 1`.
+
+    Resta perché è l'ultima porta prima di Dinic, dove una capacità negativa
+    non fallirebbe: produrrebbe un flusso massimo sbagliato, quindi un
+    certificato che non torna, quindi un **falso positivo** — in silenzio."""
     day, slot = cell
     acts = state.occupancy.get((key, day, slot), ())
     used = sum(state.material_quantity.get((aid, key), 1) for aid in acts)
@@ -128,7 +143,17 @@ def _certificate(state, key, group, cells_of, demand_of):
 
 
 def _deficient_set(state, key, group, cells_of, demand_of):
-    """Il lato sorgente del taglio minimo. None se entra tutto."""
+    """Il lato sorgente del taglio minimo. None se entra tutto.
+
+    ⚠ **Gli archi centrali sono a capacità infinita** (§3.2 della spec), ed è
+    la scelta che rende il taglio minimo fatto di soli archi di sorgente e di
+    pozzo — cioè un insieme di *attività*, leggibile, invece di un insieme di
+    archi. Non regala nulla di pericoloso: quanto entra in una cella resta
+    limitato dall'arco verso il pozzo. L'unico allentamento è che una singola
+    attività potrebbe occupare **due unità della stessa cella**, possibile solo
+    con `simultaneous_capacity > 1` **e** durata > 1 — cioè solo su aule e
+    materiali cumulativi. È un allentamento nel verso sicuro: **sovrastima** la
+    capienza, e una sovrastima non inventa deficienze."""
     cells = sorted(set().union(*(cells_of[a.id] for a in group)) or set())
     index = {c: i for i, c in enumerate(cells)}
     n_acts = len(group)
@@ -171,17 +196,31 @@ def _reduce(state, key, group, cells_of, demand_of):
 
 
 def _labels(state, group):
+    """I nomi delle risorse coinvolte, **deduplicati per nome**.
+
+    ⚠ La deduplica non è cosmesi: gli atomi di ADR-017 sono chiavi distinte
+    che portano tutte il nome della **classe**, e ogni `ClassPart` ne aggiunge
+    un'altra copia. Senza deduplica una classe con due partizioni ripete il
+    proprio nome una volta per atomo e una per parte, e la frase che l'utente
+    legge — che è il punto di questa fase — diventa illeggibile su una scuola
+    vera. L'ordine resta quello di `resource_sort_key`, quindi deterministico:
+    si tiene la prima occorrenza."""
     keys = set()
     for a in group:
         keys |= state.tokens[a.id]
-    return tuple(state.resource_names.get(k, str(k))
-                 for k in sorted(keys, key=resource_sort_key))
+    out, visti = [], set()
+    for k in sorted(keys, key=resource_sort_key):
+        nome = state.resource_names.get(k, str(k))
+        if nome not in visti:
+            visti.add(nome)
+            out.append(nome)
+    return tuple(out)
 
 
 def _analyze_state(state, seen):
     grid = state.grid
     free = _split(state)
-    starts = {a.id: admissible_starts(a, state) for a in free}
+    starts = {a.id: admissible_starts(a, state, relaxed=True) for a in free}
     cells_of = {a.id: _footprint(a, starts[a.id]) for a in free}
 
     by_key = defaultdict(list)
@@ -201,7 +240,25 @@ def _analyze_state(state, seen):
             window, required, capacity = _certificate(
                 state, key, culprits, cells_of, demand_of)
             if required <= capacity:
-                break   # il taglio non regge il conto: non si emette nulla
+                # ⚠ **Irraggiungibile per costruzione, e resta.** Misurato:
+                # togliendolo la suite resta verde. Con gli archi centrali a
+                # ∞ il lato sorgente `T` del taglio minimo soddisfa sempre
+                # `domanda(T) > capienza(N(T))` — il taglio vale
+                # `Σ domanda(a ∉ T) + Σ capienza(celle raggiungibili)`, ed è
+                # minore della domanda totale ogni volta che il flusso non la
+                # copre; `N(T)` è contenuto nelle celle raggiungibili, quindi
+                # la disuguaglianza passa. E `_reduce` la preserva: accetta un
+                # sottoinsieme solo dopo averla riverificata.
+                #
+                # Resta perché è la §3.3 della spec: un argomento sui grafi
+                # residui è **esattamente** il genere di proprietà che su
+                # questo progetto è stata dichiarata vera e si è rivelata
+                # falsa — tre volte, contate in CLAUDE.md. Qui costa tre
+                # righe trasformarla in una postcondizione controllata, e il
+                # verso in cui cede è il solo accettabile: il finding **non
+                # esce**, cioè si perde richiamo invece di inventare una
+                # deficienza.
+                break
             nominate = frozenset(a.id for a in culprits)
             group = [a for a in group if a.id not in nominate]
             if nominate in seen:

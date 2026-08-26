@@ -44,7 +44,12 @@ def _halves(state, slots):
 
 @register(T.MIN_DISTRIBUTION)
 class MinDistributionChecker(_TimeChecker):
+    """⚠ Non monotono: la violazione è una **deficienza** (meno giornate
+    qualificanti del minimo), e piazzare la **ripara**. A stato vuoto è
+    massimamente violata — `days=0` — e ogni piazzamento la migliora
+    cambiandone la chiave. Vedi `admissible_starts`."""
     TYPE = T.MIN_DISTRIBUTION
+    PLACEMENT_MONOTONE = False
 
     def violations(self, state, row, days):
         threshold = row.params["min_minutes_per_day"]
@@ -113,7 +118,13 @@ class ArrivalDepartureChecker(_TimeChecker):
 
 @register(T.FREE_GUARANTEED)
 class FreeGuaranteedChecker(_TimeChecker):
+    """⚠ Non monotono, e in **entrambe** le direzioni. `free_days` cala
+    piazzando, ma `free_half_days` si conta solo sui giorni **con** attività:
+    occupare un giorno prima vuoto *aggiunge* una mezza giornata
+    libera. La stessa asimmetria che ha costretto `FreeGuaranteedBuilder` alla
+    disgiunzione reificata. Vedi `admissible_starts`."""
     TYPE = T.FREE_GUARANTEED
+    PLACEMENT_MONOTONE = False
 
     def violations(self, state, row, days):
         free_days = [d for d in range(state.grid.days_per_cycle) if d not in days]
@@ -182,7 +193,16 @@ class MaxSiteChangesChecker(_TimeChecker):
 
 @register(T.MAX_GAP_HOURS)
 class MaxGapChecker(_TimeChecker):
+    """⚠ Non monotono, e non era nell'elenco della review: il buco è
+    `ultima − prima + 1 − conteggio`, quindi un piazzamento **dentro** un buco
+    esistente alza il conteggio senza toccare gli estremi e il totale
+    **cala**. Riparare una violazione ne cambia la chiave, e con la baseline
+    già oltre il tetto (congelate) ogni cella risulterebbe nuova. Non si vede
+    sul banco a testimone perché lì non c'è nessuna congelata, e con la sola
+    attività di prova nessuna mezza giornata arriva a due fasce — ma il caso
+    esiste appena una congelata lascia un buco. Vedi `admissible_starts`."""
     TYPE = T.MAX_GAP_HOURS
+    PLACEMENT_MONOTONE = False
 
     def violations(self, state, row, days):
         sm = state.grid.slot_minutes

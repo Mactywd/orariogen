@@ -174,13 +174,18 @@ celle dove il piazzamento **non introduce violazioni hard nuove** rispetto alla
 baseline. È molto più stretto di un'intersezione di disponibilità — passa per
 tutti i checker, quindi incorpora incompatibilità di materia, tetti orari,
 buchi, sedi — e questo rende la fase 5 **più forte**, non solo più comoda:
-domini più stretti significano più violatori trovati. Resta sano perché la
-condizione di `residual_domain` è precisamente l'ammissibilità.
+domini più stretti significano più violatori trovati.
+
+⚠ **«Resta sano perché la condizione di `residual_domain` è precisamente
+l'ammissibilità» era falso**, e la review finale l'ha dimostrato con un falso
+positivo riproducibile (§4.3). La condizione di `residual_domain` non è
+l'ammissibilità: è «la `Finding.key` è cambiata». Le due coincidono solo per i
+checker **monotoni**, e non tutti lo sono.
 
 **Modifica mirata**: oggi `residual_domain` restituisce i conteggi (`S.P.`,
-`Nr G.`). Si estrae la scansione in `admissible_starts(activity, state)`, e
-`residual_domain` conta quelli. Comportamento identico, test esistenti
-invariati.
+`Nr G.`). Si estrae la scansione in `admissible_starts(activity, state,
+relaxed=False)`, e `residual_domain` conta quelli. Comportamento identico,
+test esistenti invariati — la fase 5 passa `relaxed=True` (§4.3).
 
 ### ⚠ 4.1 La trappola dello spiazzamento
 
@@ -212,9 +217,98 @@ e si condividono fra tutte le risorse (perché non dipendono da `r`), e il
 flusso per gruppo lavora su reti piccole — l'estrapolazione lineare ignorava
 entrambi gli effetti.
 
-Per una fase diagnostica lanciata a mano va benissimo — è anzi la più veloce
-delle famiglie di analisi misurate su questo dataset, non la più lenta come la
-proiezione originale suggeriva.
+⚠ **E anche questa misura dice meno di quanto sembri: è per una firma sola.**
+Il Fermi ha **una** firma di settimana — nessuna indisponibilità datata,
+nessun festivo, tutte le attività annuali — e `analyze_hall` cicla sulle
+firme, ricostruendo lo `ScheduleState` e tutti i domini per ognuna. Il costo è
+**lineare nel numero di firme**, ed è la dimensione che questo dataset non
+esercita: la stessa forma di errore che §2 mette in guardia («le settimane sono
+una dimensione, non un dettaglio»).
+
+Misurato sul Fermi aggiungendo indisponibilità **datate** su settimane diverse
+(che è il meccanismo reale — le assenze):
+
+| firme | secondi | s/firma |
+|---|---|---|
+| 1 | 0,34 | 0,34 |
+| 3 | 0,99 | 0,33 |
+| 6 | 1,88 | 0,31 |
+| 11 | 3,25 | 0,30 |
+| 21 | 5,98 | 0,29 |
+
+Circa **0,3 s per firma**, lineare (il costo per firma cala appena perché la
+costruzione della fixture si ammortizza). Un anno reale ha 35-40 settimane, e
+nel caso limite in cui ognuna faccia firma a sé si arriva a **~10-13 s** sul
+Fermi.
+
+Per una fase diagnostica lanciata a mano resta accettabile — e `--no-hall`
+esiste apposta (§8). Ma «la più veloce delle famiglie di analisi» era una
+conclusione generale tratta dall'unica dimensione che il dataset non ha:
+va letta come «~0,3 s per firma», non come un numero assoluto.
+
+### ⚠ 4.3 I checker non monotoni, e il falso positivo che ne è uscito
+
+Trovato alla **review finale**, dopo sette review per-task e un oracolo a
+quaranta semi che non potevano vederlo (§6.3). Riproduzione minima:
+`mini_school()`, una riga `MIN_DISTRIBUTION` (`min_days = 3`) su un docente,
+tre attività da un'ora sui giorni 0, 1 e 2. `check_schedule` non emette
+**nessun** finding HARD, `solve` risponde `OPTIMAL` — e `analyze_hall`
+restituisce **tre** finding «L'attività non ha nessuna collocazione
+ammissibile».
+
+**La causa.** `admissible_starts` scarta una cella quando il piazzamento di
+prova introduce una `Finding.key` **nuova** rispetto alla baseline, e
+`Finding.key` include `quantities`. Per un checker la cui violazione è una
+**deficienza** — `MIN_DISTRIBUTION` esiste già a stato vuoto, con `days = 0` —
+ogni piazzamento *migliora* il conteggio e con esso cambia la chiave: chiave
+nuova a ogni cella, dominio vuoto, deficienza inventata. E §4.1 è ciò che
+*crea* la condizione: spiazzando tutte le candidate insieme, la baseline
+diventa lo stato in cui i minimi sono massimamente violati.
+
+**La correzione.** Una classificazione **dichiarata** sul `Checker`, nella
+stessa forma di `PLACEMENT_INDEPENDENT`: `PLACEMENT_MONOTONE`, default `True`,
+`False` sulle famiglie in cui piazzare può *riparare* una violazione, oppure
+spostare l'identità del finding senza aggravarlo. `admissible_starts` guadagna
+`relaxed=False`; con `relaxed=True` esclude dal loop di prova i non monotoni, e
+`hall.py` passa `relaxed=True`.
+
+⚠ **Il default resta `relaxed=False`**, quindi `S.P.` non cambia di un bit.
+Non è pigrizia: `S.P.` è una **stima di difficoltà** mostrata in una colonna
+ordinabile, e un dominio più stretto è per l'utente informazione, non un bug.
+La fase 5 è l'opposto — il suo verdetto negativo è una dimostrazione.
+
+**Le sei famiglie non monotone**, classificate leggendo i checker uno per uno:
+
+| famiglia | perché |
+|---|---|
+| `MIN_DISTRIBUTION` | deficienza: piazzare la ripara |
+| `FREE_GUARANTEED` | e in **entrambe** le direzioni: `free_half_days` si conta solo sui giorni *con* attività, quindi occupare un giorno vuoto ne *aggiunge* una |
+| `IMPOSED_SUCCESSION` | entrambi i rami: con A = B infilare un'occorrenza dentro lo scarto lo spezza; con A ≠ B e B assente ogni A è in violazione, e una sola B le ripara tutte |
+| `MAX_GAP_HOURS` | il buco è `ultima − prima + 1 − conteggio`: piazzare *dentro* un buco lo riduce |
+| `WEEKLY_ORDER` | deriva d'identità: il finding nomina l'argmin, e l'argmin si sposta senza che la violazione cambi |
+| `structural:didactic_weight` | deriva d'identità: `activities` porta *tutte* le attività dell'unità, quindi un piazzamento di lunedì rikeya la violazione di venerdì |
+| i quattro `PARTS_*` | deriva d'identità: il finding nomina l'intero secchio, non chi realizza il disordine |
+
+⚠ Le prime tre erano nell'elenco della review, misurato su dieci semi. Le
+altre vengono dalla **lettura**, e la misura non le vede: hanno bisogno di
+un'attività **congelata** per manifestarsi, e il banco a testimone non congela
+niente. `ARRIVAL_DEPARTURE`, che l'elenco della review dava come quarta, a
+lettura è **monotona** — `compliant` non può che calare piazzando, quindi ogni
+cambio di chiave è un peggioramento causato dalla prova — e marcarla non
+cambia un finding su quaranta semi (misurato). Resta monotona.
+
+**Rilassare fa perdere richiamo, mai precisione**: domini più larghi
+significano più capienza, quindi meno deficienze trovate. È il verso giusto in
+cui sbagliare, ed è il criterio con cui si decide una famiglia dubbia.
+
+⚠ Su `WEEKLY_ORDER` e sui quattro `PARTS_*` il rilassamento costa richiamo e
+**oggi non compra precisione**: i loro builder trattano ADR-018 vietando ai
+liberi il secchio già sporco, quindi rispondono `INFEASIBLE` esattamente dove
+`admissible_starts` non rilassato svuotava il dominio. Si rilassano lo stesso
+perché `PLACEMENT_MONOTONE` è una proprietà del **checker**: legarla alla
+scelta di un builder metterebbe in `domain/analysis` una dipendenza dal
+solver — quella che il package esiste per non avere — e marcirebbe in silenzio
+il giorno che il builder cambia idea.
 
 ## 5. Il finding
 
@@ -315,6 +409,34 @@ coperto dai soli casi a mano, e la fase 5 è comunque incompleta per costruzione
 (§3.4): non c'è un numero di richiamo da promettere. Va scritto nel consuntivo
 invece che lasciato intendere.
 
+### ⚠ 6.3 E il testimone dev'essere **denso**, o l'oracolo non misura niente
+
+Trovato alla review finale, ed è la ragione per cui §4.3 è arrivato fin lì
+indisturbato. L'oracolo di §6.2 girava su `build_witness(seed)`, e dopo quella
+chiamata:
+
+```
+ResourceTimeConstraint.objects.count() == 0
+SubjectConstraint.objects.count()      == 0
+ResourceUnavailability.objects.count() == 0
+```
+
+Le righe di vincolo non le crea `build_witness`: le creano i **derivatori**,
+che `build_witness` non chiama. Quaranta semi che esercitavano lo stesso
+sottoinsieme dello spike a cinque vincoli — cioè **letteralmente** la frase che
+`CLAUDE.md` porta già sul Fermi («non misura il modello completo: misura il
+dataset»), non applicata qui.
+
+**Correzione**: si estrae da `run_tutte_le_famiglie` la metà che **non chiama
+il solver** — `costruisci_tutte_le_famiglie(seed)`, che deriva le righe di
+tutte e ventisei le famiglie e **asserisce** che il testimone le soddisfi
+insieme — e l'oracolo usa quella. Alla fase 5 il solver non serve, e non
+pagarlo tiene il file a **~26 s** per quaranta semi invece dei minuti che il
+`solve(time_limit=120)` costerebbe.
+
+Su quei testimoni densi, prima della correzione di §4.3, la fase 5 era rossa
+su **40 seed su 40** — da 6 a 15 falsi positivi per seed.
+
 ## 7. Struttura dei file
 
 | file | cosa |
@@ -369,3 +491,12 @@ dopo:
    deficienza sottostimata sulle attività lunghe.
 6. **Capienza delle immobili contata due volte**, una nello stato e una
    nell'arco verso il pozzo.
+
+⚠ **Il settimo non era in elenco, ed è quello che è passato**: *falso positivo
+da checker non monotono* (§4.3). Nessuna delle sei voci qui sopra lo copre —
+sono tutte sul **motore** (le firme, il taglio, l'impronta, la capienza),
+nessuna sul **dominio**, perché §4 dichiarava il dominio sano per definizione.
+La lezione è la stessa che `CLAUDE.md` conta ormai a decine: la proprietà che
+ha ceduto è quella che il documento affermava invece di misurare. E l'ottavo,
+che non è un difetto ma un limite dichiarato: il **costo per firma** (§4.2),
+misurato solo sull'unico dataset che di firme ne ha una.

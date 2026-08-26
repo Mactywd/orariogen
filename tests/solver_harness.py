@@ -399,21 +399,21 @@ def ordine_derivatori():
     return testa + [k for k in sorted(DERIVERS, key=str) if k not in testa]
 
 
-def run_tutte_le_famiglie(seed, time_limit=120):
-    """Il banco a **modello completo**: tutte le famiglie attive insieme sullo
-    stesso testimone, invece di una per volta.
+def costruisci_tutte_le_famiglie(seed):
+    """Il **testimone denso**: un testimone piu' le righe di tutte e ventisei
+    le famiglie, derivate perche' *lui* le soddisfa — e l'asserzione che le
+    soddisfi davvero, tutte insieme.
 
-    E' la misura che il Fermi non puo' dare. Il dataset Fermi ha **zero** righe
-    `ResourceTimeConstraint` e **zero** `SubjectConstraint`, e i quattro tetti
-    di peso a `None`: ventuno builder su ventisei non postano nulla, e il
-    modello «completo» sul Fermi e' identico byte per byte a quello dello
-    spike a cinque vincoli. Qui invece ogni famiglia porta le proprie righe.
+    E' la meta' di `run_tutte_le_famiglie` che **non chiama il solver**, ed e'
+    estratta apposta: il violatore di Hall non usa il solver, quindi il suo
+    oracolo non deve pagarlo (Critical 2, review finale). Prima di questa
+    estrazione l'oracolo della fase 5 girava su `build_witness` nudo, dove
+    `ResourceTimeConstraint`, `SubjectConstraint` e `ResourceUnavailability`
+    sono a **zero righe**: quaranta semi che esercitavano lo stesso
+    sottoinsieme dello spike a cinque vincoli — la stessa frase che CLAUDE.md
+    porta sul Fermi, non applicata qui.
 
-    Il testimone resta il testimone: ogni riga e' derivata perche' *lui* la
-    soddisfa, quindi soddisfa anche la loro **congiunzione** — INFEASIBLE
-    resta un fallimento duro, esattamente come in `run_family`.
-
-    Restituisce `(w, soluzione, poteri)`."""
+    Restituisce `(w, poteri, codici)`."""
     w = build_witness(seed)
     poteri, codici = {}, set()
     for key in ordine_derivatori():
@@ -431,6 +431,25 @@ def run_tutte_le_famiglie(seed, time_limit=120):
         f"sospettato e' _sintonizza_parti — che riassegna la materia delle "
         f"attivita' di parte e viene chiamata da tutti e quattro i PARTS_*: "
         f"vedi il suo guardiano _sintonia_compatibile.")
+    return w, poteri, codici
+
+
+def run_tutte_le_famiglie(seed, time_limit=120):
+    """Il banco a **modello completo**: tutte le famiglie attive insieme sullo
+    stesso testimone, invece di una per volta.
+
+    E' la misura che il Fermi non puo' dare. Il dataset Fermi ha **zero** righe
+    `ResourceTimeConstraint` e **zero** `SubjectConstraint`, e i quattro tetti
+    di peso a `None`: ventuno builder su ventisei non postano nulla, e il
+    modello «completo» sul Fermi e' identico byte per byte a quello dello
+    spike a cinque vincoli. Qui invece ogni famiglia porta le proprie righe.
+
+    Il testimone resta il testimone: ogni riga e' derivata perche' *lui* la
+    soddisfa, quindi soddisfa anche la loro **congiunzione** — INFEASIBLE
+    resta un fallimento duro, esattamente come in `run_family`.
+
+    Restituisce `(w, soluzione, poteri)`."""
+    w, poteri, codici = costruisci_tutte_le_famiglie(seed)
 
     Placement.objects.filter(schedule=w.schedule).delete()
     soluzione = solve(w.schedule, time_limit=time_limit)

@@ -277,13 +277,20 @@ def test_la_riduzione_toglie_la_terza_di_tre_sulla_stessa_cella():
     env = mini_school()
     _blocca(env["teacher"], giorni=(1, 2, 3, 4),
             celle=[(0, s) for s in range(1, 6)])       # resta la sola (0,0)
-    for _ in range(3):
-        make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+    tre = [make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+           for _ in range(3)]
 
     findings = analyze_hall(env["schedule"])
     assert len(findings) == 1
     f = findings[0]
     assert f.n_activities == 2
+    # ⚠ `activities` va asserito come nei test fratelli: `n_activities` conta
+    # e basta, e non dice che le due nominate siano davvero due delle tre in
+    # contesa. Quali due, qui, non e' determinabile ne' interessante — le tre
+    # sono intercambiabili e ogni coppia e' un insieme irriducibile valido:
+    # cio' che si asserisce e' l'appartenenza, non l'identita'.
+    assert set(f.activities) < {a.id for a in tre}
+    assert len(f.activities) == 2
     assert f.required_minutes == 2 * 60
     assert f.placeable_minutes == 1 * 60
 
@@ -302,4 +309,5 @@ def test_fermi_intero_misurato():
     findings = analyze_hall(dataset["schedule"])
     elapsed = time.perf_counter() - t0
     print(f"\nFermi hall: {elapsed:.3f}s, {len(findings)} findings")
+    assert findings == []       # il docstring lo dichiara: va anche asserito
     assert elapsed < 5.0

@@ -13,6 +13,16 @@ class Checker:
     # delta rispetto alla baseline è comunque sempre vuoto.
     PLACEMENT_INDEPENDENT = False
 
+    # True per i checker **monotoni**: piazzare un'attività in più non può che
+    # *aggiungere* o *aggravare* violazioni, mai ripararne una né spostarne
+    # l'identità senza aggravarla. È la proprietà su cui poggia il criterio di
+    # `admissible_starts` («una chiave nuova rispetto alla baseline significa
+    # che la cella è inammissibile»): se non vale, una cella che *migliora* la
+    # situazione produce comunque una chiave nuova e viene scartata a torto.
+    # Default True; le famiglie che non lo sono lo dichiarano False e portano
+    # nel proprio docstring il perché. Vedi domain/analysis/domain_size.py.
+    PLACEMENT_MONOTONE = True
+
     def check(self, state, resources=None):
         raise NotImplementedError
 
