@@ -147,6 +147,29 @@ def _deficient_set(state, key, group, cells_of, demand_of):
     return [a for i, a in enumerate(group) if i in side]
 
 
+def _reduce(state, key, group, cells_of, demand_of):
+    """Toglie un'attivita' per volta finche' il certificato regge, fino a punto
+    fisso. Cio' che resta e' **irriducibile**: ogni attivita' nominata e'
+    necessaria alla contraddizione, e toglierne una qualsiasi la fa sparire.
+
+    Non e' cosmesi. L'insieme che esce dal taglio minimo e' il massimale, e sul
+    Fermi nominerebbe centinaia di attivita': una diagnosi che nessuno legge."""
+    current = list(group)
+    changed = True
+    while changed and len(current) > 1:
+        changed = False
+        for a in list(current):
+            if len(current) == 1:
+                break
+            trial = [x for x in current if x.id != a.id]
+            _, required, capacity = _certificate(
+                state, key, trial, cells_of, demand_of)
+            if required > capacity:
+                current = trial
+                changed = True
+    return current
+
+
 def _labels(state, group):
     keys = set()
     for a in group:
@@ -170,26 +193,29 @@ def _analyze_state(state, seen):
     for key in sorted(by_key, key=resource_sort_key):
         group = by_key[key]
         demand_of = {a.id: _demand(state, a, key) for a in group}
-        culprits = _deficient_set(state, key, group, cells_of, demand_of)
-        if not culprits:
-            continue
-        window, required, capacity = _certificate(
-            state, key, culprits, cells_of, demand_of)
-        if required <= capacity:
-            continue   # il taglio non regge il conto: non si emette nulla
-        signature = frozenset(a.id for a in culprits)
-        if signature in seen:
-            continue
-        seen.add(signature)
-        findings.append(HallFinding(
-            statement=STATEMENT if len(culprits) > 1 else STATEMENT_SINGOLA,
-            binding_label=state.resource_names.get(key, str(key)),
-            resource_labels=_labels(state, culprits),
-            n_activities=len(culprits),
-            required_minutes=required * grid.slot_minutes,
-            placeable_minutes=capacity * grid.slot_minutes,
-            window=window,
-            activities=tuple(sorted(signature)),
-            remedies=REMEDIES,
-        ))
+        while group:
+            culprits = _deficient_set(state, key, group, cells_of, demand_of)
+            if not culprits:
+                break
+            culprits = _reduce(state, key, culprits, cells_of, demand_of)
+            window, required, capacity = _certificate(
+                state, key, culprits, cells_of, demand_of)
+            if required <= capacity:
+                break   # il taglio non regge il conto: non si emette nulla
+            nominate = frozenset(a.id for a in culprits)
+            group = [a for a in group if a.id not in nominate]
+            if nominate in seen:
+                continue
+            seen.add(nominate)
+            findings.append(HallFinding(
+                statement=STATEMENT if len(culprits) > 1 else STATEMENT_SINGOLA,
+                binding_label=state.resource_names.get(key, str(key)),
+                resource_labels=_labels(state, culprits),
+                n_activities=len(culprits),
+                required_minutes=required * grid.slot_minutes,
+                placeable_minutes=capacity * grid.slot_minutes,
+                window=window,
+                activities=tuple(sorted(nominate)),
+                remedies=REMEDIES,
+            ))
     return findings

@@ -213,3 +213,73 @@ def test_lo_stesso_insieme_in_due_firme_e_un_problema_solo():
         date=dt.date(2026, 9, 21))                     # settimana 1
 
     assert len(analyze_hall(env["schedule"])) == 1
+
+
+def test_il_taglio_minimo_esclude_le_attivita_estranee():
+    # Sul docente il gruppo unito e' di 10 attivita' (7 legate al giorno 0
+    # dalla classe + 3 libere su due giorni), ma il finding ne nomina solo 7.
+    # Non e' `_reduce` a escludere le tre estranee: il taglio minimo di
+    # `_deficient_set` le esclude gia' da solo. Il taglio piu' economico non
+    # e' "blocca tutte e dieci le sorgenti" (costerebbe 10) ne'
+    # "chiudi tutte e 12 le celle" (costerebbe 12): e' "chiudi le 6 celle del
+    # giorno 0 e blocca le 3 sorgenti libere", che costa 3 + 6 = 9 — meno di
+    # 10 richieste, deficiente per 1, e lascia le tre libere fuori dal lato
+    # sorgente perche' possono defluire dal giorno 1. Questo test tiene ferma
+    # la PRECISIONE di `_deficient_set`, non la riduzione: per un caso dove
+    # serve davvero `_reduce` vedi
+    # `test_la_riduzione_toglie_la_terza_di_tre_sulla_stessa_cella`.
+    env = mini_school()
+    _blocca(env["teacher"], giorni=(2, 3, 4))          # docente: giorni 0 e 1
+    _blocca(env["klass"], giorni=(1, 2, 3, 4))         # classe:  giorno 0
+
+    legate = [make_activity(env["subject"], teachers=[env["teacher"]],
+                            classes=[env["klass"]], slots=1) for _ in range(7)]
+    for _ in range(3):
+        make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+
+    findings = analyze_hall(env["schedule"])
+
+    assert len(findings) == 1                          # dedup fra classe e docente
+    f = findings[0]
+    assert f.n_activities == 7
+    assert f.activities == tuple(sorted(a.id for a in legate))
+    assert f.required_minutes == 7 * 60
+    assert f.placeable_minutes == 6 * 60
+
+
+def test_due_insiemi_indipendenti_sulla_stessa_risorsa_escono_entrambi():
+    # Due attivita' senza nessuna collocazione, sullo stesso docente. Gli
+    # insiemi irriducibili sono due, {A} e {B}: emetterne uno solo perche' la
+    # risorsa e' la stessa nasconderebbe meta' del problema.
+    env = mini_school()
+    _blocca(env["teacher"], giorni=(0, 1, 2, 3, 4))
+    make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+    make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+
+    findings = analyze_hall(env["schedule"])
+
+    assert len(findings) == 2
+    assert all(f.n_activities == 1 for f in findings)
+    assert len({f.activities for f in findings}) == 2
+    assert all(f.statement == STATEMENT_SINGOLA for f in findings)
+
+
+def test_la_riduzione_toglie_la_terza_di_tre_sulla_stessa_cella():
+    # Tre attivita' costrette nell'unica fascia che il docente concede. Il
+    # taglio minimo le nomina tutte e tre - costa 1 (la capienza della cella)
+    # contro 2 (la domanda della terza piu' la capienza) - ma l'insieme
+    # irriducibile e' di DUE: due attivita' in una fascia sono gia' una
+    # contraddizione, e togliendone ancora una non lo sono piu' (1 <= 1).
+    # E' il caso in cui `_reduce` deve mordere: senza, il finding ne nomina 3.
+    env = mini_school()
+    _blocca(env["teacher"], giorni=(1, 2, 3, 4),
+            celle=[(0, s) for s in range(1, 6)])       # resta la sola (0,0)
+    for _ in range(3):
+        make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+
+    findings = analyze_hall(env["schedule"])
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.n_activities == 2
+    assert f.required_minutes == 2 * 60
+    assert f.placeable_minutes == 1 * 60
