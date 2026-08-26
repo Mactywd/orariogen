@@ -63,7 +63,7 @@ domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza, il violatore di Hall (fase 5, hall.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -138,7 +138,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. Il
 > **violatore di Hall** (fase 5 dell'Analisi dei vincoli, `domain/analysis/hall.py`)
 > **è anch'esso implementato**: nessun solver, teorema di Hall in forma
-> deficitaria su flusso massimo e taglio minimo. **516 test verdi**, 16 skip
+> deficitaria su flusso massimo e taglio minimo. **524 test verdi**, 16 skip
 > tutti misurati e attribuiti (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -501,14 +501,138 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   **costo**, mai la **copertura**: il dataset non ha righe di vincolo, quindi
   zero finding è l'esito atteso, non un risultato.
 
-  Suite **misurata a fine task** (non prevista): `venv/bin/pytest -q` →
-  **516 test verdi**, 16 skip (i 35 in più sono i seed 6-40 dell'oracolo,
-  appena portati nella suite). Corretto anche il **436** dichiarato nella nota
-  di stato più sopra: era la misura di prima dei due commit di review della
-  PR #1 (`modello-hard-completo`), non il numero corrente neppure a inizio di
-  questo lavoro. E i **tre pezzi dichiarati fuori** nella nota di stato
-  diventano **due**: resta l'assegnazione delle aule e gli alleggerimenti a
-  quota con l'ottimizzazione lessicografica.
+  Suite dopo i sette task: **516 test verdi**, 16 skip (i 35 in più sono i
+  seed 6-40 dell'oracolo, appena portati nella suite). Corretto anche il
+  **436** dichiarato nella nota di stato più sopra: era la misura di prima dei
+  due commit di review della PR #1 (`modello-hard-completo`), non il numero
+  corrente neppure a inizio di questo lavoro. E i **tre pezzi dichiarati
+  fuori** nella nota di stato diventano **due**: resta l'assegnazione delle
+  aule e gli alleggerimenti a quota con l'ottimizzazione lessicografica.
+
+  ---
+
+  ⛔ **E poi la review finale ha trovato un falso positivo dimostrato — il
+  difetto che questa stessa voce si congratulava di aver prevenuto.** Tre righe
+  di riproduzione: `mini_school()`, una riga `MIN_DISTRIBUTION`
+  (`min_days = 3`) su un docente, tre attività da un'ora sui giorni 0, 1 e 2.
+  `check_schedule` non emette **nessun** finding HARD, `solve` risponde
+  `OPTIMAL` — e `analyze_hall` restituisce **tre** finding «L'attività non ha
+  nessuna collocazione ammissibile». Cioè esattamente ciò che la fase 5 non ha
+  il diritto di fare: mandare l'utente a smontare vincoli sani.
+
+  🔑 **La causa sta nel punto che la spec dichiarava sano per definizione.**
+  §4 diceva: *«Resta sano perché la condizione di `residual_domain` è
+  precisamente l'ammissibilità»*. Non lo è. La condizione di
+  `admissible_starts` è «la `Finding.key` è **cambiata** rispetto alla
+  baseline», e `Finding.key` include le `quantities`. Per un checker la cui
+  violazione è una **deficienza** — `MIN_DISTRIBUTION` esiste già a stato
+  vuoto, con `days = 0` — ogni piazzamento *migliora* il conteggio e con esso
+  cambia la chiave: chiave nuova a ogni cella, dominio vuoto, deficienza
+  inventata. E §4.1 — la trappola che la spec aveva **previsto**, giustamente —
+  è ciò che *crea* la condizione, perché spiazzando tutte le candidate insieme
+  rende la baseline lo stato in cui i minimi sono massimamente violati. La
+  precauzione giusta ha esposto il difetto sbagliato.
+
+  ⚠ **Né le sette review per-task né l'oracolo a quaranta semi potevano
+  vederlo, e il perché è il difetto vero.** `build_witness(seed)` lascia
+  `ResourceTimeConstraint.objects.count() == 0`, `SubjectConstraint == 0`,
+  `ResourceUnavailability == 0`: le righe di vincolo le creano i
+  **derivatori**, che `build_witness` non chiama. I quaranta semi dell'oracolo
+  esercitavano quindi lo stesso sottoinsieme dello spike a cinque vincoli — ed
+  è **letteralmente** la frase che questo file porta già sul Fermi («non misura
+  il modello completo: misura il dataset. Ha zero righe
+  `ResourceTimeConstraint`, zero `SubjectConstraint`»), non applicata al banco
+  nuovo. Un numero grande di semi ha fatto da anestetico: quaranta ripetizioni
+  della stessa misura povera sembrano una copertura.
+  **Corretto** estraendo da `run_tutte_le_famiglie` la metà che **non chiama il
+  solver** — `costruisci_tutte_le_famiglie(seed)`, che deriva le righe di tutte
+  e ventisei le famiglie e **asserisce** che il testimone le soddisfi insieme.
+  Su quei testimoni densi la fase 5 era rossa **40 semi su 40**, da 6 a 15
+  falsi positivi ciascuno; e l'oracolo resta a **~26 s** per i quaranta semi,
+  perché alla fase 5 il solver non serve e non lo si paga.
+
+  **La correzione**: `Checker.PLACEMENT_MONOTONE`, dichiarato nella stessa
+  forma di `PLACEMENT_INDEPENDENT` — default `True`, `False` sulle famiglie in
+  cui piazzare può *riparare* una violazione oppure spostare l'identità del
+  finding senza aggravarlo. `admissible_starts(..., relaxed=False)`; con
+  `relaxed=True` esclude i non monotoni, e `hall.py` passa `relaxed=True`.
+  ⚠ Il default resta `relaxed=False`, quindi **S.P. non cambia di un bit** e
+  nessun test esistente si muove: `S.P.` è una stima di difficoltà in una
+  colonna ordinabile, e un dominio più stretto è per l'utente informazione, non
+  un bug — la fase 5 è l'opposto, il suo verdetto negativo è una dimostrazione.
+  Rilassare fa perdere **richiamo**, mai precisione: domini più larghi
+  significano più capienza, quindi meno deficienze trovate. È il verso giusto
+  in cui sbagliare.
+
+  🔑 **E l'elenco della review era corretto ma non esaustivo, in entrambe le
+  direzioni.** La review dava quattro famiglie, misurate su dieci semi.
+  Rileggendo i checker uno per uno ne escono **sei**: le tre confermate
+  (`MIN_DISTRIBUTION`, `FREE_GUARANTEED`, `IMPOSED_SUCCESSION` in **entrambi**
+  i rami) più `MAX_GAP_HOURS` — il buco è `ultima − prima + 1 − conteggio`,
+  quindi piazzare *dentro* un buco lo **riduce** — e tre casi di **deriva
+  d'identità**: `WEEKLY_ORDER` (il finding nomina l'argmin), i quattro
+  `PARTS_*` (nomina l'intero secchio) e `structural:didactic_weight` (nomina
+  tutte le attività dell'unità, quindi un piazzamento di lunedì rikeya la
+  violazione di venerdì). ⚠ Le ultime quattro **la misura non le vede**: hanno
+  bisogno di un'attività **congelata** per manifestarsi, e il banco a testimone
+  non congela niente — lo stesso buco che il 2026-08-26 (sera) aveva già
+  costretto a costruire il banco che congela per il solver. La stessa cecità,
+  su un banco diverso, sei giorni dopo.
+  ⚠ E in senso opposto: `ARRIVAL_DEPARTURE`, la quarta dell'elenco, a lettura
+  è **monotona** — `compliant` non può che calare piazzando, quindi ogni cambio
+  di chiave è un peggioramento causato dalla prova. Marcarla non cambia un
+  finding su quaranta semi (misurato). Resta monotona, e la divergenza è
+  dichiarata invece che appianata.
+  ⚠ Su `WEEKLY_ORDER` e sui quattro `PARTS_*` il rilassamento costa richiamo e
+  **oggi non compra precisione**: i loro builder trattano ADR-018 vietando ai
+  liberi il secchio già sporco, quindi rispondono `INFEASIBLE` esattamente dove
+  il dominio non rilassato si svuotava — misurato, ed è il motivo per cui i due
+  test corrispondenti hanno il **checker** come metro e non il solver. Si
+  rilassano lo stesso, perché `PLACEMENT_MONOTONE` è una proprietà del
+  *checker*: legarla alla scelta di un builder metterebbe in `domain/analysis`
+  una dipendenza dal solver — quella che il package esiste per non avere.
+
+  **Ogni marcatura è verificata per mutazione**: rimettendo `True` su una sola
+  famiglia, il test di *quella* famiglia diventa rosso e nessun altro (sette
+  mutazioni, sette esiti distinti). E il banco morde anche nel verso opposto,
+  che con una correzione fatta *restringendo ciò che si scarta* è il rischio
+  vero: `analyze_hall` sostituita da `return []` incondizionato lascia **12
+  test rossi** fra i quattro file della fase 5.
+
+  ⚠ **Il costo è lineare nel numero di firme, e il numero dichiarato veniva
+  dall'unico dataset che ne ha una sola.** Il Fermi ha **una** firma di
+  settimana, quindi «~0,4 s, è anzi la più veloce delle famiglie di analisi»
+  era una conclusione generale tratta dalla dimensione che il dataset non
+  esercita — mentre §2 della spec chiama le firme *«una dimensione, non un
+  dettaglio»*. Misurato aggiungendo indisponibilità **datate** (il meccanismo
+  reale: le assenze): 1 firma 0,34 s · 3 firme 0,99 s · 6 firme 1,88 s ·
+  11 firme 3,25 s · 21 firme 5,98 s — circa **0,3 s per firma**. Un anno reale
+  ha 35-40 settimane, quindi nel caso limite **~10-13 s** sul Fermi. Resta
+  accettabile per una fase diagnostica lanciata a mano, e `--no-hall` esiste
+  apposta; ma va letto come «0,3 s per firma», non come un numero assoluto.
+  Spec e nota di stato corrette in loco.
+
+  **Chiusi nello stesso giro** i minori della review: il caveat degli archi a
+  ∞ nel docstring di `_deficient_set` (§3.2 lo imponeva testualmente);
+  `_labels` che deduplica per nome — senza, gli atomi di ADR-017 ripetevano il
+  nome della classe una volta per atomo più una per `ClassPart`, e su una
+  scuola vera la frase diventava illeggibile, che è l'UX del finding, cioè il
+  punto del pezzo; i due `assert` mancanti (`findings == []` sul Fermi,
+  `activities` sulla riduzione). E la decisione **dichiarata** sui due
+  guardiani che si potevano togliere lasciando la suite verde: `required <=
+  capacity` e il clamp `max(0, base - used)` sono **entrambi irraggiungibili
+  per costruzione** — il primo perché con gli archi centrali a ∞ il lato
+  sorgente del taglio minimo soddisfa sempre la disuguaglianza e `_reduce` la
+  preserva; il secondo perché ogni cella che arriva a `_cell_capacity` è
+  passata per `admissible_starts`, dove `structural:occupation` (monotono,
+  quindi presente anche col rilassamento) scarta le celle sature. **Restano
+  entrambi**, col perché nel docstring: il primo è la §3.3 della spec, cioè un
+  argomento sui grafi residui trasformato in postcondizione controllata; il
+  secondo è l'ultima porta prima di Dinic, dove una capacità negativa non
+  fallirebbe — produrrebbe un certificato che non torna, in silenzio.
+
+  **Suite a fine lavoro**: `venv/bin/pytest -q` → **524 test verdi**, 16 skip
+  in ~86 s.
 
 - **2026-08-26 (notte)** — **La review della PR #1, e il gemello del difetto
   nella famiglia che il banco non poteva vedere.** Quattro rilievi sistemati
