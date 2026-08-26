@@ -45,6 +45,11 @@ class MaxFlow:
         return 0
 
     def max_flow(self, s, t):
+        # La sorgente e il pozzo non possono coincidere: in quel caso _augment
+        # restituisce il limit senza consumare capacita', e il while non termina.
+        # Meglio fallire forte che restituire 0 (falso positivo per il violatore).
+        if s == t:
+            raise ValueError("source and sink must be different")
         total = 0
         while self._levels(s, t):
             self.seen = [0] * self.n

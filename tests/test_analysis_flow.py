@@ -2,6 +2,8 @@
 Nessuna nozione di orario qui: se questi test sono verdi e hall.py sbaglia,
 l'errore e' nella semantica del dominio, non nell'algoritmo."""
 
+import pytest
+
 from domain.analysis.flow import INF, MaxFlow
 
 
@@ -57,3 +59,12 @@ def test_lato_sorgente_esclude_le_celle_irraggiungibili():
     side = f.source_side(src)
     assert 1 in side and 3 in side   # l'attivita' 1 non entra tutta
     assert 0 not in side             # l'attivita' 0 e' servita
+
+
+def test_sorgente_e_pozzo_coincidenti_alzano():
+    # Prima alzava, questo ciclo non terminava mai: `_augment` restituisce
+    # `limit` senza consumare capacita', e `max_flow` non esce dal while.
+    f = MaxFlow(3)
+    f.add_edge(0, 1, 5)
+    with pytest.raises(ValueError):
+        f.max_flow(0, 0)
