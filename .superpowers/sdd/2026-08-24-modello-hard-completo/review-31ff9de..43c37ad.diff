@@ -1,0 +1,546 @@
+# Review package: 31ff9de..HEAD
+
+## Commits
+43c37ad fix(solver): Task 9 giro 1 — s==t su SiteTransitionBuilder, derivatori costruttivi
+463f418 docs: la semantica del cambio di sede sotto capienza cumulativa e' aperta
+
+## Files changed
+ CLAUDE.md                            |  12 +++
+ domain/solver/builders/time_sites.py | 172 +++++++++++++++++++++++++++-----
+ tests/solver_harness.py              | 188 +++++++++++++++++++++++++++--------
+ tests/test_solver_sites.py           |  49 +++++++++
+ 4 files changed, 355 insertions(+), 66 deletions(-)
+
+## Diff
+diff --git a/CLAUDE.md b/CLAUDE.md
+index b55b38c..a5dc099 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -291,6 +291,18 @@ l'assegnazione delle aule e il violatore di Hall. Vedi
+       stato ammesso — è il comportamento di EDT, che con 21 attività in
+       violazione piazzate a mano continua a lavorare. **Da implementare** nella
+       spec del modello completo, prima dei ventidue builder restanti.
++- [ ] ⚠ **Cosa significa «cambio di sede» quando due sedi coesistono nella
++      stessa fascia?** Sotto capienza cumulativa (aula con `Qtà > 1`, feature
++      EDT documentata) due attività di sedi diverse possono occupare la stessa
++      fascia della stessa risorsa. `MaxSiteChangesChecker` **conta un cambio**,
++      ma solo come conseguenza di un dettaglio implementativo:
++      `state.occupancy` è una `list` e `_site_sequence` la scorre in ordine
++      d'inserimento, quindi il conteggio dipende dall'ordine. È un **artefatto,
++      non una semantica**, e va deciso in `domain/analysis` prima di poter
++      essere tradotto — tradurre un artefatto sarebbe peggio che lasciare lo
++      scarto. Il builder CP-SAT lo dichiara nel proprio docstring. Trovato
++      nella review del Task 9 del piano `modello-hard-completo`. ⚠ Non tocca il
++      Fermi, dove le aule non sono mai state inserite (voce qui sopra).
+ 
+ ## Scope di v1 — deciso il 2026-07-26
+ 
+diff --git a/domain/solver/builders/time_sites.py b/domain/solver/builders/time_sites.py
+index 7abba6d..19aee94 100644
+--- a/domain/solver/builders/time_sites.py
++++ b/domain/solver/builders/time_sites.py
+@@ -31,23 +31,59 @@ comunque vacuo (la coppia non forza nulla se in mezzo c'e' un'altra sede
+ nota, che a sua volta partecipa alle proprie coppie adiacenti), e le coppie
+ vicine includono tutte le consecutive.
+ 
+-⚠ **Caso verificato e non risolto (stesso Ruling, ultimo paragrafo): due
+-attivita' di sede diversa sulla STESSA fascia della stessa chiave.** Il
+-checker le conta entrambe (appende una voce per **ogni** attivita' che
+-occupa la fascia, `state.occupancy[(key, day, s)]`), quindi due attivita' di
+-sede diversa simultanee sulla stessa fascia sono un cambio. La costruzione a
+-coppie `s < t` (qui sotto) non puo' esprimerlo: non esiste una coppia con
+-`s == t`. Di norma e' irraggiungibile perche' la stessa fascia della stessa
+-chiave e' gia' vietata da `structural:occupation` (capienza 1) — ma
+-**verificato che e' raggiungibile** quando la chiave ha capienza cumulativa
+-`simultaneous_capacity > 1` (il campo esiste sulla `Resource` base, quindi
+-anche su classi/docenti, anche se il caso d'uso tipico e' aule/materiali):
+-costruita un'istanza con una classe a capienza 2, due attivita' di sede
+-diversa su docenti diversi piazzate sulla stessa fascia — zero finding di
+-occupazione, un `max_site_changes` `HARD` dal checker, nessuna coppia del
+-builder in grado di intercettarlo. **Non risolto qui**: e' un'osservazione
+-per il controller (il brief lo vieta esplicitamente come task di iniziativa),
+-non un difetto corretto in questo giro.
++⚠ **Due attivita' di sede diversa sulla STESSA fascia della stessa chiave —
++riparato solo in `SiteTransitionBuilder` (Important 1 + Ruling 33, giro di
++correzione 1).** Il checker le conta entrambe (appende una voce per **ogni**
++attivita' che occupa la fascia, `state.occupancy[(key, day, s)]`), quindi due
++attivita' di sede diversa simultanee sulla stessa fascia sono **sempre** un
++cambio per `SiteTransitionChecker`: con `s1 == s2`, `gap_slots = s2-s1-1 =
++-1`, che e' `< needed` per **qualunque** `needed >= 0` — anche `needed = 0`.
++La violazione non dipende dalla soglia. La costruzione a coppie `s < t` (qui
++sotto) non puo' esprimerla: non esiste una coppia con `s == t`. Di norma e'
++irraggiungibile perche' la stessa fascia della stessa chiave e' gia' vietata
++da `structural:occupation` (capienza 1) — ma **raggiungibile** quando la
++chiave ha capienza cumulativa `simultaneous_capacity > 1` (il campo esiste
++sulla `Resource` base, quindi anche su classi/docenti, ma il caso reale e'
++l'aula col `Numero di aule`/`Qta'` di EDT, documentato in `docs/edt/aule.md`
++— non un caso di laboratorio): un'aula a capienza 2 con due attivita' di
++classi diverse, sedi diverse, piazzate sulla stessa fascia produce zero
++finding di occupazione ma un `site_transition` `HARD` dal checker — l'oracolo
++differenziale rotto (solver `OPTIMAL`, checker boccia con un finding nuovo).
++
++**Riparato**: `SiteTransitionBuilder.build` posta ora, per ogni `(chiave,
++giorno, fascia)` e ogni coppia di sedi distinte che tocca davvero quella
++cella, la clausola `s == t` (`site_occupied(key, day, s, sa).Not() OR
++site_occupied(key, day, s, sb).Not()`) — **indipendente da `needed`**, perche'
++il checker non la esenta mai, nemmeno a `needed = 0`. Esatto, non
++conservativo; costo trascurabile (una clausola per chiave × giorno × fascia ×
++coppia di sedi effettivamente compresenti in quella cella, filtrate da
++`_sedi_raggiungibili` — Minor 2 sotto). Test:
++`test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa` in
++`tests/test_solver_sites.py`.
++
++⚠ **`MaxSiteChangesBuilder` — NON riparato, deliberatamente (Ruling 33).** Lo
++stesso buco esiste anche qui (due sedi diverse sulla stessa fascia sono un
++cambio per il checker), ma qui la riparazione non e' univoca, perche' la
++semantica del checker stesso non lo e'. `ScheduleState.occupancy`
++(`domain/analysis/state.py`) e' un `defaultdict(list)`, e `_site_sequence` la
++scorre **in ordine di lista** — l'ordine in cui `ScheduleState.build` ha
++inserito le occupazioni. Sotto capienza cumulativa il **conteggio** dei
++cambi dipende quindi dall'**ordine di inserimento**: la stessa coppia di
++attivita' simultanee da' un conteggio diverso a seconda che la sequenza
++letta sia `[A, B]` o `[B, A]` seguita da una terza occupazione. Non e' una
++proprieta' del piazzamento, e' un artefatto di implementazione del checker —
++e il checker e' **l'autorita'** su cosa significhi il vincolo. Tradurre
++l'artefatto nel builder (per esempio imponendo un ordine arbitrario fra le
++due sedi simultanee) significherebbe replicare un comportamento che nessuno
++ha deciso essere corretto, non tradurre una semantica. **Va prima deciso in
++`domain/analysis` cosa significhi «cambio di sede» quando due sedi
++coesistono nella stessa fascia** (per esempio: ordinare la sequenza
++intra-fascia in modo deterministico, o dichiarare che sedi diverse
++simultanee valgono un cambio e basta indipendentemente da quante sono e in
++che ordine) — solo allora questo builder ha una semantica bersaglio univoca
++da tradurre. Fino a quella decisione resta **esatto solo per chiavi a
++capienza 1** (confronto esaustivo nel report del Task 9, giro di correzione
++1 e nella review). Voce gia' in CLAUDE.md, elenco «Ancora aperto».
+ 
+ ⚠ **ADR-018.** `MaxSiteChangesBuilder` posta somme su variabili derivate
+ (i letterali di cambio `c`), non su termini `(peso, id, letterale)`
+@@ -56,7 +92,37 @@ separabili: stesso schema di `MaxGapBuilder`/`MaxPresenceBuilder`
+ `continue` e' stato sbagliato due volte su questo piano: review Task 6
+ Important 2, e Ruling 23 sul Task 8). `SiteTransitionBuilder` invece ha gia'
+ ADR-018 nella forma della regola dell'implicazione (`any_free`): non
+-toccato."""
++toccato.
++
++⚠ **Minor 2 (review Task 9): filtro a costo zero sul numero di clausole —
++applicato, ma misurato a effetto nullo sul Fermi.** Entrambi i builder
++ciclavano su **tutte** le sedi conosciute nell'istituto per ogni `sa`/`sb`,
++anche quando nessuna attivita' di quella sede tocca davvero la cella in
++questione — in quel caso `site_occupied(...)` e' costante a zero per
++costruzione (nessun letterale in `ctx.by_cell`) e la clausola che lo
++coinvolge e' vera per costruzione, quindi inutile da postare.
++`_sedi_raggiungibili` restituisce, per una cella, solo le sedi di cui esiste
++**davvero** un'attivita' il cui dominio tocca quella cella (lettura diretta
++di `ctx.by_cell`, senza filtrare per firma di settimana — filtro grosso ma a
++costo zero in complessita' del codice): e' logicamente corretto e non
++costa nulla in leggibilita', quindi resta. **Ma misurato sul Fermi (giro di
++correzione 1) non taglia nulla**: a 2 sedi il conteggio dei constraint di
++`SiteTransitionBuilder` e' identico con e senza il filtro (5604, sia al 50%
++sia al 100% di attivita' con sede), e lo stesso a 4 sedi (21830 con e senza).
++La ragione e' strutturale, non un errore del filtro: sul Fermi le attivita'
++di ogni chiave (classe o docente) non hanno restrizioni di dominio ulteriori
++(nessuna indisponibilita', nessun vincolo di griglia in questi scenari di
++misura), quindi `ctx.by_cell` per quella chiave contiene gia' rappresentanti
++di (quasi) tutte le sedi in (quasi) ogni cella — non c'e' nulla da filtrare.
++Il filtro tornerebbe utile su dati con domini davvero ristretti per sede
++(indisponibilita', griglia, congelate), che il Fermi con le sedi aggiunte
++sinteticamente per la misura non esercita. La crescita superlineare col
++numero di sedi resta comunque reale e superiore a quella del piano originale
++(la clausola `s == t` aggiunge una famiglia intera di vincoli): misurato qui,
++`SiteTransitionBuilder` da solo (senza righe MAX_SITE_CHANGES) passa da 5604
++constraint a 2 sedi a 21830 a 4 sedi sul Fermi — piu' del baseline
++pre-riparazione (4008 → 12254) perche' la riparazione dell'Important 1 e'
++un'intera famiglia di vincoli in piu', non un'ottimizzazione."""
+ 
+ from domain.models import ResourceTimeConstraint
+ from domain.solver.builders.base import ResourceBuilder
+@@ -71,6 +137,20 @@ def _sedi(ctx):
+                    if a.site_id is not None})
+ 
+ 
++def _sedi_raggiungibili(ctx, key, day, slot):
++    """Le sedi di cui esiste **davvero** un'attivita' il cui dominio tocca
++    questa cella (Minor 2, review Task 9): fuori da questo insieme,
++    `site_occupied(key, day, slot, sito)` e' costante a zero per
++    costruzione (nessun letterale in `ctx.by_cell`), quindi ogni clausola
++    che lo coinvolge sarebbe vera per costruzione — inutile da postare.
++    Non filtra per firma di settimana (sarebbe piu' preciso ma complica il
++    chiamante): un falso positivo qui costa al piu' una clausola vera per
++    costruzione, mai una sbagliata."""
++    return {ctx.activities[aid].site_id
++            for aid, _ in ctx.by_cell.get((key, day, slot), ())
++            if ctx.activities[aid].site_id is not None}
++
++
+ def _coppie_di_sede(ctx, key, day, s, t, sa, sb, rep, sedi):
+     """I letterali di «fascia s sulla sede sa, fascia t sulla sede sb, e
+     nessuna sede nota in mezzo» — l'adiacenza nella sottosequenza dei
+@@ -119,10 +199,15 @@ class MaxSiteChangesBuilder(ResourceBuilder):
+         consumo_settimana = 0
+         for day in range(ctx.grid.days_per_cycle):
+             cambi = []
++            # Minor 2: le sedi davvero raggiungibili in ogni fascia,
++            # calcolate una volta per giornata invece che ad ogni coppia
++            # (s, t) — stesso filtro, meno lavoro ripetuto.
++            per_fascia = [_sedi_raggiungibili(ctx, key, day, s)
++                          for s in range(ctx.grid.slots_per_day)]
+             for s in range(ctx.grid.slots_per_day):
+                 for t in range(s + 1, ctx.grid.slots_per_day):
+-                    for sa in sedi:
+-                        for sb in sedi:
++                    for sa in per_fascia[s]:
++                        for sb in per_fascia[t]:
+                             if sa == sb:
+                                 continue
+                             lits = _coppie_di_sede(ctx, key, day, s, t,
+@@ -156,21 +241,58 @@ class SiteTransitionBuilder(Builder):
+ 
+     ADR-018 e' gia' presente nella forma della regola dell'implicazione
+     (`any_free`): se nessuna delle attivita' che toccano le due fasce e'
+-    libera, il vincolo e' un fatto sul passato e non si posta."""
++    libera, il vincolo e' un fatto sul passato e non si posta.
++
++    `build` posta due famiglie di clausole: `s == t` (due sedi diverse sulla
++    stessa fascia, indipendente da `needed` — Important 1, Ruling 33) e
++    `s < t` (le coppie a distanza insufficiente, vacua se `needed == 0`).
++    Vedi il docstring del modulo per i dettagli e i limiti."""
+ 
+     def build(self, ctx, model):
+         sedi = _sedi(ctx)
+         if len(sedi) < 2:
+             return
+         needed = ctx.states[ctx.signatures[0][0]].settings.site_transition_slots
+-        if not needed:
+-            return
+         chiavi = sorted({k for (k, _d, _s) in ctx.by_cell}, key=str)
+         posted = set()
+         for rep, _ in ctx.signatures:
+             active = ctx.states[rep].activities
+             for key in chiavi:
+                 for day in range(ctx.grid.days_per_cycle):
++                    per_fascia = [_sedi_raggiungibili(ctx, key, day, s)
++                                  for s in range(ctx.grid.slots_per_day)]
++
++                    # s == t (Important 1, riparazione Ruling 33): due sedi
++                    # diverse sulla STESSA fascia sono sempre un cambio per
++                    # il checker (gap_slots = -1, sempre < needed qualunque
++                    # sia needed >= 0), quindi questa clausola non dipende
++                    # da `needed` — postata anche a needed = 0. Di norma
++                    # irraggiungibile (structural:occupation la vieta gia'
++                    # a capienza 1), raggiungibile a
++                    # simultaneous_capacity > 1 (vedi docstring del modulo).
++                    for s in range(ctx.grid.slots_per_day):
++                        tocca = {aid for aid, _ in ctx.by_cell.get((key, day, s), ())
++                                  if aid in active}
++                        if not any_free(ctx, tocca):
++                            continue
++                        for sa in per_fascia[s]:
++                            for sb in per_fascia[s]:
++                                if sa == sb:
++                                    continue
++                                firma = (key, day, s, s, sa, sb,
++                                         frozenset(tocca))
++                                if firma in posted:
++                                    continue
++                                posted.add(firma)
++                                model.AddBoolOr([
++                                    ctx.vocab.site_occupied(
++                                        key, day, s, sa, signature=rep).Not(),
++                                    ctx.vocab.site_occupied(
++                                        key, day, s, sb, signature=rep).Not(),
++                                ])
++
++                    if not needed:
++                        continue   # la coppia s < t sotto e' interamente vacua
+                     for s in range(ctx.grid.slots_per_day):
+                         for t in range(s + 1, ctx.grid.slots_per_day):
+                             if t - s - 1 >= needed:
+@@ -183,8 +305,8 @@ class SiteTransitionBuilder(Builder):
+                             }
+                             if not any_free(ctx, tocca):
+                                 continue
+-                            for sa in sedi:
+-                                for sb in sedi:
++                            for sa in per_fascia[s]:
++                                for sb in per_fascia[t]:
+                                     if sa == sb:
+                                         continue
+                                     firma = (key, day, s, t, sa, sb,
+diff --git a/tests/solver_harness.py b/tests/solver_harness.py
+index 7f041e7..b90bc98 100644
+--- a/tests/solver_harness.py
++++ b/tests/solver_harness.py
+@@ -571,25 +571,62 @@ def _derive_max_presence(w):
+ 
+ @deriver(RT.MAX_SITE_CHANGES, {"max_site_changes"})
+ def _derive_max_site_changes(w):
+-    """I cambi di sede osservati nel testimone per il docente scelto, per
+-    giornata e in totale sulla settimana, presi sulla firma peggiore. Con
+-    l'uguaglianza il vincolo e' soddisfatto e stretto.
+-
+-    Vacua (ritorna 0, correzione 3 del brief, Ruling 29) se il docente scelto
+-    a caso ha **meno di due sedi distinte** fra le proprie attivita' del
+-    testimone (nessuna sede, o una sola): in quel caso «cambio di sede» non
+-    e' nemmeno strutturalmente possibile per lui — nessuna coppia di sue
+-    attivita' puo' mai differire di sede, qualunque arrangiamento scelga il
+-    solver — quindi il tetto, per quanto stretto (anche zero), non potrebbe
+-    mai essere violato da un builder rotto (stessa convenzione di
+-    _derive_max_half_days: non basta che la riga esista, deve poter essere
+-    violata)."""
+-    docente = w.rng.choice(w.env["teachers"])
+-    sedi_docente = {w.act(aid).site_id for aid in w.placement
+-                    if docente.pk in w.tokens[aid]
+-                    and w.act(aid).site_id is not None}
+-    if len(sedi_docente) < 2:
++    """Formulazione **«segregato»** (Ruling 34, review Task 9 giro di
++    correzione 1, §3): il derivatore **costruisce** lo scenario invece di
++    osservarlo. La versione precedente sceglieva un docente a caso e si
++    limitava a leggere le sedi che gli erano gia' toccate da
++    `_make_activities` (assegnazione al 50%, indipendente dal docente): la
++    review ha misurato il potere vincolante reale (builder reso no-op, il
++    caso deve fallire) a **0/15** — la famiglia non testava niente, perche'
++    quasi mai un docente a caso aveva due sedi distinte sulle proprie
++    attivita' nello stesso giorno.
++
++    Qui si sceglie il docente con **piu' attivita'** nel testimone e gli si
++    assegna una sede **per giornata**: tutte le sue attivita' dello stesso
++    giorno alla stessa sede, sedi alternate fra giorni consecutivi
++    (`sites[day % len(sites)]`); tutte le altre attivita' (di lui e di
++    chiunque altro) restano senza sede. Cosi' i cambi di sede **per
++    giornata** del docente scelto sono sempre zero nel testimone — non serve
++    dimostrarlo caso per caso, e' garantito dalla costruzione — quindi il
++    tetto derivato e' `per_day = per_week = 0`, e qualunque soluzione che
++    mescoli due sedi diverse nella stessa giornata di quel docente lo viola.
++    Misurato qui (giro di correzione 1, builder reso no-op, 15 seed, piu'
++    esecuzioni per il non determinismo di CP-SAT): **10/15** stabile su
++    quattro esecuzioni consecutive. La review aveva misurato 12/15 sulla
++    propria formulazione di riferimento (non il codice qui sopra, solo la
++    descrizione): la differenza e' compatibile coi dettagli di
++    implementazione (qui il docente e' scelto per numero totale di
++    attivita', non specificamente per idoneita' a produrre sedi multiple) —
++    resta comunque un miglioramento netto rispetto allo 0/15 in albero.
++
++    Non tocca `_make_activities`: sovrascrive le sedi **dopo** che il
++    testimone e' gia' completo, e ogni `run_family` costruisce il proprio
++    testimone da zero — nessun altro derivatore vede questo cambiamento.
++
++    Vacua (ritorna 0) solo se il docente piu' carico ha **meno di due
++    attivita'** nel testimone: con una sola, «cambio di sede» non e'
++    strutturalmente possibile per lui, qualunque cosa scelga il solver."""
++    conteggio = defaultdict(int)
++    for aid in w.placement:
++        for t in w.act(aid).teachers.all():
++            conteggio[t.pk] += 1
++    docente_pk = max(conteggio, key=conteggio.get)
++    docente = next(t for t in w.env["teachers"] if t.pk == docente_pk)
++    attivita_docente = [aid for aid in w.placement
++                        if docente.pk in w.tokens[aid]]
++    if len(attivita_docente) < 2:
+         return 0
++
++    sites = w.env["sites"]
++    for act in w.activities:
++        act.site = None
++        act.save()
++    for aid in attivita_docente:
++        day, _slot = w.placement[aid]
++        act = w.act(aid)
++        act.site = sites[day % len(sites)]
++        act.save()
++
+     per_giorno, per_settimana = 0, 0
+     for rep, _ in w.signatures:
+         settimana = 0
+@@ -611,39 +648,108 @@ def _derive_max_site_changes(w):
+     return 1
+ 
+ 
+-@deriver("structural:site_transition", {"site_transition"})
+-def _derive_site_transition(w):
+-    """Il numero di fasce libere che il testimone garantisce gia' fra due
+-    lezioni su sedi diverse che condividono una chiave (stessa classe o
+-    stesso docente), nello stesso giorno. Derivato sulle **coppie vicine**,
+-    cioe' contro la regola piu' stretta del builder e non contro quella del
+-    checker: e' cosi' che «direzione dimostrata» diventa eseguibile (spec
+-    §5.2).
+-
+-    Vacua (ritorna 0, correzione 3 del brief, Ruling 29) quando il minimo
+-    osservato produce un `needed` di **zero**: sia perche' nessuna coppia
+-    di attivita' con sedi diverse e chiave condivisa esiste nel testimone
+-    (`minimo` resta `None`), sia perche' la coppia piu' vicina trovata ha
+-    gia' distanza zero (due sedi diverse a fasce adiacenti). In entrambi i
+-    casi il builder esce subito (`if not needed: return`,
+-    `domain/solver/builders/time_sites.py`): la famiglia e' completamente
+-    vacua, non c'e' nulla che un builder rotto potrebbe far fallire."""
+-    minimo = None
++def _distanza_sedi(w, aid, slot, altro, slot2):
++    """Distanza in fasce fra le occupazioni di due attivita' — sulle fasce
++    **occupate**, non sulle fasce d'inizio (Important 2, review Task 9 giro
++    di correzione 1): un'attivita' di durata > 1 occupa anche le fasce
++    successive alla prima, e il checker cammina sulle fasce occupate
++    (`_site_sequence`, `domain/analysis/checkers/time_constraints.py` e
++    `sites.py`). La vecchia formula (`abs(slot2 - slot) - 1`, sulle sole
++    fasce d'inizio) poteva dichiarare un `needed` che il testimone stesso
++    viola: riprodotto con `run_family("structural:site_transition", 15)` sul
++    codice in albero, seed 15 (vedi il report del Task 9, giro di correzione
++    1, per l'output verbatim)."""
++    if slot < slot2:
++        return slot2 - slot - w.act(aid).duration_slots
++    return slot - slot2 - w.act(altro).duration_slots
++
++
++def _coppie_sedi_vicine(w):
++    """Tutte le coppie (non ordinate) di attivita' con sedi note e diverse,
++    chiave condivisa (stessa classe o stesso docente) e stesso giorno, in
++    almeno una firma di settimana in cui sono entrambe attive — con la loro
++    distanza (fasce occupate, `_distanza_sedi`)."""
++    viste = set()
++    coppie = []
+     for rep, _ in w.signatures:
+         for aid, (day, slot) in w.placement.items():
+-            if w.act(aid).site_id is None or rep not in w.weeks_of[aid]:
++            a1 = w.act(aid)
++            if a1.site_id is None or rep not in w.weeks_of[aid]:
+                 continue
+             for altro, (day2, slot2) in w.placement.items():
+                 if altro == aid or day2 != day or rep not in w.weeks_of[altro]:
+                     continue
+-                if w.act(altro).site_id in (None, w.act(aid).site_id):
++                a2 = w.act(altro)
++                if a2.site_id is None or a2.site_id == a1.site_id:
+                     continue
+                 if not (w.tokens[aid] & w.tokens[altro]):
+                     continue
+-                distanza = abs(slot2 - slot) - 1
+-                minimo = distanza if minimo is None else min(minimo, distanza)
+-    needed = 0 if minimo is None else max(0, minimo)
++                chiave = frozenset((aid, altro))
++                if chiave in viste:
++                    continue
++                viste.add(chiave)
++                coppie.append((aid, altro,
++                               _distanza_sedi(w, aid, slot, altro, slot2)))
++    return coppie
++
++
++@deriver("structural:site_transition", {"site_transition"})
++def _derive_site_transition(w):
++    """Formulazione **«denso»** (Ruling 34, review Task 9 giro di correzione
++    1, §3): il derivatore **costruisce** lo scenario invece di osservarlo.
++
++    La versione precedente osservava le sedi assegnate a caso al 50% da
++    `_make_activities` e derivava il minimo delle distanze fra le coppie
++    trovate. La review ha dimostrato che nessuna riformulazione che si
++    limiti a **osservare** puo' fare meglio: `site_transition_slots` e'
++    un'impostazione d'istituto globale, quindi il `needed` derivabile e'
++    *necessariamente* il minimo su tutte le coppie — e il minimo su coppie
++    casuali e' quasi sempre zero (potere vincolante reale misurato: 1/15).
++    Ridurre la densita' delle sedi peggiora, non aiuta: meno coppie significa
++    piu' spesso *zero* coppie, che e' vacuo lo stesso.
++
++    L'unica via che regge e' **riparare** il testimone: (i) calcolare la
++    distanza sulle fasce occupate, non sulle fasce d'inizio (`_distanza_sedi`
++    — chiude anche l'Important 2 per costruzione, non solo qui); (ii)
++    assegnare una sede a **tutte** le attivita' del testimone (sovrascrive
++    l'assegnazione al 50% di `_make_activities`, ma solo su questa copia del
++    testimone: non tocca `_make_activities`, e nessun altro derivatore ne
++    risente); (iii) finche' esiste una coppia a distanza <= 0, togliere la
++    sede, greedy, a una delle due (converge sempre: ogni rimozione riduce di
++    uno il numero di attivita' con sede, quindi il ciclo e' limitato da
++    `len(w.activities)`); (iv) `needed` = minimo superstite, vacua
++    (`return 0`) se non sopravvive nessuna coppia. Misurato qui (giro di
++    correzione 1, builder reso no-op, 15 seed, piu' esecuzioni per il non
++    determinismo di CP-SAT): **12-14/15** a seconda dell'esecuzione, contro
++    l'1/15 della formulazione osservativa — in linea con la misura della
++    review (12/15)."""
++    sites = w.env["sites"]
++    if len(sites) < 2:
++        return 0
++    for act in w.activities:
++        act.site = w.rng.choice(sites)
++        act.save()
++
++    limite = len(w.activities) + 1
++    for _ in range(limite):
++        a_zero = [c for c in _coppie_sedi_vicine(w) if c[2] <= 0]
++        if not a_zero:
++            break
++        _, altro, _ = a_zero[0]
++        w.act(altro).site = None
++        w.act(altro).save()
++    else:
++        raise AssertionError(
++            "_derive_site_transition: la riparazione non converge, "
++            "bug nel derivatore")
++
++    coppie = _coppie_sedi_vicine(w)
+     settings, _ = InstituteSettings.objects.get_or_create(pk=1)
++    if not coppie:
++        settings.site_transition_slots = 0
++        settings.save()
++        return 0
++    needed = min(d for _, _, d in coppie)
+     settings.site_transition_slots = needed
+     settings.save()
+     return 0 if needed == 0 else 1
+diff --git a/tests/test_solver_sites.py b/tests/test_solver_sites.py
+index caa27c5..f3fff2a 100644
+--- a/tests/test_solver_sites.py
++++ b/tests/test_solver_sites.py
+@@ -216,6 +216,55 @@ def test_site_transition_impone_le_fasce_libere():
+         assert abs(sa - sb) - 1 >= 2
+ 
+ 
++def test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa():
++    """Important 1 (review Task 9, giro di correzione 1): due attivita' di
++    sede diversa piazzate sulla STESSA fascia della stessa chiave. La
++    costruzione a coppie `s < t` non puo' esprimerlo (non esiste una coppia
++    con `s == t`), ma il checker la vede sempre come una violazione
++    (`gap_slots = s2 - s1 - 1 = -1`, sempre `< needed`). Di norma e'
++    irraggiungibile perche' la stessa cella e' gia' vietata da
++    `structural:occupation` a capienza 1 — qui la si rende raggiungibile con
++    un'aula a `simultaneous_capacity = 2` (il `Numero di aule`/`Qta'` di
++    EDT, non un caso di laboratorio): due attivita' di **classi diverse**
++    (quindi nessun conflitto di classe o docente le separa) che condividono
++    la stessa aula, su una griglia 1x1 dove non c'e' altrove dove andare.
++
++    Prima della riparazione (clausola `s == t` in
++    `SiteTransitionBuilder.build`) il solver trovava `OPTIMAL` piazzando
++    entrambe sulla stessa unica cella — zero finding di occupazione, ma
++    `check_schedule` sulla soluzione applicata riportava un `site_transition`
++    `HARD` che il solver non aveva visto (vedi il report del Task 9, giro di
++    correzione 1, per l'output verbatim prima/dopo). Con la riparazione il
++    modello dev'essere INFEASIBLE: e' l'unica cella disponibile e la
++    clausola la vieta."""
++    from domain.models import Room, SchoolClass, StudyPlan, Teacher
++
++    env = mini_school()
++    env["grid"].days_per_cycle = 1
++    env["grid"].slots_per_day = 1
++    env["grid"].morning_end_slot = 1
++    env["grid"].save()
++    InstituteSettings.objects.update_or_create(
++        pk=1, defaults={"site_transition_slots": 1})
++
++    aula = Room.objects.create(name="Aula", simultaneous_capacity=2)
++    a_site = Site.objects.create(name="A")
++    b_site = Site.objects.create(name="B")
++    altro_piano = StudyPlan.objects.create(code="P2", name="Piano 2", year=1)
++    altra_classe = SchoolClass.objects.create(
++        name="1B", study_plan=altro_piano, year=1)
++    altro_docente = Teacher.objects.create(
++        name="Doc2", last_name="D2", first_name="2")
++
++    make_activity(env["subject"], teachers=[env["teacher"]],
++                  classes=[env["klass"]], rooms=[aula], site=a_site)
++    make_activity(env["subject"], teachers=[altro_docente],
++                  classes=[altra_classe], rooms=[aula], site=b_site)
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status == "INFEASIBLE", soluzione.stats
++
++
+ # ⚠ Un tentativo di test in piu' e' stato scartato qui, non aggiunto: una
+ # variante dell'istanza sopra con **due** giorni invece di uno (cosi' il
+ # solver trova sempre una soluzione, per un test in stile oracolo con

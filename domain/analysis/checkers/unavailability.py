@@ -3,6 +3,7 @@
 from domain.analysis import causali
 from domain.analysis.findings import Finding, Severity
 from domain.analysis.registry import Checker, register
+from domain.analysis.state import resource_sort_key
 
 _CODE = {"hard": "unavailability", "optional": "unavailability_optional",
          "preference": "preference"}
@@ -15,7 +16,7 @@ _ORDER = ["hard", "optional", "preference"]
 class UnavailabilityChecker(Checker):
     def check(self, state, resources=None):
         for aid, pl in sorted(state.placed.items()):
-            for key in sorted(state.tokens[aid]):
+            for key in sorted(state.tokens[aid], key=resource_sort_key):
                 if resources is not None and key not in resources:
                     continue
                 hit = [state.unavailability[(key, pl.day, s)]

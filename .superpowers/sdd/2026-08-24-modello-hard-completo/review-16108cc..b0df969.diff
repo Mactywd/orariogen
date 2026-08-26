@@ -1,0 +1,71 @@
+# Review package: 16108cc..HEAD
+
+## Commits
+b0df969 refactor(solver): i builder nel file del proprio pattern
+
+## Files changed
+ domain/solver/builders/__init__.py                                 | 4 ++--
+ .../solver/builders/{subject_constraints.py => subject_buckets.py} | 6 +++++-
+ domain/solver/builders/{time_constraints.py => time_presence.py}   | 7 ++++++-
+ 3 files changed, 13 insertions(+), 4 deletions(-)
+
+## Diff
+diff --git a/domain/solver/builders/__init__.py b/domain/solver/builders/__init__.py
+index ae3081a..c81f3ff 100644
+--- a/domain/solver/builders/__init__.py
++++ b/domain/solver/builders/__init__.py
+@@ -1,3 +1,3 @@
+ """L'import registra i builder nel BUILDERS."""
+-from . import (grid, occupation, subject_constraints,  # noqa: F401
+-               time_constraints, unavailability)
++from . import (grid, occupation, subject_buckets,  # noqa: F401
++               time_presence, unavailability)
+diff --git a/domain/solver/builders/subject_constraints.py b/domain/solver/builders/subject_buckets.py
+similarity index 90%
+rename from domain/solver/builders/subject_constraints.py
+rename to domain/solver/builders/subject_buckets.py
+index 68afefb..229b0d6 100644
+--- a/domain/solver/builders/subject_constraints.py
++++ b/domain/solver/builders/subject_buckets.py
+@@ -1,11 +1,15 @@
+-"""SAME_DAY_INCOMPATIBLE — l'incompatibilità nella giornata.
++"""I vincoli di materia che si esprimono come cardinalita' su un **secchio**
++(giornata o mezza giornata). L'attivita' si attribuisce al secchio della sua
++fascia di **partenza**.
++
++SAME_DAY_INCOMPATIBLE — l'incompatibilità nella giornata.
+ 
+ Con A = B (il caso dominante osservato nei dati reali di EDT: non due ore
+ della stessa materia nello stesso giorno) è «al più un'occorrenza per unità e
+ giorno». Con A ≠ B è «le due materie non coesistono nella giornata».
+ L'attività si attribuisce al giorno della sua fascia di partenza, come nel
+ checker.
+ 
+ Semplificazione dichiarata: questo builder non distingue le firme di settimana
+ e tratta tutte le attività come co-attive. È conservativo — può vincolare di
+ più, mai di meno."""
+diff --git a/domain/solver/builders/time_constraints.py b/domain/solver/builders/time_presence.py
+similarity index 92%
+rename from domain/solver/builders/time_constraints.py
+rename to domain/solver/builders/time_presence.py
+index 15e78d3..3827b91 100644
+--- a/domain/solver/builders/time_constraints.py
++++ b/domain/solver/builders/time_presence.py
+@@ -1,11 +1,16 @@
+-"""MAX_GAP_HOURS — il D.T.B., «durata tollerata dei buchi».
++"""Presenza e buchi: i vincoli che ragionano sulla **prima e sull'ultima**
++fascia occupata, e non sul semplice conteggio. Entrambi passano da
++`vocab.covered`, con `span` diverso — mezza giornata per il D.T.B., giornata
++intera per MAX_PRESENCE.
++
++MAX_GAP_HOURS — il D.T.B., «durata tollerata dei buchi».
+ 
+ ⚠ È un **budget settimanale**, non una soglia per singolo buco: il checker
+ somma i minuti di buco su tutte le mezze giornate della settimana e confronta
+ il totale una volta sola. Qui la stessa cosa, in forma lineare e senza big-M:
+ per ogni mezza giornata, `covered[s] = before[s] AND after[s]` dice se la
+ fascia sta fra la prima e l'ultima occupata, e i minuti di buco sono
+ `slot_minutes * somma(covered[s] - occ[s])` — ogni termine non negativo perché
+ `occ[s]` implica `covered[s]`.
+ 
+ I buchi non si contano mai a cavallo del pranzo: le due mezze giornate sono

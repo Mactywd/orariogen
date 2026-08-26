@@ -61,7 +61,9 @@ requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze)
+  solver/               il modello CP-SAT: vocabolario di variabili derivate,
+                        residuo di ADR-018, ventisei builder su ventisette
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -130,11 +132,25 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > dominio è approvato in [docs/modello-dominio.md](docs/modello-dominio.md). Lo
 > schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
 > predicati e l'analisi di capienza **sono anch'essi implementati**
-> (`domain/analysis/`, 116 test verdi a suite completa, misurati con
-> `venv/bin/pytest`); il piano successivo è il **modello CP-SAT** (piano 3).
-> Restano due punti aperti, entrambi marginali e non bloccanti:
-> le aule mai inserite nella base del Fermi, e l'estensione della cascata di
-> default.
+> (`domain/analysis/`); e il **modello CP-SAT hard è completo**
+> (`domain/solver/`): **ventisei builder su ventisette checker**, e il
+> ventisettesimo (`structural:coverage`) non ne ha uno per costruzione —
+> `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. **436 test
+> verdi**, 16 skip tutti misurati e attribuiti (`venv/bin/pytest`).
+>
+> ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
+> righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
+> `None`, quindi ventuno builder su ventisei non postano nulla — e infatti dà
+> **gli stessi 8140 variabili e 1082 constraint dello spike a cinque vincoli**,
+> `OPTIMAL` in ~0,56 s. La misura del modello è
+> `test_modello_completo`, che attiva tutte le famiglie **insieme** sullo stesso
+> testimone: 22–23 famiglie con righe su 26, 48–73 righe, `OPTIMAL` su tutti e
+> cinque i seed, oracolo pulito.
+>
+> Restano i **tre pezzi dichiarati fuori**: l'assegnazione delle aule, gli
+> alleggerimenti a quota con l'ottimizzazione lessicografica, e il violatore di
+> Hall (che non usa il solver: è un conteggio di capienza). Più i punti aperti
+> elencati sotto.
 
 ### Prototipo solver — parcheggiato
 
@@ -150,10 +166,14 @@ buchi, gruppi/sdoppiamenti — cioè quasi tutti i conflitti di
 OPTIMAL quindi **non dice nulla** sulla risolvibilità dell'istanza reale: è la
 risposta a un problema più facile.
 
-**Il solver resta fermo** finché il modello di dominio approvato
-([docs/modello-dominio.md](docs/modello-dominio.md)) non è tradotto in codice:
-prima la forma dei dati, poi il modello CP-SAT. Vedi [ADR-008](docs/decisioni.md)
-e [ADR-016](docs/decisioni.md).
+Questo script **resta parcheggiato ed è superato**: il codice vivo del solver
+è `domain/solver/` (vedi la nota di stato sopra), che ne riprende l'idea sullo
+schema del dominio approvato invece che sui dati grezzi. Il **modello hard è
+ora completo** — ventisei builder su ventisette checker. Ciò che manca non è
+più la traduzione dei vincoli, ma i tre pezzi dichiarati fuori dal piano: gli
+alleggerimenti a quota con l'ottimizzazione lessicografica, l'assegnazione
+delle aule e il violatore di Hall. Vedi
+[ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md).
 
 ### Aperto / da verificare
 
@@ -272,6 +292,100 @@ e [ADR-016](docs/decisioni.md).
 - [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
       `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
       CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
+- [x] **Come si comporta un builder quando un constraint mescola attività
+      congelate già in violazione e attività libere?** Deciso con
+      [ADR-018](docs/decisioni.md): **capacità residua** clampata sui soli
+      letterali liberi, e **oracolo differenziale** (nessun finding `HARD`
+      *nuovo*, invece di nessun finding `HARD`). Un orario illegale è uno
+      stato ammesso — è il comportamento di EDT, che con 21 attività in
+      violazione piazzate a mano continua a lavorare. **Da implementare** nella
+      spec del modello completo, prima dei ventidue builder restanti.
+- [ ] ⚠ **Cosa significa «cambio di sede» quando due sedi coesistono nella
+      stessa fascia?** Sotto capienza cumulativa (aula con `Qtà > 1`, feature
+      EDT documentata) due attività di sedi diverse possono occupare la stessa
+      fascia della stessa risorsa. `MaxSiteChangesChecker` **conta un cambio**,
+      ma solo come conseguenza di un dettaglio implementativo:
+      `state.occupancy` è una `list` e `_site_sequence` la scorre in ordine
+      d'inserimento, quindi il conteggio dipende dall'ordine. È un **artefatto,
+      non una semantica**, e va deciso in `domain/analysis` prima di poter
+      essere tradotto — tradurre un artefatto sarebbe peggio che lasciare lo
+      scarto. Il builder CP-SAT lo dichiara nel proprio docstring. Trovato
+      nella review del Task 9 del piano `modello-hard-completo`. ⚠ Non tocca il
+      Fermi, dove le aule non sono mai state inserite (voce qui sopra).
+- [ ] ⚠ **Il tie-break di `_placed_of` è un artefatto dell'ordine
+      d'inserimento, non una semantica** — la stessa forma del problema qui
+      sopra su `MaxSiteChangesChecker`. `_placed_of` (in
+      `domain/analysis/checkers/subject_constraints.py`) ordina le occorrenze
+      piazzate per `(day, start_slot)` con `sorted` **stabile**: a parità di
+      collocazione, quale attività diventi `a[0]` dipende dall'ordine del
+      queryset `Activity`, non da niente di dichiarato nel modello. Per
+      `WEEKLY_ORDER`, `Finding.key` include l'**identità** delle due attività
+      argmin (non la loro posizione): due occorrenze della stessa materia su
+      parti diverse della stessa partizione (sdoppiamento) possono
+      condividere la stessa cella senza confliggere sull'occupazione, quindi
+      un pareggio esatto con la posizione della congelata può cambiare *chi*
+      è l'argmin — e quindi la chiave del finding — mentre il valore
+      aggregato resta invariato. Trovato nella review del Task 12: il builder
+      `WeeklyOrderBuilder` (`domain/solver/builders/subject_order.py`) vietava
+      solo il valore aggregato (`prima_a >= FA`), non l'identità, ed era
+      quindi possibile che il solver ammettesse un finding `HARD` *nuovo*
+      restando dentro ADR-018 solo in apparenza. **Corretto lì** stringendo il
+      ramo status-quo (divieto per attività, non sul minimo aggregato) — ma
+      la causa a monte resta nel tie-break di `domain/analysis`, non
+      toccabile da questo giro: va decisa quando si generalizza la famiglia
+      d'ordine ai Task 13-17. ⚠ **Il banco che congela lo vede** (2026-08-26
+      sera): `subject_imposed_succession` cambia la coppia nominata lasciando
+      causale, risorsa e quantità identiche, ed è per questo che l'oracolo del
+      banco sporco porta una chiave grossolana **dichiarata** (`_grossa` in
+      `tests/solver_harness.py`) invece di un'eccezione implicita. Il fenomeno
+      è quindi più largo di quanto §9.5 dichiarasse: riguarda ogni famiglia il
+      cui finding nomina l'argmin invece del secchio intero.
+- [ ] ⚠ **Il ramo «status quo» è pigro, e nel caso misto spegne la riga.**
+      Riguarda la **famiglia** dei rami disgiuntivi introdotti da ADR-018 —
+      `WeeklyOrderBuilder` dal Task 12, `MinDistributionBuilder` e
+      `FreeGuaranteedBuilder` dal 2026-08-26 — non i singoli builder. Il
+      modello non ha funzione di costo, quindi `riparato` e `riparato.Not()`
+      sono alla pari e CP-SAT non ha motivo di preferire la riparazione. Nel
+      solve incrementale «poche congelate + libere non ancora piazzate» la
+      baseline del checker è quasi sempre già violata **perché nulla è
+      piazzato**, `B` vale quanto qualificano le sole congelate, e il ramo
+      status quo diventa **vacuo**: la riga smette di vincolare. Misurato —
+      una congelata, sei libere mai piazzate, `min_days=3`: ammassarle tutte
+      su due giorni è ammesso, mentre prima era vietato (al prezzo però di
+      `INFEASIBLE` su 33 istanze sporche su 45). È perdita di **qualità**, non
+      di correttezza: nessun finding nuovo, l'oracolo differenziale regge. Tre
+      strade in §9.7 della spec, nessuna adottata. ⚠ **Ora misurato anche dal
+      banco che congela** (2026-08-26 sera), che è la prima volta che questo
+      debito si vede da solo invece di essere dichiarato — e in una forma più
+      precisa di quella dichiarata qui: è uno **scambio**, non un peggioramento
+      secco. `free_guaranteed` passa da `free_days 4 / free_half_days 1` a
+      `free_days 1 / free_half_days 4`: ripara la soglia delle mezze e rompe
+      quella dei giorni, che era soddisfatta. Il banco lo esenta
+      **strettamente** — solo un peggioramento su una (causale, risorsa) già
+      violata, mai una violazione su una risorsa pulita.
+
+- [ ] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
+      piazzamento**, e il tetto **settimanale** del peso didattico è il primo
+      caso incontrato. `AddExactlyOne` obbliga a piazzare ogni attività, e il
+      secchio settimanale di un'unità-studente contiene *tutte* le sue celle
+      candidate: la somma dei letterali liberi è quindi una **costante**, e il
+      vincolo è vero sempre o falso sempre. Ne discendono due cose. La prima è
+      risolta: col residuo clampato a zero il vincolo diventava `costante
+      positiva <= 0`, cioè la pretesa che il passato venga riparato — il
+      modello rispondeva INFEASIBLE per colpa delle sole congelate (misurato:
+      due congelate da 2 punti, tetto 3, una libera). `DidacticWeightBuilder`
+      ora **non posta** il tetto settimanale quando a sforarlo sono le
+      congelate da sole, e continua a postarlo quando il colpevole è il totale
+      — due test tengono ferme le due metà. La seconda **non è risolvibile da
+      nessun builder**: la soluzione restituita porta comunque il finding
+      `weight_week`, e la sua `Finding.key` non è quella di prima, perché
+      `activities` cresce delle libere e `quantities["weight"]` cambia. Le
+      libere vanno collocate, e ovunque vadano pesano. Quindi **l'oracolo
+      differenziale a tutto campo, quando lo si scriverà, va formulato su una
+      chiave più grossolana** (causale + risorsa) per le famiglie
+      placement-invariant, oppure quelle famiglie vanno spostate dove EDT le
+      mette davvero: nell'**analisi di capienza**, che si esegue *prima* del
+      calcolo e non dentro. Trovato verificando il Task 16.
 
 ## Scope di v1 — deciso il 2026-07-26
 
@@ -294,6 +408,461 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte)** — **La review della PR #1, e il gemello del difetto
+  nella famiglia che il banco non poteva vedere.** Quattro rilievi sistemati
+  sopra il banco che congela.
+  🔑 **`OccupationBuilder` aveva lo stesso difetto di `SiteTransitionBuilder`,
+  ed è la conferma che «tocca» contro «realizza» è un pattern, non un
+  incidente.** Il gate `any_free` guarda chi tocca la cella, non chi ne
+  realizza la saturazione: due congelate in conflitto su una cella che una
+  libera può toccare producevano `costante + libere <= capienza` con la sola
+  costante oltre il tetto — `INFEASIBLE` per colpa del solo passato, con il
+  checker che quello stato lo prevede e lo nomina (`resource_occupied_locked`,
+  HARD). Corretto con `residual_cap`, come tutti gli altri tetti. ⚠ **Il banco
+  che congela non poteva trovarlo**: `sporca()` ripacka solo in celle libere da
+  conflitti di occupazione e lo asserisce, quindi la famiglia esclusa per
+  costruzione dal banco è proprio quella in cui il difetto è sopravvissuto. La
+  chiusura di Ruling 20 resta valida, ma **non è totale**: un banco ha sempre
+  una cecità, e va detto dove.
+  ⚠ **Metà del guardiano nuovo non era asserita da niente.** Misurato:
+  rimuovendo il solo `continue` del ramo `s == t` di `SiteTransitionBuilder` e
+  lasciando l'altro, la suite intera restava verde. Aggiunto il test del ramo
+  (`test_adr018_site_transition_due_sedi_gia_sulla_stessa_fascia_non_blocca`),
+  che è raggiungibile solo a capienza simultanea > 1. Entrambi i test nuovi
+  sono **verificati per mutazione**: senza la correzione diventano rossi.
+  ⚠ **Le due prove del banco passavano su `UNKNOWN`.** `!= INFEASIBLE` non è
+  `in (OPTIMAL, FEASIBLE)`: al timeout la prova A passava senza soluzione, e la
+  prova B pure — con i piazzamenti vuoti `apply()` è un no-op dichiarato e
+  l'oracolo differenziale confrontava la baseline pre-solve con sé stessa.
+  Verde per non aver misurato niente, cioè il criterio con cui questa stessa
+  sessione aveva bocciato `test_famiglia_con_congelate`. Corretto in entrambe.
+  Corretta infine una contraddizione interna: «Ancora aperto» dava
+  `free_guaranteed` in peggioramento da 2 mezze giornate a 1, mentre la misura
+  (spec §9.7) è uno **scambio** — `free_days 4 / free_half_days 1` →
+  `free_days 1 / free_half_days 4`. **450 test verdi**, 16 skip.
+
+- **2026-08-26 (sera)** — **Il banco congela, e il primo builder a cadere è
+  quello che si dichiarava già a posto.** Chiude il debito che §9.7 chiamava
+  «il buco strutturale più grande che resta» (Ruling 20): fino a qui **nessun
+  test del banco congelava niente**, quindi in ogni modello che il banco
+  costruiva `ctx.free` conteneva tutto — `split()` con `frozen = 0` sempre,
+  `any_free` sempre vero, `frozen_occupies` sempre falso, `residual_cap` che
+  non clampava mai, i rami disgiuntivi mai imboccati. Tutta la copertura di
+  ADR-018 poggiava sui test scritti a mano.
+
+  **La costruzione.** Si genera il testimone pulito, si derivano le righe di
+  **tutte** e ventisei le famiglie, poi si **ripacka**: alcune attività si
+  spostano in celle libere da conflitti di occupazione — «libere da conflitti»
+  non è cosmetico, è ciò che lascia il resto dell'orario dov'è. Chi risulta
+  **implicato** nelle violazioni così create viene congelato; gli altri restano
+  liberi e i loro piazzamenti si cancellano. Il risultato è letteralmente la
+  premessa di ADR-018: congelate **già in violazione**, libere da piazzare.
+
+  🔑 **La prova che morde è la prima, non l'oracolo.** Si **forza** ogni libera
+  nella cella dove il testimone la teneva e si attende che il modello non
+  risponda `INFEASIBLE`. Quell'assegnazione non aggiunge niente — per
+  costruzione, perché la baseline è calcolata su di essa e ogni attività
+  implicata è congelata — quindi rifiutarla è *pretendere una riparazione*, la
+  metà vietata del criterio di ADR-018. È la forma della casa (forzare e
+  attendere uno stato), applicata a un modello intero invece che a una riga.
+
+  ⚠ **`SiteTransitionBuilder` non aveva il guardiano ADR-018 che due commenti
+  gli attribuivano.** Trovato al seme 38, ridotto alla forma minima in
+  `tests/test_solver_sites.py`. `any_free` guarda chi **tocca** le due fasce,
+  non chi **realizza** la coppia di sedi vietata: due congelate di sede diversa
+  a distanza insufficiente sono già una violazione, ma basta una qualunque
+  libera che tocchi una delle due fasce perché la clausola venga postata — e
+  quella clausola ha **entrambi** i letterali forzati a 1 dalle congelate.
+  `INFEASIBLE` per colpa del solo passato. Il commento di
+  `builders/time_sites.py` diceva «ha già ADR-018 nella forma della regola
+  dell'implicazione (`any_free`): non toccato», e il docstring di
+  `test_adr018_cambio_gia_prodotto_dalle_congelate_non_blocca` lo ripeteva.
+  **Il pattern di questo progetto per la tredicesima volta**, e stavolta l'ha
+  trovato una misura, non una rilettura. Corretto con `_sede_congelata`, che
+  rispecchia **letteralmente** la selezione dei letterali di
+  `Vocabulary.site_occupied` — leggere il codice invece del proprio ricordo è
+  la stessa regola che vale per `B` nei rami disgiuntivi.
+
+  🔑 **E la mutazione ha bocciato metà del lavoro.** Il banco nasceva con
+  **due** parti: oltre a quella sporca, un `test_famiglia_con_congelate` che
+  congelava una parte del testimone dov'è, famiglia per famiglia, su baseline
+  pulita — 78 test, 28 secondi, i due terzi del tempo aggiunto. Su **sette**
+  mutazioni della macchina ADR-018 non è diventato rosso **una sola volta**,
+  mentre il banco sporco le ha colte su **sei** delle sette (`split` 4 rossi,
+  congelate a dominio pieno 8, `any_free` 2, `_sede_congelata` 1,
+  `_status_quo_rappresentabile` 1, `frozen_occupies` 1 — e **zero** entrambi
+  sul clamp di `residual_cap`, che resta difeso dai soli test scritti a mano).
+  Rimosso: un test che non diventa rosso quando il codice che afferma sparisce
+  non sta affermando niente. ⚠ Il banco **non sostituisce** i test a mano —
+  aggiunge la sola cosa che nessuno di loro sapeva fare, trovare un difetto che
+  nessuno cercava.
+
+  **Due esenzioni dichiarate, entrambe misurate, entrambe esercitate da un test
+  apposta.** ⚠ La prima estende §9.5 oltre le famiglie indipendenti dal
+  piazzamento: la **deriva d'identità**. Diverse famiglie non nominano in
+  `activities` il secchio intero ma la **coppia argmin** o la coppia
+  consecutiva — chi viola, non chi partecipa; piazzare una libera accanto a una
+  congelata cambia allora *quale* coppia è l'argmin senza cambiare la
+  violazione. Misurato al seme 20: `subject_imposed_succession` sulla risorsa 1
+  passa da `(5, 7)` a `(4, 5)` con `gap 3 / max_gap 2` **identici**. È la stessa causa a monte del
+  tie-break di `_placed_of` già in «Ancora aperto».
+  La seconda è il **ramo pigro** di §9.7, per la prima volta misurato invece
+  che dichiarato — e con una forma più precisa di quella descritta lì: è uno
+  **scambio**, non un peggioramento secco. Al seme 20 `free_guaranteed` passa
+  da `free_days 4 / free_half_days 1` a `free_days 1 / free_half_days 4`:
+  ripara la soglia delle mezze (min 3) e rompe quella dei giorni (min 2), che
+  era soddisfatta. Le due soglie stanno sotto **lo stesso** booleano proprio
+  per impedirlo (correzione del 2026-08-26 mattina), ma con le libere non
+  ancora piazzate lo status quo non è rappresentabile, il ramo scende a `>= 0`
+  e scavalca il booleano. Perdita di qualità, non di correttezza:
+  l'esenzione è stretta apposta — una violazione su una risorsa **pulita**
+  resta rossa anche per quelle tre famiglie.
+
+  ⚠ **E un docstring del banco è stato falsificato entro l'ora.**
+  `run_family_congelata` dichiarava «la baseline resta pulita»: falso.
+  Cancellando i piazzamenti delle libere, le famiglie che contano una quantità
+  *presente* — successione imposta, minimi, distribuzione — sono violate
+  proprio **perché manca qualcosa** (misurato: `imposed_succession` al seme 3,
+  finding `(2,) max_gap 2` già prima del solve). Il criterio giusto è il
+  **contenimento** rispetto alla baseline pre-solve, non `== set()`.
+
+  **Osservazione a margine, non risolta**: `residual_floor` non è chiamato da
+  **nessun** builder — solo dal proprio test. I minimi di §3.1 non sono mai
+  stati trattati per sottrazione di termini: i cinque casi di ADR-018 usano
+  `frozen_occupies` o la disgiunzione reificata. È il gemello documentale di
+  `residual_cap`, non codice morto per distrazione, ma va detto.
+
+  **I numeri.** Su 40 semi, **36** producono una costruzione sporca
+  utilizzabile (saltano 13, 14, 17 e 28: le violazioni implicano quasi tutto e
+  restano meno di tre libere) e la dirt copre **26 causali distinte**. Dieci
+  semi entrano nella suite, scelti per fenomeni diversi e non a caso; su quelli
+  la costruzione **non può saltare**, così che una decadenza diventi rossa
+  invece di svuotarsi in silenzio. Suite: **448 test verdi**, 16 skip.
+
+- **2026-08-26** — **La review finale, e due builder che rifiutavano il
+  presente.** Sei findings su tutte e ventisei le famiglie, con i seed allargati
+  da 5 a 40. ⚠ **Il risultato più importante è positivo e va detto per primo**:
+  **zero** builder più larghi del checker e **zero** più stretti del testimone.
+  I difetti stanno su input **sporco** (ADR-018), copertura di test e vacuità
+  del banco — non nella traduzione dei vincoli.
+
+  **I due gravi erano lo stesso errore in due forme.**
+  `MinDistributionBuilder` postava la soglia **grezza** pur avendo il
+  controesempio scritto nella propria docstring: due congelate sullo stesso
+  giorno, una libera, `min_days=3` → `INFEASIBLE` **anche forzando lo status
+  quo**, cioè rifiutando un piazzamento che non introduce niente di nuovo.
+  Spegnendo il solo builder, `OPTIMAL`. `FreeGuaranteedBuilder` clampava le due
+  soglie **una per volta**, ma i due conteggi si escludono a vicenda —
+  `libera = attivo AND NOT meta` conta una mezza solo se il giorno lavora,
+  quindi un giorno che la soglia dei *giorni* obbliga a lasciare vuoto
+  contribuisce **zero** mezze — e la congiunzione era irraggiungibile mentre
+  ciascuna soglia da sola no. Entrambi passano alla **disgiunzione reificata**
+  già in uso su `WeeklyOrderBuilder`, con le due soglie sotto **lo stesso**
+  booleano. `B` si legge **chiamando il checker** di `domain/analysis`, mai
+  riscrivendone la condizione: una divergenza di uno renderebbe il residuo
+  peggiore del difetto. Misurato: status quo rifiutato 45/45 → **0** e 43/45 →
+  **0**, `solve()` `INFEASIBLE` 33/45 e 16/45 → **0**, coppie (causale,
+  risorsa) nuove **0** prima e dopo.
+  ⚠ **ADR-018 ha quindi cinque casi, non quattro**, e la §9.5 della spec —
+  scritta il giorno prima — **dichiarava vere due cose false**: che
+  `FREE_GUARANTEED` fosse risolto dal residuo per forzatura e che
+  `MIN_DISTRIBUTION` «reggesse davvero». Nessuna delle due si vedeva
+  rileggendo il documento. È il pattern di questo progetto per l'ennesima
+  volta, stavolta su un documento scritto da meno di ventiquattr'ore.
+
+  🔑 **E la mutazione che avrebbe dovuto accorgersene non poteva.**
+  `PartsHomogeneousHalfBuilder` non era difeso da **nessun** test: un `post()`
+  no-op sulla sola sottoclasse `_H` lasciava la suite identica alla baseline,
+  mentre le altre tre danno 5, 3 e 3 rossi. Tutte le mutazioni fatte fino a lì
+  spegnevano `_PartsOrderBuilder.post`, cioè **tutte e quattro le sottoclassi
+  insieme**: misuravano la base, non le foglie. **Corollario da portarsi
+  dietro: quando un builder ha sottoclassi, la mutazione va fatta per
+  sottoclasse.** Lo stesso corollario ha poi trovato un secondo buco —
+  `_giorni_garantiti` sostituito da `resource_days` lasciava la suite verde,
+  cioè il codice faceva una distinzione che nessun test affermava.
+
+  **Settima forma di vacuità.** `_derive_max_gap` dichiarava «anche a budget
+  zero è un vincolo vero»: falso, il buco è `ultima − prima + 1 − conteggio`,
+  quindi serve una mezza giornata larga **almeno tre**, e la fixture pesca
+  anche `(4, 2)` dove entrambe le metà sono larghe due. Otto righe inviolabili
+  su 40 seed, e il **seed 2 era fra i cinque del banco** — un verde incapace di
+  fallire. Ora salta onestamente: **uno skip in più, 15 → 16**, che è il numero
+  giusto. E `_derive_two_days` era l'unico derivatore di materia senza la
+  guardia di co-attività per firma; ⚠ `_coppia_violabile` **non** si può
+  riusare, perché richiede lo **stesso** secchio mentre `TWO_DAYS` vuole
+  l'opposto.
+
+  **I quattro `parts_*` si invalidavano a vicenda**, e la precedenza fra
+  derivatori introdotta al Task 17 non poteva proteggerli: tutti e quattro
+  risintonizzano la **stessa** materia della **stessa** attività di parte, e
+  non esiste un ordine che funzioni. Serviva un guardiano, non un riordino.
+  Con `_sintonia_compatibile` la composizione passa da 34/40 a **40/40**
+  puliti; le righe scendono da 48-73 a **36-76**, e il minimo cala perché i
+  numeri di prima **includevano righe diventate vacue** — il sospetto che la
+  review aveva segnalato senza quantificare era fondato.
+
+  ⚠ **Debito nuovo, dichiarato e non risolto: il ramo status quo è pigro.**
+  Senza funzione di costo i due rami sono alla pari, e nel solve incrementale
+  con le libere non ancora piazzate la baseline è quasi sempre già violata
+  perché **nulla è piazzato**: `B` vale quanto qualificano le sole congelate e
+  il ramo diventa **vacuo**, cioè la riga smette di vincolare. Misurato. È
+  perdita di qualità, non di correttezza, e va decisa sulla **famiglia** dei
+  rami disgiuntivi — vedi «Ancora aperto» e §9.7 della spec.
+
+  Suite: **436 test verdi**, 16 skip.
+
+- **2026-08-25** — **Il modello hard completo: ventisei builder su
+  ventisette.** Diciassette task sul branch `modello-hard-completo`, ciascuno
+  scritto da un sottoagente su un brief e verificato per mutazione. Il registro
+  dei builder è chiuso: la ventisettesima chiave (`structural:coverage`) non ha
+  un builder **per costruzione** — è `PLACEMENT_INDEPENDENT`, confronta attività
+  e servizi anagrafici e non guarda mai i piazzamenti, e il solver non crea né
+  distrugge attività. L'assenza è **dichiarata da un test**
+  (`tests/test_solver_registry_completo.py`), così che chi volesse aggiungerla
+  debba prima cancellare il test e leggerne il perché. **436 test verdi**, 16
+  skip tutti misurati e attribuiti.
+
+  **Il vocabolario, e perché esiste.** I checker ragionano su quantità che i
+  piazzamenti non contengono: «il docente lavora quel giorno», «quella mezza
+  giornata è occupata», «la posizione della prima occorrenza di questa
+  materia». Tradurle una per builder avrebbe prodotto ventisei definizioni
+  incoerenti della stessa cosa. `domain/solver/vocabulary.py` le costruisce una
+  volta sola — `occupied`, `day_active`, `half_active`, `pos` — memoizzate per
+  chiave, e ⚠ **parametriche sulla firma di settimana**, che è la dimensione su
+  cui questo progetto ha già sbagliato una volta.
+
+  **ADR-018 nelle sue forme, che non erano due.** La spec ne prevedeva due —
+  tetti (si clampa il residuo a zero) e minimi (nessun clamp, non sono mai
+  infattibili per colpa del passato). Ne sono servite **quattro**.
+  ⚠ I minimi **non** sono sempre innocui: su `ARRIVAL_DEPARTURE` e
+  `FREE_GUARANTEED` una congelata in una fascia proibita **consuma** la
+  quantità contata, e nessuna mossa sulle libere la recupera — corretto col
+  residuo *per forzatura* (`frozen_occupies`), mentre `MIN_DISTRIBUTION` regge
+  davvero, quindi l'asimmetria è reale e non generale.
+  ⚠ E il caso che nessuno aveva previsto: il **tetto inevadibile**. Il secchio
+  settimanale del peso didattico contiene *tutte* le celle candidate di ogni
+  attività dell'unità, quindi `AddExactlyOne` rende la somma dei letterali
+  liberi una **costante**: col residuo clampato a zero il vincolo diventa
+  `costante positiva ≤ 0`, falso comunque vada il piazzamento. Non «inagibile»:
+  **contraddittorio**. Il clamp, che altrove è il trattamento giusto, produce
+  qui esattamente ciò che ADR-018 vieta — misurato, `INFEASIBLE` con due
+  congelate e una libera. Il criterio che unifica i quattro casi è più preciso
+  di «tetto o minimo»: **`INFEASIBLE` che nasce dal vietare un peggioramento è
+  ammesso, `INFEASIBLE` che nasce dal pretendere una riparazione no.**
+
+  **Il generatore a testimone.** Il banco genera **prima** un orario valido a
+  caso, **poi** le righe di vincolo che quell'orario soddisfa, e solo allora
+  chiede al solver di ricostruirlo da zero. Rende impossibile un oracolo vacuo:
+  un builder che postasse `1 == 0` non trova il testimone, uno che non postasse
+  nulla lascia passare un orario che il checker boccia. Ogni derivatore
+  restituisce il proprio **potere vincolante** (quante righe ha creato), e zero
+  fa saltare il seed invece di spacciarlo per un successo.
+
+  **Le trappole trovate leggendo i checker invece di ricordarli.**
+  `FREE_GUARANTEED` conta le mezze giornate libere **solo sui giorni con
+  attività**, non su tutti; `MAX_PRESENCE` usa la **giornata intera** dove il
+  D.T.B. usa la mezza; `_PartsOrder` bucketizza per giorno, ma
+  `PartsHomogeneousHalfChecker` **sovrascrive** il bucket con la mezza giornata,
+  e invertire le due cose non fa fallire niente di ovvio; `ImposedSuccession`
+  non ha la guardia di vacuità che `WeeklyOrder` ha, quindi con B assente
+  **ogni** occorrenza di A è in violazione. Nessuna di queste era nel piano.
+
+  **I due conservativi previsti erano uno.** ⚠ `HALF_DAY_GAP` era il caso
+  vetrina della sovra-approssimazione deliberata: si è rivelato **esatto**. Le
+  due regole — coppie consecutive nel checker, tutte le coppie incrociate nel
+  builder — sono equivalenti (dimostrato, e verificato su 200 000 casi sintetici
+  con zero divergenze). Resta conservativo il solo `structural:site_transition`.
+  A consuntivo: **venticinque builder esatti su ventisei**.
+
+  **⚠ E la misura sul Fermi dice meno di quanto sembri.** `OPTIMAL` in ~0,56 s,
+  284 attività, 8140 variabili, 1082 constraint — **gli stessi numeri, byte per
+  byte, dello spike a cinque vincoli del 2026-08-09**. La ragione è che il
+  dataset Fermi ha **zero** righe `ResourceTimeConstraint`, **zero**
+  `SubjectConstraint` e i quattro tetti di peso a `None`: delle ventisei
+  famiglie ne esercita cinque, e ventuno builder non postano nulla. «OPTIMAL sul
+  Fermi col modello completo» è una frase vera e priva di contenuto, ed è ora
+  scritta così nel test, con due assert che la tengono ferma.
+  La misura vera è `test_modello_completo`, aggiunto qui: tutte le famiglie
+  attive **insieme** sullo stesso testimone — 22–23 famiglie con righe su 26,
+  48–73 righe, `OPTIMAL` su tutti e cinque i seed, oracolo pulito. Non esisteva:
+  il banco provava ventisei modelli da una famiglia ciascuno, e due traduzioni
+  corrette separatamente possono contraddirsi una volta postate insieme.
+
+  **Comporre ha trovato una precedenza che nessuno aveva visto.** ⚠ I derivatori
+  **non sono componibili in ordine qualunque**: due sono in formulazione densa e
+  non osservano il testimone, lo **riparano**. `_derive_site_transition`
+  riassegna le sedi — che sono ciò che `max_site_changes` conta;
+  `_sintonizza_parti` riassegna la materia — che è ciò su cui ogni riga
+  `SubjectConstraint` è ancorata. In ordine alfabetico la composizione risponde
+  `INFEASIBLE` su 2 seed su 3. Entrambe le docstring dichiaravano di non
+  disturbare nessuno: vero per il testimone *in sé*, falso per le righe già
+  derivate da altri. Corrette, e la precedenza è ora esplicita.
+
+  **L'oracolo differenziale era rimasto alle cinque famiglie dello spike** per
+  dieci task: `CODICI` non era mai stato esteso, quindi copriva un ventesimo di
+  ciò che sorvegliava di nome. Ora copre le ventisei, con una guardia che gli
+  impedisce di reinvecchiare — una causale nuova deve finire in `CODICI` oppure
+  in `FUORI`, per decisione esplicita.
+
+  **Il passo «risolvi e guarda» è un rilevatore debole, misurato.** Sulle quattro
+  famiglie `PARTS_*` le righe derivate sono violabili **118 volte su 120** —
+  forzando la violazione: `INFEASIBLE` col builder acceso, `FEASIBLE` con quello
+  spento — eppure il banco, che risolve e guarda, coglie un builder rotto **1
+  volta su 11**. CP-SAT non cerca la soluzione cattiva e quasi mai la trova per
+  caso. Da qui la regola della casa: **il test che dimostra che un vincolo morde
+  forza la violazione e attende `INFEASIBLE`**, mai «risolvi e controlla dove è
+  finita». La sonda esatta di violabilità è adottata in questa forma, e
+  **non** come criterio del banco: farne il criterio richiederebbe di
+  reimplementare in CP-SAT la condizione di violazione di tutte e ventisei le
+  famiglie, dentro il banco che le verifica.
+
+  **Il pattern, contato.** «Questa semplificazione è conservativa» era già stata
+  asserita e falsificata tre volte prima di questo piano. Il piano l'ha ripetuta
+  (`HALF_DAY_GAP`), e ne ha aggiunte altre: derivatori senza `return` (**tre
+  volte** — avrebbero reso una famiglia intera verde per non aver fatto nulla),
+  docstring che dichiarano di non disturbare nessuno, `residual_cap` dichiarato
+  sufficiente per ogni tetto. Sempre la stessa forma: **il documento dichiara
+  vera una proprietà che si rivela falsa solo controllandola contro il checker o
+  contro i dati, mai a colpo d'occhio sul documento.** Le due contromisure che
+  hanno funzionato sono misurare il derivatore del piano **prima** di scrivere
+  il builder, e la mutazione — spegnere il builder e contare i rossi, perché un
+  test che non diventa rosso quando il codice che afferma sparisce non sta
+  affermando niente.
+
+  **Debiti dichiarati**, tutti in «Ancora aperto» o nella §9 della spec: il
+  banco **non congela mai nulla**, quindi la copertura di ADR-018 poggia
+  interamente sui test scritti a mano; `coverage_mismatch` sul testimone, da
+  riparare nella fixture prima di qualunque oracolo differenziale a tutto campo;
+  i due tie-break di `domain/analysis` che sono artefatti dell'ordine
+  d'inserimento; e ⚠ **una metà del tetto inevadibile che nessun builder può
+  risolvere** — la `Finding.key` cresce comunque delle attività libere, quindi
+  per le famiglie indipendenti dal piazzamento l'oracolo differenziale andrà
+  formulato su una chiave più grossolana, o quelle famiglie andranno dove EDT le
+  mette davvero: nell'analisi di capienza, che si esegue *prima* del calcolo.
+
+- **2026-08-24** — **La review finale falsifica l'oracolo, e lo ripara.**
+  L'oracolo dichiarato "tenuto" il 2026-08-09 aveva un limite non notato:
+  scuola giocattolo, Fermi per una classe e Fermi intero condividono tutti
+  **un'unica firma di settimana** (tutte le attività sono annuali), quindi la
+  dimensione «settimane» di `domain/analysis/conformity.week_signatures` non
+  era mai stata esercitata. La review finale l'ha trovato lì: `MaxGapBuilder`
+  (il D.T.B.) dichiarava **conservativo** trattare tutte le attività come
+  co-attive, ignorando le firme. **Non lo è.** Il buco è
+  `ultima − prima + 1 − conteggio`: un'occupazione che cade *dentro* il buco
+  ma viene da un'attività di un'**altra** firma alza il conteggio senza
+  toccare `prima` né `ultima` — riempie il buco nel modello unione, mentre
+  nelle settimane reali quel buco resta scoperto. Trattare tutto come
+  co-attivo vincola quindi **di meno**, non di più: l'opposto di quanto
+  dichiarato. Dimostrato con un'istanza a due firme costruita apposta
+  (indisponibilità **datate**, non ricorrenti, su un docente con D.T.B. = 0):
+  il solver rispondeva `OPTIMAL` piazzando una terza attività a riempire un
+  buco che, settimana per settimana, nessuna attività attiva poteva colmare —
+  e `check_schedule` bocciava il piazzamento con un `max_gap` `HARD`.
+  Esattamente il fallimento che il criterio di riuscita dello spike dichiara
+  inaccettabile.
+  **Corretto**: `MaxGapBuilder` ora posta un budget **per firma di
+  settimana** — un `model.Add(...)` per ogni `(rep, _)` di `ctx.signatures`,
+  con i letterali `occ` filtrati alle sole attività attive in quella firma
+  (`SolverContext.occupied` guadagna un parametro `signature` opzionale,
+  memoizzato per `(firma, chiave, giorno, fascia)`; senza firma si comporta
+  come prima). Firme diverse con lo stesso insieme di attività attive
+  producono lo stesso vincolo: deduplicate con `posted`, come già fa
+  `OccupationBuilder`. Nuovo test in `tests/test_solver_oracle.py` —
+  `test_oracolo_su_istanza_multi_firma` — che nessuno dei banchi di prova
+  esistenti poteva scrivere, perché il Fermi non ha la varietà di firme per
+  farlo scattare.
+  ⚠ **La stessa semplificazione in `subject_constraints.py` resta corretta**,
+  e non è stata toccata: lì più letterali significano una somma più
+  vincolata, mai il contrario — il caso pessimo è perdere qualche soluzione,
+  mai accettarne di illegali.
+  **Non è un errore di chi ha implementato: è il piano, la terza volta.** La
+  semplificazione era scritta nei vincoli globali del piano con quella
+  giustificazione. Sullo stesso branch: prima il D.T.B. tradotto come soglia
+  per singolo buco invece che come budget settimanale (intercettato in fase
+  di design, prima del commit); poi il modello dei token che non sapeva
+  distinguere parti della stessa partizione da parti di partizioni diverse
+  (ADR-017); ora questo. Tre volte lo stesso pattern: il piano dichiara una
+  proprietà — soglia singola, insieme di chiavi sufficiente, semplificazione
+  conservativa — che si rivela falsa solo quando la si controlla contro il
+  checker o contro i dati, mai a colpo d'occhio sul piano stesso.
+  **Rifiniture minori nello stesso giro**: `EMPTY_ATOMS` (dead code, zero
+  riferimenti) rimosso da `domain/analysis/state.py`; in
+  `subject_constraints.py` il ramo `A = B` ora conta attività distinte, non
+  letterali, prima di postare il vincolo ridondante; `apply()` documenta di
+  non fare nulla su `placements` vuoto; `test_fermi_intero_misurato` non può
+  più spegnersi in silenzio se lo stato è feasible ma `placements` è vuoto;
+  aggiunto un test di `AtomMap` con tre partizioni sulla stessa classe.
+  **Chiusa la lacuna che restava**: il test multi-firma aggiunto qui sopra
+  dimostra la correzione con un `INFEASIBLE`, ma nessun banco di prova
+  portava una soluzione multi-firma **fattibile** lungo l'intera catena
+  `solve → apply → check_schedule → violazioni() == []` — cioè il caso che il
+  criterio di riuscita dello spike descrive davvero. Aggiunto
+  `test_oracolo_su_istanza_multi_firma_fattibile`: due giorni per quattro
+  fasce, due settimane, cinque attività. Il giorno 0 porta la dimensione
+  D.T.B. (un buco che si chiude per firma e non si chiude nell'unione), il
+  giorno 1 quella dell'occupazione (due attività di settimane diverse con
+  docente, classe e unica collocazione ammissibile in comune: co-attive
+  sarebbero un conflitto, e non lo sono mai). **Verificato che discrimina**,
+  non solo che passa: rompendo `OccupationBuilder` (tutte le attività
+  co-attive) e, separatamente, `MaxGapBuilder` (letterali `occ` senza firma),
+  il test risponde `INFEASIBLE` in entrambi i casi. Suite completa a **173
+  test verdi**.
+
+  **Questione aperta, non risolta qui**: cosa fare quando un constraint
+  mescola attività congelate già in violazione e attività libere nello stesso
+  vincolo — va deciso nella spec del modello completo, prima degli altri
+  ventidue builder. Aggiunta all'elenco **«Ancora aperto»**.
+
+- **2026-08-09** — **Lo spike CP-SAT, e ADR-017 chiuso.** `domain/solver/`,
+  package separato da `domain/analysis/` perché quest'ultimo resti senza
+  `ortools`. Cinque vincoli tradotti, scelti per attraversare i **tre pattern
+  di traduzione** dal predicato al modello CP-SAT: **pre-filtro strutturale**
+  (`structural:grid`, `structural:unavailability` — le celle inammissibili non
+  diventano nemmeno variabili), **cardinalità sulla risorsa**
+  (`structural:occupation` come conflitto e capienza cumulativa,
+  `MAX_GAP_HOURS`) e **relazione fra materie** (`SAME_DAY_INCOMPATIBLE`). I
+  builder sono registrati sotto le **stesse chiavi** dei checker di
+  `domain/analysis`.
+  **ADR-017 chiuso.** Il problema che lo teneva aperto: un insieme di token
+  non sa dire «parti della stessa partizione sono disgiunte, parti di
+  partizioni diverse si sovrappongono» sulla stessa coppia di oggetti — sono
+  due affermazioni opposte sulla stessa relazione. Gli **atomi** (`AtomMap` in
+  `domain/analysis/state.py`), le celle del prodotto delle partizioni, la
+  esprimono senza toccare l'architettura a intersezione di insiemi: aggiunti
+  per tutte e tre le vie con cui una parte entra nelle chiavi (parte diretta,
+  via raggruppamento, via espansione della classe intera), e **solo** per le
+  classi con almeno due partizioni — altrove nulla cambia. Nessun campo nuovo,
+  nessuna migrazione.
+  **La correzione sul `D.T.B.`** Il vincolo era stato tradotto come soglia per
+  **singolo** buco. Non lo è: il checker somma i minuti di buco su **tutte le
+  mezze giornate della settimana** e confronta una volta sola — è un budget
+  settimanale, dove due buchi da un'ora sforano un budget di un'ora e mezza.
+  L'errore è stato intercettato in fase di design, rileggendo il checker
+  invece del proprio ricordo di cosa facesse: è esattamente il tipo di svista
+  che l'oracolo esiste per intercettare.
+  **L'oracolo tiene.** Il criterio di riuscita è uno solo: una soluzione del
+  solver, riscritta nei `Placement` e riletta da `check_schedule`, non produce
+  alcun finding `HARD` nelle cinque famiglie modellate. Ha tenuto al primo
+  colpo — sulla scuola giocattolo, sul Fermi ristretto a una classe e sul
+  Fermi intero. E che potesse fallire è stato **verificato**: corrompendo
+  deliberatamente i piazzamenti, tutte le famiglie provate hanno prodotto il
+  finding atteso (`test_oracolo_puo_fallire` in
+  `tests/test_solver_oracle.py` — un test della suite, non un esperimento una
+  tantum: la prova resta nel repo, non solo nella sessione di review).
+  ⚠ **Falsificato il 2026-08-24**: nessuno di quei tre banchi di prova
+  esercita più di una firma di settimana, e proprio lì si annidava il
+  difetto. Vedi la voce corrispondente più sopra.
+  **Le misure sul Fermi intero**: 284 attività (288h00), **tutte libere**
+  (nessuna congelata dai pre-filtri strutturali), **8140 variabili**, **1082
+  constraint**, `OPTIMAL` in **meno di un secondo** (~0,55s). ⚠ Come già una
+  volta con `scripts/genera_orario.py`, quel risultato **non dice nulla**
+  sulla risolvibilità dell'istanza reale: è la risposta a un problema con
+  **cinque vincoli su ventisette**, non ai ventisette.
+  **Cosa resta fuori**, esplicitamente: gli altri ventidue vincoli del
+  registro, gli alleggerimenti a quota, l'ottimizzazione lessicografica,
+  l'assegnazione delle aule, il violatore di Hall, un comando `manage.py
+  solve`.
 
 - **2026-07-26 (notte, analisi)** — **L'analisi dei vincoli, implementata:
   `domain/analysis/`.** Chiude il piano 2 (dodici task) sopra lo schema

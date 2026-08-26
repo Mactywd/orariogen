@@ -4,15 +4,22 @@ Qtà > 1 e materiali con quantità (una risorsa cumulativa sola)."""
 from domain.analysis import causali
 from domain.analysis.findings import Finding, Severity
 from domain.analysis.registry import Checker, register
+from domain.analysis.state import resource_sort_key
 from domain.models import Activity
 
 _LOCKED = (Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE)
 
 
+def _occupancy_sort_key(item):
+    """Ordina le tuple (chiave, giorno, fascia) gestendo chiavi miste int/str."""
+    (key, day, slot), _ = item
+    return (*resource_sort_key(key), day, slot)
+
+
 @register("structural:occupation")
 class OccupationChecker(Checker):
     def check(self, state, resources=None):
-        for (key, day, slot), acts in sorted(state.occupancy.items()):
+        for (key, day, slot), acts in sorted(state.occupancy.items(), key=_occupancy_sort_key):
             if resources is not None and key not in resources:
                 continue
             load = sum(state.material_quantity.get((aid, key), 1) for aid in acts)

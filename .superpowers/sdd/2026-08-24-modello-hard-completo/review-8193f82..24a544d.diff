@@ -1,0 +1,387 @@
+# Review package: 8193f82..HEAD
+
+## Commits
+24a544d wip(solver): istantanea del giro di correzione del Task 7, non verificata
+
+## Files changed
+ domain/solver/builders/time_counting.py |  91 +++++++++++++++----
+ tests/test_solver_time_minimums.py      | 153 +++++++++++++++++++++++++++++++-
+ 2 files changed, 225 insertions(+), 19 deletions(-)
+
+## Diff
+diff --git a/domain/solver/builders/time_counting.py b/domain/solver/builders/time_counting.py
+index 4ae91ec..b49de1b 100644
+--- a/domain/solver/builders/time_counting.py
++++ b/domain/solver/builders/time_counting.py
+@@ -91,21 +91,34 @@ class MaxHalfDaysBuilder(ResourceBuilder):
+ class MinDistributionBuilder(ResourceBuilder):
+     """MinDistributionChecker (`domain/analysis/checkers/time_constraints.py`,
+     `MinDistributionChecker.violations`) conta i giorni con
+     `len(slots) * slot_minutes >= min_minutes_per_day` e ne vuole almeno
+     `min_days`.
+ 
+     ⚠ Minimo garantito, non tetto (spec §3.1, vedi `residual.py`): niente
+     `residual_cap`. Le attivita' congelate contribuiscono alla somma dentro
+     `occupied` come qualunque altra — se da sole bastano gia' a soddisfare
+     `min_days`, il vincolo `sum(qualificati) >= min_days` e' vacuo per
+-    costruzione, mai infattibile."""
++    costruzione, mai infattibile.
++
++    ⚠ Qui, e **solo qui** fra i tre minimi di questo file, l'affermazione
++    regge senza eccezioni (review Task 7, Important 2): una congelata puo'
++    solo *aumentare* `sum(occ)` per il giorno che occupa, mai renderlo non
++    qualificante — non esiste un modo per una congelata di far scendere
++    `sm * sum(occ)` sotto la soglia per un giorno che altrimenti l'avrebbe
++    superata. `ArrivalDepartureBuilder` e `FreeGuaranteedBuilder` non hanno
++    questa proprieta': li' una congelata puo' *consumare* il minimo
++    (occupare una fascia vietata, o un giorno/meta' che doveva restare
++    libero), e serve il residuo per forzatura. La differenza e' nella forma
++    del predicato: qui e' una soglia di **presenza cumulativa** (piu'
++    occupazione aiuta sempre), la' una soglia di **assenza** (piu'
++    occupazione puo' sempre nuocere)."""
+     TYPE = T.MIN_DISTRIBUTION
+ 
+     def post(self, ctx, model, row, rep):
+         sm, v, key = ctx.grid.slot_minutes, ctx.vocab, row.resource_id
+         soglia = row.params["min_minutes_per_day"]
+         qualificati = []
+         for day in range(ctx.grid.days_per_cycle):
+             occ = [v.occupied(key, day, s, signature=rep)
+                    for s in range(ctx.grid.slots_per_day)]
+             q = model.NewBoolVar(f"qualifies_{key}_{rep}_{day}")
+@@ -124,78 +137,122 @@ class ArrivalDepartureBuilder(ResourceBuilder):
+     se `slots[0] >= not_before_slot` e `slots[-1] < not_after_slot`.
+ 
+     ⚠ Non servono variabili di prima/ultima fascia. «La prima fascia e' >=
+     not_before» equivale a «nessuna occupazione prima di not_before»;
+     «l'ultima e' < not_after» a «nessuna occupazione da not_after in poi». Un
+     giorno senza occupazioni in nessuna fascia proibita non ha letterali (o li
+     ha tutti a 0): `viola` risulta 0 e il giorno e' conforme — combacia col
+     `compliant += 1` del giorno vuoto, senza doverlo trattare come caso a
+     parte.
+ 
+-    Minimo garantito: niente `residual_cap`. Se i giorni gia' conformi per
+-    via delle congelate bastano a `days`, `sum(conformi) >= days` e' vacuo."""
++    ⚠ Minimo garantito, **ma non immune al passato** (review Task 7,
++    Important 2 — la spec del brief affermava il contrario, ed era falsa).
++    Una congelata piazzata in una fascia proibita forza `viola = 1` per
++    quel giorno: nessuna libera puo' farlo rientrare a conforme, spostando
++    attivita' altrove non cambia nulla per **quel** giorno. Letta alla
++    lettera, `sum(conformi) >= days` diventerebbe insoddisfacibile per
++    colpa del solo passato — l'errore che ADR-018 esiste per evitare, qui
++    nella direzione «minimo», non «tetto». Il residuo si applica **per
++    forzatura** come in `MaxHalfDaysBuilder.post` (`frozen_occupies`, non
++    `residual_cap`): i giorni gia' persi non generano letterali (il loro
++    contributo e' 0 per costruzione, comunque), e la soglia si abbassa a
++    quanto resta raggiungibile — `min(days, days_per_cycle - persi)`, mai
++    sotto zero, mai clampata a zero se raggiungibile: e' un pavimento più
++    basso, non uno spento."""
+     TYPE = T.ARRIVAL_DEPARTURE
+ 
+     def post(self, ctx, model, row, rep):
+         v, key = ctx.vocab, row.resource_id
++        grid = ctx.grid
+         not_before = row.params.get("not_before_slot")
+         not_after = row.params.get("not_after_slot")
+-        proibite = [s for s in range(ctx.grid.slots_per_day)
++        proibite = [s for s in range(grid.slots_per_day)
+                     if (not_before is not None and s < not_before)
+                     or (not_after is not None and s >= not_after)]
+-        conformi = []
+-        for day in range(ctx.grid.days_per_cycle):
++        conformi, persi = [], 0
++        for day in range(grid.days_per_cycle):
++            if frozen_occupies(ctx, key, day, proibite, rep):
++                persi += 1  # gia' non conforme per costruzione: nessuna
++                continue    # libera puo' recuperarlo, non serve il letterale
+             viola = model.NewBoolVar(f"ad_viola_{key}_{rep}_{day}")
+             lits = [v.occupied(key, day, s, signature=rep) for s in proibite]
+             if lits:
+                 model.AddMaxEquality(viola, lits)
+             else:
+                 model.Add(viola == 0)
+             conforme = model.NewBoolVar(f"ad_ok_{key}_{rep}_{day}")
+             model.Add(conforme + viola == 1)
+             conformi.append(conforme)
+-        model.Add(sum(conformi) >= row.params["days"])
++        soglia = min(row.params["days"], grid.days_per_cycle - persi)
++        model.Add(sum(conformi) >= soglia)
+ 
+ 
+ @register(T.FREE_GUARANTEED)
+ class FreeGuaranteedBuilder(ResourceBuilder):
+     """FreeGuaranteedChecker (`FreeGuaranteedChecker.violations`) conta
+     `free_days` sui giorni **assenti da `days`** (`d not in days`, esatto: un
+     giorno assente e' un giorno libero, e sommare `not day_active` su tutti i
+     giorni coincide). Ma conta `free_halves` iterando `for day, slots in
+     days.items()`: **solo sui giorni con almeno un'attivita'**. Un giorno
+     completamente vuoto non compare in `days` e contribuisce **zero** mezze
+     giornate libere, non due — la seconda trappola di questo task. Sommare
+     `not half_active` su tutte le mezze giornate (ignorando se il giorno e'
+     attivo) conterebbe di piu', renderebbe la soglia piu' facile e
+     accetterebbe orari che il checker boccia: la direzione sbagliata.
+ 
+     Percio' `libera` (mezza giornata libera-che-conta) e' congiunta con
+     `giorno attivo`: vera solo se il giorno lavora e quella meta' e' scarica.
+ 
+-    Minimo garantito: niente `residual_cap`. Se le congelate bastano gia' a
+-    coprire `free_days`/`free_half_days`, le somme risultano vacue."""
++    ⚠ Niente `if not len(span): continue` sulla meta' vuota (review Task 7,
++    Important 1 — corretto qui, non in `MaxHalfDaysBuilder` dove e' giusto
++    cosi': li' il checker fa `bool(afternoon)`, che vale 0 su una lista
++    vuota e la salta correttamente da solo; qui il checker fa
++    `(not afternoon)`, che vale **1** su ogni giorno lavorato quando il
++    pomeriggio e' strutturalmente vuoto — saltare quella meta' azzerava un
++    contributo che il checker conta gratis, rendendo insoddisfacibile
++    qualunque `free_half_days >= 1` su una griglia senza pomeriggio.
++    `v.half_active` su uno span vuoto e' gia' una costante 0 via
++    `_max_or_zero`: non serve saltarla, basta lasciarla contribuire.
++
++    ⚠ Minimo garantito, **ma non immune al passato** (Important 2, stessa
++    correzione di `ArrivalDepartureBuilder`, sull'altra parte del
++    ragionamento: qui le congelate possono *consumare* la soglia, non solo
++    aiutarla). Una congelata che occupa un giorno forza quel giorno
++    "attivo" — `libero` non potra' mai valere 1 li'; una congelata in una
++    meta' specifica forza quella meta' "occupata" — `libera` non potra' mai
++    valere 1 li', anche se l'altra meta' dello stesso giorno resta
++    negoziabile. Residuo per forzatura (`frozen_occupies`, non
++    `residual_cap`): i termini gia' persi non generano letterali, le
++    soglie si abbassano a quanto resta raggiungibile."""
+     TYPE = T.FREE_GUARANTEED
+ 
+     def post(self, ctx, model, row, rep):
+         v, key = ctx.vocab, row.resource_id
++        grid = ctx.grid
+         giorni_liberi, mezze_libere = [], []
+-        for day in range(ctx.grid.days_per_cycle):
++        giorni_persi, mezze_perse = 0, 0
++        for day in range(grid.days_per_cycle):
+             attivo = v.day_active(key, day, signature=rep)
+-            libero = model.NewBoolVar(f"freeday_{key}_{rep}_{day}")
+-            model.Add(libero + attivo == 1)
+-            giorni_liberi.append(libero)
++            if frozen_occupies(ctx, key, day, range(grid.slots_per_day), rep):
++                giorni_persi += 1  # il giorno e' gia' occupato dal passato
++            else:
++                libero = model.NewBoolVar(f"freeday_{key}_{rep}_{day}")
++                model.Add(libero + attivo == 1)
++                giorni_liberi.append(libero)
+             for half, span in enumerate(v.halves()):
+-                if not len(span):
++                if frozen_occupies(ctx, key, day, span, rep):
++                    mezze_perse += 1  # quella meta' e' gia' occupata
+                     continue
+                 meta = v.half_active(key, day, half, signature=rep)
+                 libera = model.NewBoolVar(f"freehalf_{key}_{rep}_{day}_{half}")
+                 # libera  <->  giorno attivo AND mezza giornata scarica
+                 model.AddBoolAnd([attivo, meta.Not()]).OnlyEnforceIf(libera)
+                 model.AddBoolOr([attivo.Not(), meta]).OnlyEnforceIf(libera.Not())
+                 mezze_libere.append(libera)
+         minimo_giorni = row.params.get("free_days", 0)
+         if minimo_giorni:
+-            model.Add(sum(giorni_liberi) >= minimo_giorni)
++            soglia_giorni = min(minimo_giorni, grid.days_per_cycle - giorni_persi)
++            model.Add(sum(giorni_liberi) >= soglia_giorni)
+         minimo_mezze = row.params.get("free_half_days", 0)
+-        if minimo_mezze and mezze_libere:
+-            model.Add(sum(mezze_libere) >= minimo_mezze)
++        if minimo_mezze:
++            soglia_mezze = min(minimo_mezze, 2 * grid.days_per_cycle - mezze_perse)
++            model.Add(sum(mezze_libere) >= soglia_mezze)
+diff --git a/tests/test_solver_time_minimums.py b/tests/test_solver_time_minimums.py
+index a94c085..373ad89 100644
+--- a/tests/test_solver_time_minimums.py
++++ b/tests/test_solver_time_minimums.py
+@@ -1,30 +1,67 @@
+ """I tre vincoli orari che chiedono un minimo invece di imporre un tetto. Il
+ test che conta e' quello su FREE_GUARANTEED: il checker conta le mezze
+ giornate libere **solo sui giorni che hanno attivita'**, e un builder che le
+ contasse su tutti i giorni accetterebbe orari che il checker boccia.
+ 
+ ⚠ I cinque test per seed di ogni famiglia (`test_famiglia` in
+ tests/test_solver_witness.py, parametrizzato su `sorted(DERIVERS) x [1..5]`)
+ li copre gia' la sola registrazione dei tre derivatori sotto: non li si
+ riscrive qui."""
++import datetime as dt
++
+ import pytest
+ 
+-from domain.models import ResourceTimeConstraint
++from domain.models import (
++    Activity, Discipline, Period, ResourceTimeConstraint, Schedule,
++    SchoolClass, SchoolYear, StudyPlan, Subject, Teacher, TimeGrid,
++)
+ from domain.solver.model import apply, solve
+-from tests.analysis_helpers import make_activity, mini_school
++from tests.analysis_helpers import make_activity, mini_school, place
+ from tests.test_solver_oracle import violazioni
+ 
+ pytestmark = pytest.mark.django_db
+ T = ResourceTimeConstraint.Type
+ 
+ 
++def _scuola_senza_pomeriggio():
++    """Come mini_school(), ma con `morning_end_slot == slots_per_day`: la
++    mezza giornata pomeridiana e' vuota per costruzione (griglia 5x4). Serve
++    a riprodurre Important 1 della review Task 7 — `v.halves()` restituisce
++    uno `span` vuoto per il pomeriggio, e il vecchio `if not len(span):
++    continue` saltava quella meta' del tutto invece di lasciarla contribuire
++    come costante scarica."""
++    grid = TimeGrid.objects.create(
++        days_per_cycle=5, slots_per_day=4, slot_minutes=60, morning_end_slot=4
++    )
++    year = SchoolYear.objects.create(
++        start_date=dt.date(2026, 9, 14), end_date=dt.date(2026, 10, 11),
++        first_week_monday=dt.date(2026, 9, 14),
++    )
++    period = Period.objects.create(
++        school_year=year, name="P1",
++        start_date=year.start_date, end_date=year.end_date,
++    )
++    schedule = Schedule.objects.create(period=period)
++    disc = Discipline.objects.create(code="LET", name="Lettere")
++    subject = Subject.objects.create(code="ITA", name="Italiano", discipline=disc)
++    plan = StudyPlan.objects.create(code="P1", name="Piano", year=1)
++    klass = SchoolClass.objects.create(name="1A", study_plan=plan, year=1)
++    teacher = Teacher.objects.create(name="Rossi Anna", last_name="Rossi",
++                                     first_name="Anna")
++    return {
++        "grid": grid, "year": year, "period": period, "schedule": schedule,
++        "discipline": disc, "subject": subject, "plan": plan,
++        "klass": klass, "teacher": teacher,
++    }
++
++
+ def test_min_distribution_morde():
+     """Quattro ore, distribuite su almeno tre giorni."""
+     env = mini_school()
+     for _ in range(4):
+         make_activity(env["subject"], teachers=[env["teacher"]],
+                       classes=[env["klass"]])
+     ResourceTimeConstraint.objects.create(
+         resource=env["klass"], type=T.MIN_DISTRIBUTION,
+         params={"min_minutes_per_day": 60, "min_days": 3})
+     soluzione = solve(env["schedule"], time_limit=30)
+@@ -96,10 +133,122 @@ def test_arrival_departure_soddisfacibile_resta_soddisfacibile():
+     for _ in range(25):
+         make_activity(env["subject"], teachers=[env["teacher"]],
+                       classes=[env["klass"]])
+     ResourceTimeConstraint.objects.create(
+         resource=env["klass"], type=T.ARRIVAL_DEPARTURE,
+         params={"not_before_slot": 1, "days": 5})
+     soluzione = solve(env["schedule"], time_limit=30)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+     apply(soluzione, env["schedule"])
+     assert violazioni(env["schedule"], {"arrival_departure"}) == set()
++
++
++def test_arrival_departure_giorno_vuoto_conta_come_conforme():
++    """Requisito aggiunto dal controller dopo la review Task 7 (Minor
++    promossa): ArrivalDepartureChecker legge `if not slots: compliant += 1`
++    (`checkers/time_constraints.py`) — un giorno senza alcuna attivita' e'
++    conforme, non violato. Un'unica attivita' su cinque giorni richiesti
++    (`days=5`) lascia quattro giorni **completamente vuoti**: un builder che
++    trattasse "nessuna attivita'" come "non conforme" renderebbe la soglia
++    irraggiungibile (al massimo un giorno puo' mai essere popolato), quindi
++    INFEASIBLE. Il comportamento corretto e' FEASIBLE: i quattro giorni vuoti
++    contano gratis, resta solo da piazzare l'unica attivita' fuori dalla
++    fascia vietata."""
++    env = mini_school()
++    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.ARRIVAL_DEPARTURE,
++        params={"not_before_slot": 1, "days": 5})
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    apply(soluzione, env["schedule"])
++    assert violazioni(env["schedule"], {"arrival_departure"}) == set()
++
++
++def test_adr018_arrival_departure_congelata_in_zona_vietata_non_blocca_il_solver():
++    """Important 2 della review Task 7. Un'attivita' congelata occupa lo
++    slot 0 (vietato da `not_before_slot=1`) il giorno 0: quel giorno e' gia'
++    reso non conforme dal solo passato, e nessuna libera puo' recuperarlo. Con
++    `days=5` (tutti i 5 giorni devono essere conformi) il vincolo, letto alla
++    lettera, sarebbe insoddisfacibile per colpa del passato — esattamente
++    l'errore che ADR-018 esiste per evitare. Una seconda attivita', libera,
++    dello stesso docente deve poter comunque essere piazzata: la soglia
++    residua e' `min(5, 5 - 1) = 4`, raggiungibile sui quattro giorni ancora
++    liberi."""
++    env = mini_school()
++    congelata = make_activity(env["subject"], teachers=[env["teacher"]],
++                              classes=[env["klass"]],
++                              immobility=Activity.Immobility.LOCKED_IN_PLACE)
++    place(env["schedule"], congelata, day=0, slot=0)
++    libera = make_activity(env["subject"], teachers=[env["teacher"]],
++                           classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.ARRIVAL_DEPARTURE,
++        params={"not_before_slot": 1, "days": 5})
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    assert soluzione.placements[libera.id] is not None
++
++
++def test_adr018_free_guaranteed_congelate_non_bloccano_il_solver():
++    """Important 2 della review Task 7, sull'altra famiglia. Cinque
++    attivita' congelate, una per giorno (nessun giorno resta libero): la
++    soglia `free_days=1` e' gia' irraggiungibile dal solo passato. Una
++    sesta attivita', libera, dello stesso docente non deve rendere il
++    modello infattibile: la soglia residua e' `min(1, 5 - 5) = 0`, vacua."""
++    env = mini_school()
++    congelate = [
++        make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]],
++                      immobility=Activity.Immobility.LOCKED_IN_PLACE)
++        for _ in range(5)
++    ]
++    for day, act in enumerate(congelate):
++        place(env["schedule"], act, day=day, slot=0)
++    libera = make_activity(env["subject"], teachers=[env["teacher"]],
++                           classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.FREE_GUARANTEED,
++        params={"free_days": 1})
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    assert soluzione.placements[libera.id] is not None
++
++
++def test_free_guaranteed_meta_pomeriggio_vuota_non_blocca_una_sola_mezza():
++    """Important 1 della review Task 7. Griglia 5x4 con
++    `morning_end_slot == slots_per_day`: il pomeriggio e' vuoto per ogni
++    giorno. `FreeGuaranteedChecker` conta `(not morning) + (not afternoon)`
++    per ciascun giorno **con attivita'** — con `afternoon == []` quel
++    termine vale 1 su ogni giorno lavorato, gratis. Il vecchio
++    `if not len(span): continue` saltava del tutto la meta' pomeridiana:
++    zero letterali generati, quindi la mattina (l'unica meta' rimasta)
++    finiva per essere `attivo AND NOT attivo == 0` sempre, e qualunque
++    `free_half_days >= 1` diventava insoddisfacibile. Con una sola
++    attivita' e `free_half_days=1` dev'essere FEASIBLE: il pomeriggio vuoto
++    del giorno lavorato basta da solo."""
++    env = _scuola_senza_pomeriggio()
++    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.FREE_GUARANTEED,
++        params={"free_half_days": 1})
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    apply(soluzione, env["schedule"])
++    assert violazioni(env["schedule"], {"free_guaranteed"}) == set()
++
++
++def test_free_guaranteed_meta_pomeriggio_vuota_normale_sulla_griglia_6():
++    """Controprova indicata dal revisore: la stessa richiesta
++    (`free_half_days=1`) sulla griglia normale di `mini_school()`
++    (`slots_per_day=6`, pomeriggio non vuoto) era gia' FEASIBLE prima della
++    correzione — il difetto e' specifico alla griglia con pomeriggio vuoto,
++    non una regressione generale."""
++    env = mini_school()
++    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.FREE_GUARANTEED,
++        params={"free_half_days": 1})
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats

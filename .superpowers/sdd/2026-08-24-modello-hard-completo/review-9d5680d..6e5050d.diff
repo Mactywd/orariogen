@@ -1,0 +1,423 @@
+# Review package: 9d5680d..HEAD
+
+## Commits
+6e5050d refactor(solver): il vocabolario delle variabili derivate, prima meta'
+
+## Files changed
+ domain/solver/builders/time_constraints.py |  18 ++---
+ domain/solver/context.py                   |  28 +-------
+ domain/solver/model.py                     |   2 +
+ domain/solver/vocabulary.py                | 105 +++++++++++++++++++++++++++++
+ tests/test_solver_context.py               |   6 +-
+ tests/test_solver_vocabulary.py            |  83 +++++++++++++++++++++++
+ 6 files changed, 201 insertions(+), 41 deletions(-)
+
+## Diff
+diff --git a/domain/solver/builders/time_constraints.py b/domain/solver/builders/time_constraints.py
+index d246ee9..15e78d3 100644
+--- a/domain/solver/builders/time_constraints.py
++++ b/domain/solver/builders/time_constraints.py
+@@ -34,22 +34,20 @@ producono lo stesso vincolo: deduplicate con `posted`, come fa
+ from domain.models import ResourceTimeConstraint
+ from domain.solver.registry import Builder, register
+ 
+ T = ResourceTimeConstraint.Type
+ 
+ 
+ @register(T.MAX_GAP_HOURS)
+ class MaxGapBuilder(Builder):
+     def build(self, ctx, model):
+         grid = ctx.grid
+-        halves = [range(0, grid.morning_end_slot),
+-                  range(grid.morning_end_slot, grid.slots_per_day)]
+         for row in ctx.time_rows:
+             if row.type != T.MAX_GAP_HOURS:
+                 continue
+             key = row.resource_id
+             posted = set()
+             for rep, _ in ctx.signatures:
+                 active = ctx.states[rep].activities
+                 touching = frozenset(
+                     aid
+                     for day in range(grid.days_per_cycle)
+@@ -57,24 +55,20 @@ class MaxGapBuilder(Builder):
+                     for aid, _ in ctx.by_cell.get((key, day, slot), ())
+                     if aid in active
+                 )
+                 if not any(aid in ctx.free for aid in touching):
+                     continue   # nessuna decisione da prendere in questa firma
+                 if touching in posted:
+                     continue   # firma diversa, stesso insieme di attivita' attive
+                 posted.add(touching)
+                 terms = []
+                 for day in range(grid.days_per_cycle):
+-                    for half in halves:
+-                        occ = {s: ctx.occupied(model, key, day, s, signature=rep)
+-                               for s in half}
++                    for half in ctx.vocab.halves():
++                        if not len(half):
++                            continue
++                        cov = ctx.vocab.covered(key, day, half, signature=rep)
+                         for s in half:
+-                            before = model.NewBoolVar(f"before_{key}_{rep}_{day}_{s}")
+-                            model.AddMaxEquality(before, [occ[i] for i in half if i <= s])
+-                            after = model.NewBoolVar(f"after_{key}_{rep}_{day}_{s}")
+-                            model.AddMaxEquality(after, [occ[j] for j in half if j >= s])
+-                            covered = model.NewBoolVar(f"covered_{key}_{rep}_{day}_{s}")
+-                            model.AddMinEquality(covered, [before, after])
+-                            terms.append(covered - occ[s])
++                            terms.append(
++                                cov[s] - ctx.vocab.occupied(key, day, s, signature=rep))
+                 if terms:
+                     model.Add(grid.slot_minutes * sum(terms)
+                               <= row.params["max_gap_minutes"])
+diff --git a/domain/solver/context.py b/domain/solver/context.py
+index 19e8134..7a62853 100644
+--- a/domain/solver/context.py
++++ b/domain/solver/context.py
+@@ -21,21 +21,21 @@ class SolverContext:
+     activities: dict          # id → Activity presenti nel modello
+     free: set                 # id delle attività che il solver può muovere
+     cells: dict               # id → set di (giorno, fascia di inizio) ammissibili
+     tokens: dict              # id → frozenset di chiavi di occupazione
+     capacity: dict            # chiave → capacità simultanea
+     material_quantity: dict   # (id attività, chiave) → quantità
+     time_rows: list           # righe ResourceTimeConstraint
+     subject_rows: list        # [(riga SubjectConstraint, unit_keys precalcolate)]
+     x: dict = field(default_factory=dict)        # (id, giorno, fascia) → BoolVar
+     by_cell: dict = field(default_factory=dict)  # (chiave, giorno, fascia) → [(id, letterale)]
+-    _occupied: dict = field(default_factory=dict)
++    vocab: object = None      # Vocabulary, assegnato da build_model
+ 
+     @classmethod
+     def build(cls, schedule, extraction=None):
+         signatures = week_signatures(schedule)
+         states = {rep: ScheduleState.build(schedule, week=rep) for rep, _ in signatures}
+         base = states[signatures[0][0]]
+         grid = base.grid
+         placed = {p.activity_id: (p.day, p.start_slot)
+                   for p in schedule.placements.all()}
+         selected = (None if extraction is None
+@@ -91,36 +91,10 @@ class SolverContext:
+                     for slot in range(s, s + act.duration_slots):
+                         index[(key, d, slot)].append((aid, lit))
+         self.by_cell = dict(index)
+ 
+     def has_free(self, key, day, slot):
+         """C'è almeno un'attività libera che può occupare quella cella? Se no,
+         il constraint è un fatto e non una decisione: non si posta."""
+         return any(aid in self.free
+                    for aid, _ in self.by_cell.get((key, day, slot), ()))
+ 
+-    def occupied(self, model, key, day, slot, signature=None):
+-        """Letterale canalizzato: la chiave è occupata in quella cella. Creato
+-        su richiesta, così esistono solo le canalizzazioni che un vincolo di
+-        cardinalità chiede davvero.
+-
+-        `signature`, se dato, è il rappresentante di una firma di settimana
+-        (una chiave di `self.signatures`/`self.states`): il letterale conta
+-        solo le attività attive in quella firma, esattamente come farebbe
+-        `ScheduleState.build(schedule, week=rep)` per il checker. Omesso,
+-        conta tutte le attività che toccano la cella indipendentemente dalla
+-        settimana — comportamento invariato per chi già chiamava `occupied`
+-        senza distinguere le firme."""
+-        cell = (signature, key, day, slot)
+-        if cell not in self._occupied:
+-            var = model.NewBoolVar(f"occ_{key}_{day}_{slot}_{signature}")
+-            entries = self.by_cell.get((key, day, slot), ())
+-            if signature is not None:
+-                active = self.states[signature].activities
+-                entries = [(aid, lit) for aid, lit in entries if aid in active]
+-            lits = [lit for _, lit in entries]
+-            if lits:
+-                model.AddMaxEquality(var, lits)
+-            else:
+-                model.Add(var == 0)
+-            self._occupied[cell] = var
+-        return self._occupied[cell]
+diff --git a/domain/solver/model.py b/domain/solver/model.py
+index 06b5077..953c455 100644
+--- a/domain/solver/model.py
++++ b/domain/solver/model.py
+@@ -3,20 +3,21 @@ piazzamenti. L'ordine è obbligato: contesto → restrict() di tutti i builder 
+ creazione delle variabili sulle celle sopravvissute → build() di tutti."""
+ 
+ import time
+ from dataclasses import dataclass
+ 
+ from ortools.sat.python import cp_model
+ 
+ from domain.models import Placement
+ from domain.solver.context import SolverContext
+ from domain.solver.registry import all_builders
++from domain.solver.vocabulary import Vocabulary
+ 
+ _STATUS = {
+     cp_model.OPTIMAL: "OPTIMAL",
+     cp_model.FEASIBLE: "FEASIBLE",
+     cp_model.INFEASIBLE: "INFEASIBLE",
+     cp_model.MODEL_INVALID: "MODEL_INVALID",
+     cp_model.UNKNOWN: "UNKNOWN",
+ }
+ 
+ 
+@@ -43,20 +44,21 @@ def build_model(schedule, extraction=None):
+         if lits:
+             model.AddExactlyOne(lits)
+         else:
+             # dominio vuoto: nessuna collocazione sopravvive ai pre-filtri.
+             # Il modello è infattibile, e va detto in modo esplicito.
+             vuoto = model.NewBoolVar(f"dominio_vuoto_{aid}")
+             model.Add(vuoto == 1)
+             model.Add(vuoto == 0)
+ 
+     ctx.index_cells()
++    ctx.vocab = Vocabulary(ctx, model)
+     for builder in builders:
+         builder.build(ctx, model)
+     return model, ctx
+ 
+ 
+ def solve(schedule, extraction=None, time_limit=None):
+     started = time.monotonic()
+     model, ctx = build_model(schedule, extraction=extraction)
+     solver = cp_model.CpSolver()
+     if time_limit is not None:
+diff --git a/domain/solver/vocabulary.py b/domain/solver/vocabulary.py
+new file mode 100644
+index 0000000..982b884
+--- /dev/null
++++ b/domain/solver/vocabulary.py
+@@ -0,0 +1,105 @@
++"""Le variabili derivate condivise dai builder: una primitiva per concetto,
++costruita una volta sola e memoizzata sulla chiave completa — firma di
++settimana inclusa.
++
++Non e' un modulo di comodita'. Piu' builder hanno bisogno delle stesse
++costruzioni non banali (il trittico prima/dopo/coperta serve al D.T.B. e a
++MAX_PRESENCE; l'occorrenza di una materia in un secchio serve a sei vincoli di
++materia). Riscriverle in ogni builder significa replicare in N posti ogni
++difetto — e in questo progetto una di queste costruzioni e' gia' stata
++sbagliata una volta."""
++
++
++class Vocabulary:
++    def __init__(self, ctx, model):
++        self.ctx = ctx
++        self.model = model
++        self._cache = {}
++
++    def _memo(self, kind, key, make):
++        cell = (kind, key)
++        if cell not in self._cache:
++            self._cache[cell] = make()
++        return self._cache[cell]
++
++    def _max_or_zero(self, var, lits):
++        """AddMaxEquality con lista vuota e' invalido. Una meta' giornata puo'
++        essere vuota (morning_end_slot == slots_per_day), quindi il caso non e'
++        teorico: capita in due test esistenti."""
++        if lits:
++            self.model.AddMaxEquality(var, lits)
++        else:
++            self.model.Add(var == 0)
++        return var
++
++    # --- griglia ---------------------------------------------------------
++
++    def halves(self):
++        """[mattina, pomeriggio]. La seconda puo' essere vuota."""
++        g = self.ctx.grid
++        return [range(0, g.morning_end_slot),
++                range(g.morning_end_slot, g.slots_per_day)]
++
++    def half_of(self, slot):
++        return 0 if slot < self.ctx.grid.morning_end_slot else 1
++
++    # --- occupazione -----------------------------------------------------
++
++    def occupied(self, key, day, slot, signature=None):
++        """La chiave e' occupata in quella cella.
++
++        `signature`, se dato, e' il rappresentante di una firma di settimana:
++        il letterale conta solo le attivita' attive in quella firma, come
++        farebbe ScheduleState.build(schedule, week=rep) per il checker."""
++        def make():
++            var = self.model.NewBoolVar(f"occ_{key}_{day}_{slot}_{signature}")
++            entries = self.ctx.by_cell.get((key, day, slot), ())
++            if signature is not None:
++                active = self.ctx.states[signature].activities
++                entries = [(aid, lit) for aid, lit in entries if aid in active]
++            return self._max_or_zero(var, [lit for _, lit in entries])
++        return self._memo("occ", (signature, key, day, slot), make)
++
++    def covered(self, key, day, span, signature=None):
++        """{fascia: letterale} — la fascia sta fra la prima e l'ultima
++        occupata **dentro `span`**.
++
++        ⚠ `span` non e' un dettaglio: il D.T.B. lo vuole sulla mezza giornata
++        (non conta mai buchi a cavallo del pranzo), MAX_PRESENCE sulla giornata
++        intera (`_presence_minutes` non passa da `_halves`). Sono due cose
++        diverse che si somigliano: qui la differenza e' un argomento visibile
++        alla chiamata."""
++        span = tuple(span)
++        def make():
++            occ = {s: self.occupied(key, day, s, signature) for s in span}
++            out = {}
++            for s in span:
++                tag = f"{key}_{signature}_{day}_{span[0] if span else 'x'}_{s}"
++                before = self.model.NewBoolVar(f"before_{tag}")
++                self._max_or_zero(before, [occ[i] for i in span if i <= s])
++                after = self.model.NewBoolVar(f"after_{tag}")
++                self._max_or_zero(after, [occ[j] for j in span if j >= s])
++                cov = self.model.NewBoolVar(f"covered_{tag}")
++                self.model.AddMinEquality(cov, [before, after])
++                out[s] = cov
++            return out
++        return self._memo("covered", (signature, key, day, span), make)
++
++    # --- presenza per giornata e mezza giornata --------------------------
++
++    def day_active(self, key, day, signature=None):
++        def make():
++            var = self.model.NewBoolVar(f"dayact_{key}_{signature}_{day}")
++            lits = [self.occupied(key, day, s, signature)
++                    for s in range(self.ctx.grid.slots_per_day)]
++            return self._max_or_zero(var, lits)
++        return self._memo("day_active", (signature, key, day), make)
++
++    def half_active(self, key, day, half, signature=None):
++        """`half`: 0 mattina, 1 pomeriggio."""
++        def make():
++            var = self.model.NewBoolVar(f"halfact_{key}_{signature}_{day}_{half}")
++            lits = [self.occupied(key, day, s, signature)
++                    for s in self.halves()[half]]
++            return self._max_or_zero(var, lits)
++        return self._memo("half_active", (signature, key, day, half), make)
+diff --git a/tests/test_solver_context.py b/tests/test_solver_context.py
+index 5e45f98..de11152 100644
+--- a/tests/test_solver_context.py
++++ b/tests/test_solver_context.py
+@@ -1,16 +1,17 @@
+ """Il contesto: celle ammissibili, congelamento, indice per cella."""
+ import pytest
+ from ortools.sat.python import cp_model
+ 
+ from domain.models import Extraction
+ from domain.solver.context import SolverContext
++from domain.solver.vocabulary import Vocabulary
+ from tests.analysis_helpers import make_activity, mini_school, place
+ 
+ pytestmark = pytest.mark.django_db
+ 
+ 
+ def test_celle_iniziali_secondo_la_durata():
+     env = mini_school()
+     a = make_activity(env["subject"], slots=1)
+     b = make_activity(env["subject"], slots=2)
+     ctx = SolverContext.build(env["schedule"])
+@@ -62,12 +63,13 @@ def test_indice_per_cella_e_canalizzazione():
+     ctx = SolverContext.build(env["schedule"])
+     model = cp_model.CpModel()
+     for (d, s) in sorted(ctx.cells[a.id]):
+         ctx.x[(a.id, d, s)] = model.NewBoolVar(f"x_{d}_{s}")
+     ctx.index_cells()
+     key = env["teacher"].pk
+     # durata 2: partendo da (0, 0) copre le fasce 0 e 1
+     assert (a.id, ctx.x[(a.id, 0, 0)]) in ctx.by_cell[(key, 0, 1)]
+     assert ctx.has_free(key, 0, 1) is True
+     assert ctx.has_free(key, 0, 99) is False
+-    occ = ctx.occupied(model, key, 0, 0)
+-    assert ctx.occupied(model, key, 0, 0) is occ   # memoizzato
++    vocab = Vocabulary(ctx, model)
++    occ = vocab.occupied(key, 0, 0)
++    assert vocab.occupied(key, 0, 0) is occ   # memoizzato
+diff --git a/tests/test_solver_vocabulary.py b/tests/test_solver_vocabulary.py
+new file mode 100644
+index 0000000..fc0e9ce
+--- /dev/null
++++ b/tests/test_solver_vocabulary.py
+@@ -0,0 +1,83 @@
++"""Le primitive derivate condivise. Il test che conta e' quello su `covered`:
++il parametro `span` distingue il D.T.B. (mezza giornata) da MAX_PRESENCE
++(giornata intera), ed e' proprio la differenza che due copie separate del
++codice avrebbero perso."""
++import pytest
++from ortools.sat.python import cp_model
++
++from domain.solver.context import SolverContext
++from domain.solver.vocabulary import Vocabulary
++from tests.analysis_helpers import make_activity, mini_school
++
++pytestmark = pytest.mark.django_db
++
++
++def _vocab(env):
++    ctx = SolverContext.build(env["schedule"])
++    model = cp_model.CpModel()
++    for aid in sorted(ctx.activities):
++        for (day, slot) in sorted(ctx.cells[aid]):
++            ctx.x[(aid, day, slot)] = model.NewBoolVar(f"x_{aid}_{day}_{slot}")
++        model.AddExactlyOne([ctx.x[(aid, d, s)] for (d, s) in sorted(ctx.cells[aid])])
++    ctx.index_cells()
++    return ctx, model, Vocabulary(ctx, model)
++
++
++def test_halves_pomeriggio_puo_essere_vuoto():
++    env = mini_school()
++    env["grid"].morning_end_slot = env["grid"].slots_per_day
++    env["grid"].save()
++    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    _, _, vocab = _vocab(env)
++    mattina, pomeriggio = vocab.halves()
++    assert len(list(mattina)) == env["grid"].slots_per_day
++    assert list(pomeriggio) == []
++
++
++def test_half_active_su_meta_vuota_non_esplode():
++    """AddMaxEquality con lista vuota e' invalido: la primitiva deve fissare
++    la variabile a zero invece di costruire un vincolo malformato."""
++    env = mini_school()
++    env["grid"].morning_end_slot = env["grid"].slots_per_day
++    env["grid"].save()
++    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    _, model, vocab = _vocab(env)
++    var = vocab.half_active(env["klass"].pk, 0, 1)
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert solver.Value(var) == 0
++
++
++def test_covered_span_mezza_giornata_contro_giornata_intera():
++    """Due attivita' della stessa classe alle fasce 0 e 5, con la linea di
++    meta' giornata a 4. Sulla giornata intera le fasce 1..4 sono 'coperte'
++    (stanno fra la prima e l'ultima occupata); sulla sola mattina no, perche'
++    li' l'ultima occupata e' la fascia 0."""
++    env = mini_school()
++    a = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    b = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    ctx, model, vocab = _vocab(env)
++    model.Add(ctx.x[(a.id, 0, 0)] == 1)
++    model.Add(ctx.x[(b.id, 0, 5)] == 1)
++    key = env["klass"].pk
++    giornata = vocab.covered(key, 0, range(0, 6))
++    mattina = vocab.covered(key, 0, range(0, 4))
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert [solver.Value(giornata[s]) for s in range(6)] == [1, 1, 1, 1, 1, 1]
++    assert [solver.Value(mattina[s]) for s in range(4)] == [1, 0, 0, 0]
++
++
++def test_day_active_e_memoizzazione():
++    env = mini_school()
++    a = make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
++    ctx, model, vocab = _vocab(env)
++    model.Add(ctx.x[(a.id, 2, 1)] == 1)
++    key = env["klass"].pk
++    attivo, di_nuovo = vocab.day_active(key, 2), vocab.day_active(key, 2)
++    assert attivo is di_nuovo          # memoizzata: una variabile, non due
++    vuoto = vocab.day_active(key, 3)
++    solver = cp_model.CpSolver()
++    assert solver.Solve(model) in (cp_model.OPTIMAL, cp_model.FEASIBLE)
++    assert solver.Value(attivo) == 1
++    assert solver.Value(vuoto) == 0

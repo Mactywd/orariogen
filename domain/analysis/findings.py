@@ -18,7 +18,7 @@ class Finding:
     code: str
     message: str
     severity: Severity
-    resources: tuple[int, ...] = ()    # pk delle Resource coinvolte
+    resources: tuple[int | str, ...] = ()    # pk delle Resource o chiavi-atomo (ADR-017)
     activities: tuple[int, ...] = ()   # pk delle Activity coinvolte
     quantities: Mapping[str, int] = field(default_factory=dict)
     weeks: tuple[int, ...] = ()        # settimane in cui la violazione vale

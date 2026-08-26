@@ -1,0 +1,225 @@
+# Review package: d410745..HEAD
+
+## Commits
+28c90ef fix(solver): correzioni Important 1 e 2 della review Task 6
+
+## Files changed
+ domain/solver/builders/base.py          |  6 ++++++
+ domain/solver/builders/time_counting.py |  9 ++++++++
+ domain/solver/builders/time_presence.py | 34 ++++++++++++++++++++---------
+ tests/test_solver_time_counting.py      | 38 ++++++++++++++++++++++++++++-----
+ 4 files changed, 72 insertions(+), 15 deletions(-)
+
+## Diff
+diff --git a/domain/solver/builders/base.py b/domain/solver/builders/base.py
+index 0fc9454..740ef6d 100644
+--- a/domain/solver/builders/base.py
++++ b/domain/solver/builders/base.py
+@@ -8,20 +8,26 @@ co-attivo puo' vincolare *di meno*, non di piu' — e' il difetto trovato sul
+ D.T.B. il 2026-08-24. Qui la regola e' nella classe base, cosi' nessun builder
+ deve ricordarsene."""
+ 
+ from domain.solver.registry import Builder
+ 
+ 
+ class ResourceBuilder(Builder):
+     TYPE = None
+ 
+     def build(self, ctx, model):
++        # Rete di sicurezza: una sottoclasse che eredita build() supera
++        # sempre test_ogni_builder_implementa_almeno_un_hook (l'eredita'),
++        # quindi dimenticare TYPE la renderebbe silenziosamente vacua — non
++        # fa mai match con nessuna riga, e nessun test se ne accorgerebbe
++        # (review Task 6, requisito del controller).
++        assert self.TYPE is not None, type(self).__name__
+         for row in ctx.time_rows:
+             if row.type != self.TYPE:
+                 continue
+             posted = set()
+             for rep, _ in ctx.signatures:
+                 active = ctx.states[rep].activities
+                 touching = frozenset(
+                     aid
+                     for day in range(ctx.grid.days_per_cycle)
+                     for slot in range(ctx.grid.slots_per_day)
+diff --git a/domain/solver/builders/time_counting.py b/domain/solver/builders/time_counting.py
+index 68200e9..44624dd 100644
+--- a/domain/solver/builders/time_counting.py
++++ b/domain/solver/builders/time_counting.py
+@@ -66,13 +66,22 @@ class MaxHalfDaysBuilder(ResourceBuilder):
+                     if frozen_occupies(ctx, key, day, span, rep):
+                         consumo += 1
+                     else:
+                         terms.append(v.half_active(key, day, half, signature=rep))
+             if terms:
+                 model.Add(sum(terms) <= max(0, cap - consumo))
+         if row.params.get("only_half_day_per_day"):
+             mattina, pomeriggio = v.halves()
+             if len(mattina) and len(pomeriggio):
+                 for day in range(ctx.grid.days_per_cycle):
++                    # ADR-018 (review Task 6, Important 1): se le sole
++                    # congelate occupano gia' entrambe le meta' di questo
++                    # giorno, AddAtMostOne([1, 1]) sarebbe insoddisfacibile —
++                    # colpa del passato, non della libera. Con una sola meta'
++                    # congelata il vincolo degrada correttamente a «l'altra
++                    # deve restare a 0», ed e' il residuo giusto: si posta.
++                    if (frozen_occupies(ctx, key, day, mattina, rep)
++                            and frozen_occupies(ctx, key, day, pomeriggio, rep)):
++                        continue
+                     model.AddAtMostOne([
+                         v.half_active(key, day, 0, signature=rep),
+                         v.half_active(key, day, 1, signature=rep)])
+diff --git a/domain/solver/builders/time_presence.py b/domain/solver/builders/time_presence.py
+index 29e7cda..27c152a 100644
+--- a/domain/solver/builders/time_presence.py
++++ b/domain/solver/builders/time_presence.py
+@@ -34,27 +34,40 @@ illegali.)
+ 
+ Le firme diverse con lo stesso insieme di attività attive sulla risorsa
+ producono lo stesso vincolo: deduplicate con `posted`, come fa
+ `OccupationBuilder`. Il ciclo sulle firme e la deduplicazione sono ora nella
+ classe base `ResourceBuilder` (`domain/solver/builders/base.py`): qui resta
+ solo il corpo del vincolo, come `post`.
+ 
+ ⚠ **ADR-018, esteso al D.T.B.** Il budget e' un aggregato non lineare (min/max
+ via `covered`), quindi il residuo non si separa in «costante + libere» come
+ sui tetti lineari (`residual_cap`): non si puo' sottrarre il contributo delle
+-congelate dalla somma. Il guardiano qui e' percio' diverso — non un residuo,
+-ma un **fatto**: si calcola il buco che le sole attivita' congelate
+-produrrebbero (`_frozen_gap_minutes`, a posizioni fisse e note a build time),
+-e se quello da solo supera gia' il tetto, il vincolo per quella firma non si
+-posta affatto. E' esattamente il caso di ADR-018 — un ingresso sporco non deve
+-rendere INFEASIBLE un modello per colpa del passato — applicato a un vincolo
+-che non e' una somma pesata."""
++congelate dalla somma. Qui il guardiano non e' un residuo sottratto dal
++letterale, ma un **clamp sul tetto stesso**: si calcola il buco che le sole
++attivita' congelate produrrebbero (`_frozen_gap_minutes`, a posizioni fisse e
++note a build time), e il tetto effettivamente postato e'
++`max(cap, _frozen_gap_minutes(...))` — mai sotto al debito gia' contratto dal
++passato.
++
++⚠ **Non saltare il vincolo quando le congelate sforano da sole** (era l'errore
++della prima versione, corretto in review Task 6, Important 2): il vincolo
++resta postato su **tutti** i giorni della firma, solo con un tetto piu' alto.
++Il D.T.B. e' un budget settimanale che comprende giorni **mai toccati dalle
++congelate**: se il vincolo sparisse del tutto, le attivita' libere potrebbero
++aprire buchi illimitati anche li', e potrebbero perfino *richiudere* un buco
++delle congelate — quindi il debito non e' irrecuperabile, ed «e' un fatto, non
++una decisione» non vale. Il clamp concede esattamente il debito gia' contratto
++e nulla di piu': mai infattibile per colpa del passato, ma vincolante ovunque
++le libere abbiano ancora voce in capitolo — l'analogo esatto di
++`max(0, cap - consumo)` in `residual_cap`, qui scritto come
++`max(cap, consumo)` perche' il tetto e il consumo vivono sulla stessa scala
++(entrambi minuti di buco), non sottratti l'uno dall'altro."""
+ 
+ from domain.models import ResourceTimeConstraint
+ from domain.solver.builders.base import ResourceBuilder
+ from domain.solver.registry import register
+ 
+ T = ResourceTimeConstraint.Type
+ 
+ 
+ def _frozen_gap_minutes(ctx, key, rep):
+     """Il buco settimanale (in minuti) indotto dalle sole attivita'
+@@ -78,23 +91,24 @@ def _frozen_gap_minutes(ctx, key, rep):
+     return total
+ 
+ 
+ @register(T.MAX_GAP_HOURS)
+ class MaxGapBuilder(ResourceBuilder):
+     TYPE = T.MAX_GAP_HOURS
+ 
+     def post(self, ctx, model, row, rep):
+         grid, v = ctx.grid, ctx.vocab
+         key = row.resource_id
+-        cap = row.params["max_gap_minutes"]
+-        if _frozen_gap_minutes(ctx, key, rep) > cap:
+-            return   # ADR-018: il passato ha gia' perso da solo, non si posta
++        # ADR-018: il tetto effettivo non scende mai sotto il debito gia'
++        # contratto dalle sole congelate — clamp, non spegnimento del
++        # vincolo (review Task 6, Important 2).
++        cap = max(row.params["max_gap_minutes"], _frozen_gap_minutes(ctx, key, rep))
+         terms = []
+         for day in range(grid.days_per_cycle):
+             for half in v.halves():
+                 if not len(half):
+                     continue
+                 cov = v.covered(key, day, half, signature=rep)
+                 for s in half:
+                     terms.append(cov[s] - v.occupied(key, day, s, signature=rep))
+         if terms:
+             model.Add(grid.slot_minutes * sum(terms) <= cap)
+diff --git a/tests/test_solver_time_counting.py b/tests/test_solver_time_counting.py
+index 99c5af4..e362931 100644
+--- a/tests/test_solver_time_counting.py
++++ b/tests/test_solver_time_counting.py
+@@ -62,25 +62,27 @@ def test_adr018_una_congelata_gia_in_violazione_non_blocca_il_solver():
+ 
+     soluzione = solve(env["schedule"], time_limit=30)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+     assert soluzione.placements[libera.id][0] != 0   # non il giorno gia' pieno
+ 
+ 
+ def test_adr018_dtb_gia_sforato_dalle_congelate_non_blocca_il_solver():
+     """Lo stesso principio di ADR-018, ma sul D.T.B. (MaxGapBuilder), che il
+     brief non copre esplicitamente: due attivita' congelate dello stesso
+     docente lasciano un buco di 60' fra loro (fasce 0 e 2 ammesse, fascia 1
+-    vietata da un'indisponibilita' hard), e il tetto e' 0 — gia' sforato dal
+-    solo passato. Una terza attivita' libera dello stesso docente, su un
+-    altro giorno, non deve rendere il modello infattibile: il guardiano deve
+-    riconoscere che per la firma coinvolta il budget e' gia' perso e non
+-    postare il vincolo, invece di propagare l'INFEASIBLE a valle."""
++    vietata da un'indisponibilita' hard), e il tetto dichiarato e' 0 — gia'
++    sforato dal solo passato. Una terza attivita' libera dello stesso
++    docente, su un altro giorno, non deve rendere il modello infattibile: il
++    guardiano deve riconoscere il debito gia' contratto e concedere un tetto
++    effettivo pari ad esso (clamp), non spegnere il vincolo — la review Task
++    6 (Important 2) ha corretto lo spegnimento in un clamp, perche' il D.T.B.
++    resta un budget su tutta la settimana, non solo sul giorno gia' sforato."""
+     from domain.models import ResourceUnavailability
+ 
+     env = mini_school()
+     docente = env["teacher"]
+     # Restringe solo il giorno 0, cosi' il buco e' forzato li' e la libera
+     # ha comunque altrove (giorni 1-4, tutti aperti) dove andare.
+     for fascia in (1, 3, 4, 5):
+         ResourceUnavailability.objects.create(
+             resource=docente, day=0, slot=fascia, level="hard")
+     congelate = [
+@@ -89,10 +91,36 @@ def test_adr018_dtb_gia_sforato_dalle_congelate_non_blocca_il_solver():
+         for _ in range(2)
+     ]
+     for slot, act in zip((0, 2), congelate):
+         place(env["schedule"], act, day=0, slot=slot)
+     make_activity(env["subject"], teachers=[docente])
+     ResourceTimeConstraint.objects.create(
+         resource=docente, type=T.MAX_GAP_HOURS, params={"max_gap_minutes": 0})
+ 
+     soluzione = solve(env["schedule"], time_limit=30)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++
++
++def test_adr018_only_half_day_gia_sforato_dalle_congelate_non_blocca_il_solver():
++    """Il ramo `only_half_day_per_day` di MaxHalfDaysBuilder non era provato
++    in nessuna direzione (review Task 6, Important 1: l'affermazione del
++    brief che fosse coperto da test_max_hours_morde era falsa, quel test
++    riguarda MAX_HOURS). Due attivita' congelate dello stesso docente, una in
++    mattinata (fascia 0) e una in pomeriggio (fascia 4) dello stesso giorno,
++    forzano entrambe le half_active derivate a 1: AddAtMostOne([1, 1]) senza
++    guardia sarebbe insoddisfacibile, colpa del passato. Una terza attivita'
++    libera dello stesso docente deve poter comunque essere piazzata."""
++    env = mini_school()
++    docente = env["teacher"]
++    mattina = make_activity(env["subject"], teachers=[docente],
++                            immobility=Activity.Immobility.LOCKED_IN_PLACE)
++    pomeriggio = make_activity(env["subject"], teachers=[docente],
++                               immobility=Activity.Immobility.LOCKED_IN_PLACE)
++    place(env["schedule"], mattina, day=0, slot=0)
++    place(env["schedule"], pomeriggio, day=0, slot=4)
++    make_activity(env["subject"], teachers=[docente])
++    ResourceTimeConstraint.objects.create(
++        resource=docente, type=T.MAX_HALF_DAYS,
++        params={"only_half_day_per_day": True})
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats

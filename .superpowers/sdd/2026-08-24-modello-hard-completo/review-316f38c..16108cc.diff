@@ -1,0 +1,212 @@
+# Review package: 316f38c..HEAD
+
+## Commits
+16108cc fix(solver): l'oracolo differenziale espande per settimana, non solo per chiave
+
+## Files changed
+ tests/test_solver_oracle.py | 108 ++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 100 insertions(+), 8 deletions(-)
+
+## Diff
+diff --git a/tests/test_solver_oracle.py b/tests/test_solver_oracle.py
+index 228fde0..dad5038 100644
+--- a/tests/test_solver_oracle.py
++++ b/tests/test_solver_oracle.py
+@@ -9,40 +9,48 @@ from domain import weeks
+ from domain.analysis.conformity import check_schedule, week_signatures
+ from domain.analysis.findings import Severity
+ from domain.models import (
+     Break, ClassPart, ClassPartition, Discipline, Extraction, Period,
+     Placement, ResourceTimeConstraint, ResourceUnavailability, Schedule,
+     SchoolClass, SchoolYear, StudyPlan, Subject, SubjectConstraint, Teacher,
+     TimeGrid,
+ )
+ from domain.solver.model import apply, solve
+ from tests import fermi
+-from tests.analysis_helpers import make_activity, mini_school
++from tests.analysis_helpers import make_activity, mini_school, place
+ 
+ pytestmark = pytest.mark.django_db
+ 
+ # le causali delle cinque famiglie modellate, e solo quelle
+ CODICI = {
+     "resource_occupied", "resource_occupied_locked", "resource_peak",   # occupazione
+     "unavailability",                                                   # indisponibilita'
+     "slot_out_of_grid", "break_straddled", "holiday",                   # griglia
+     "max_gap",                                                          # D.T.B.
+     "subject_same_day",                                                 # materia
+ }
+ 
+ 
+ def violazioni(schedule, codici=CODICI):
+-    """L'insieme delle chiavi dei finding HARD nelle famiglie modellate.
+-    Un insieme, non una lista: il criterio di riuscita e' il **contenimento**
+-    (ADR-018), non l'uguaglianza."""
+-    return {f.key for f in check_schedule(schedule)
+-            if f.severity == Severity.HARD and f.code in codici}
++    """L'insieme delle (chiave, settimana) dei finding HARD nelle famiglie
++    modellate. Un insieme, non una lista: il criterio di riuscita e' il
++    **contenimento** (ADR-018), non l'uguaglianza.
++
++    Espanso per settimana invece di lasciare la sola chiave: `Finding.key`
++    esclude deliberatamente `weeks` (e' pensata per il dedup fra firme dentro
++    check_schedule), quindi una violazione identica per codice/risorse/
++    attivita'/quantita' ma comparsa su una firma diversa da quella di
++    partenza si fonderebbe nello stesso finding e sparirebbe dal calcolo
++    differenziale di `nuove()`. Espandere per settimana la rende visibile."""
++    return {(f.key, w) for f in check_schedule(schedule)
++            if f.severity == Severity.HARD and f.code in codici
++            for w in f.weeks}
+ 
+ 
+ def nuove(schedule, prima, codici=CODICI):
+     """I finding HARD comparsi **dopo** il solve. Il solver puo' anche
+     riparare una violazione preesistente spostando un'attivita' libera: quello
+     e' un successo, non una discrepanza, ed e' per questo che il criterio e'
+     il contenimento e non l'uguaglianza."""
+     return violazioni(schedule, codici) - prima
+ 
+ 
+@@ -147,35 +155,35 @@ def test_oracolo_puo_fallire():
+     ita = env["ita_activities"]  # [1A×2, 1B×2, 1C×2], stesso docente per tutte
+     docente_ita = env["docenti"]["ITA"]
+ 
+     # Famiglia "occupazione": due attivita' dello stesso docente (classi
+     # diverse, 1A e 1B) forzate sulla stessa cella.
+     p_a = Placement.objects.get(schedule=env["schedule"], activity=ita[0])
+     p_b = Placement.objects.get(schedule=env["schedule"], activity=ita[2])
+     giorno_orig, fascia_orig = p_b.day, p_b.start_slot
+     p_b.day, p_b.start_slot = p_a.day, p_a.start_slot
+     p_b.save()
+-    codici = {codice for codice, *_ in violazioni(env["schedule"])}
++    codici = {codice for (codice, *_), _settimana in violazioni(env["schedule"])}
+     assert "resource_occupied" in codici
+ 
+     # Ripristino: la corruzione precedente non deve contaminare la successiva.
+     p_b.day, p_b.start_slot = giorno_orig, fascia_orig
+     p_b.save()
+     assert violazioni(env["schedule"]) == set()
+ 
+     # Famiglia "indisponibilita'": un'attivita' del docente ITA spostata sulla
+     # fascia (giorno=0, fascia=1), dichiarata indisponibile hard per lui.
+     assert ResourceUnavailability.objects.filter(
+         resource=docente_ita, day=0, slot=1, level="hard").exists()
+     p_a.day, p_a.start_slot = 0, 1
+     p_a.save()
+-    codici = {codice for codice, *_ in violazioni(env["schedule"])}
++    codici = {codice for (codice, *_), _settimana in violazioni(env["schedule"])}
+     assert "unavailability" in codici
+ 
+ 
+ def _scuola_multi_firma():
+     """Due settimane con firme diverse, per disciplinare la dimensione che il
+     Fermi non esercita (una sola firma, tutto annuale). Un docente con
+     D.T.B. = 0 sulla classe; due attivita' della prima settimana forzate da
+     indisponibilita' **datate** su (giorno 0, fascia 0) e (giorno 0, fascia
+     2); una terza attivita', libera, attiva solo nella seconda settimana.
+ 
+@@ -337,20 +345,104 @@ def test_oracolo_su_istanza_multi_firma_fattibile():
+         nome: (p.day, p.start_slot)
+         for nome, att in env["attivita"].items()
+         for p in [Placement.objects.get(schedule=env["schedule"], activity=att)]
+     }
+     assert celle["A5"] == (1, 0)
+     assert celle["A6"] == (1, 0)
+     # e A1 ha dovuto chiudere il buco della settimana 0, non aprirne uno
+     assert celle["A1"] in {(0, 1), (1, 1)}
+ 
+ 
++def _due_settimane_stessa_violazione():
++    """Fissa la semantica di nuove() sul caso della review: una violazione
++    max_gap identica per codice/risorsa/quantita' su due settimane diverse.
++    Non passa dal solver — e' costruita a mano con Placement diretti, perche'
++    qui l'oggetto sotto esame e' l'helper del test, non il solver.
++
++    Griglia 1 giorno x 3 fasce, MAX_GAP_HOURS = 0 sulla classe (qualunque
++    buco e' una violazione). Settimana 0: due attivita' piazzate a fascia 0 e
++    2, buco alla fascia 1 → un finding max_gap su 'klass', quantities
++    {gap_minutes: 60, max_gap_minutes: 0}. Settimana 1: due attivita' attive
++    ma non ancora piazzate → nessuna occupazione, nessun buco, nessuna
++    violazione — finche' il chiamante non le piazza con lo stesso schema.
++
++    MaxGapChecker (domain/analysis/checkers/time_constraints.py) costruisce
++    il finding senza 'activities' nella chiave (solo resources e quantities):
++    piazzando A3/A4 con lo stesso buco, il finding della settimana 1 ha
++    esattamente la stessa Finding.key di quello della settimana 0, e
++    check_schedule li fonde in un solo oggetto con weeks=(0, 1)."""
++    grid = TimeGrid.objects.create(
++        days_per_cycle=1, slots_per_day=3, slot_minutes=60, morning_end_slot=3)
++    year = SchoolYear.objects.create(
++        start_date=dt.date(2026, 9, 14), end_date=dt.date(2026, 9, 27),
++        first_week_monday=dt.date(2026, 9, 14),
++    )
++    period = Period.objects.create(
++        school_year=year, name="P1", start_date=year.start_date, end_date=year.end_date)
++    schedule = Schedule.objects.create(period=period)
++    disc = Discipline.objects.create(code="LET", name="Lettere")
++    subject = Subject.objects.create(code="ITA", name="Italiano", discipline=disc)
++    plan = StudyPlan.objects.create(code="P1", name="Piano", year=1)
++    klass = SchoolClass.objects.create(name="1A", study_plan=plan, year=1)
++    teacher = Teacher.objects.create(name="Rossi Anna", last_name="Rossi", first_name="Anna")
++
++    prima_settimana, seconda_settimana = weeks.single_week(0), weeks.single_week(1)
++    a1 = make_activity(subject, teachers=[teacher], classes=[klass], mask=prima_settimana)
++    a2 = make_activity(subject, teachers=[teacher], classes=[klass], mask=prima_settimana)
++    a3 = make_activity(subject, teachers=[teacher], classes=[klass], mask=seconda_settimana)
++    a4 = make_activity(subject, teachers=[teacher], classes=[klass], mask=seconda_settimana)
++
++    ResourceTimeConstraint.objects.create(
++        resource=klass, type=ResourceTimeConstraint.Type.MAX_GAP_HOURS,
++        params={"max_gap_minutes": 0})
++
++    place(schedule, a1, day=0, slot=0)
++    place(schedule, a2, day=0, slot=2)
++
++    return {"schedule": schedule, "a3": a3, "a4": a4}
++
++
++def test_nuove_vede_una_violazione_ripetuta_su_unaltra_settimana():
++    """L'osservazione Important della review del Task 3: violazioni() riduce
++    ogni finding alla sua Finding.key, che esclude 'weeks' per costruzione
++    (e' pensata per il dedup fra firme dentro check_schedule). Senza
++    l'espansione per settimana, una violazione preesistente in una firma e
++    una identica — stesso codice/risorse/quantities — comparsa su un'altra
++    firma si fondono in un solo finding con weeks allargato: la chiave era
++    gia' in 'prima', quindi nuove() la perderebbe.
++
++    Qui costruiamo esattamente quel caso: 'prima' cattura la violazione della
++    settimana 0; poi piazziamo lo stesso schema di buco sulla settimana 1
++    (stessa Finding.key, weeks diverso). Se nuove() operasse sulla sola
++    chiave, il risultato sarebbe l'insieme vuoto — il finding "nuovo" e'
++    identico a quello gia' visto. Con l'espansione per (chiave, settimana),
++    nuove() deve vedere la settimana 1 come genuinamente nuova."""
++    env = _due_settimane_stessa_violazione()
++    schedule = env["schedule"]
++
++    prima = violazioni(schedule)
++    assert len(prima) == 1
++    (chiave, settimana), = prima
++    assert chiave[0] == "max_gap"
++    assert settimana == 0
++
++    # stesso schema di buco, sulla settimana 1: stessa Finding.key di prima
++    place(schedule, env["a3"], day=0, slot=0)
++    place(schedule, env["a4"], day=0, slot=2)
++
++    dopo = violazioni(schedule)
++    assert dopo == prima | {(chiave, 1)}
++
++    trovate = nuove(schedule, prima)
++    assert trovate == {(chiave, 1)}
++
++
+ def test_fermi_intero_misurato():
+     """Il Fermi ha le classi del triennio a 30 ore su una griglia di 30 fasce:
+     non e' noto se sia fattibile. Qualunque cosa il solver restituisca, deve
+     essere corretta — e le misure vanno riportate."""
+     dataset = fermi.build()
+     soluzione = solve(dataset["schedule"], time_limit=120)
+     print("\nFermi intero:", soluzione.status, soluzione.stats)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNKNOWN")
+     if soluzione.status in ("OPTIMAL", "FEASIBLE"):
+         assert soluzione.placements

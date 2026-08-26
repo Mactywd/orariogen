@@ -1,0 +1,170 @@
+# Review package: 24a544d..HEAD
+
+## Commits
+7e88822 fix(solver): giro 2 del Task 7 — bound per giorno delle mezze libere
+
+## Files changed
+ domain/solver/builders/time_counting.py | 57 +++++++++++++++++++++++++--------
+ tests/test_solver_time_minimums.py      | 55 +++++++++++++++++++++++++++++++
+ 2 files changed, 98 insertions(+), 14 deletions(-)
+
+## Diff
+diff --git a/domain/solver/builders/time_counting.py b/domain/solver/builders/time_counting.py
+index b49de1b..2a0be94 100644
+--- a/domain/solver/builders/time_counting.py
++++ b/domain/solver/builders/time_counting.py
+@@ -100,18 +100,30 @@ class MinDistributionBuilder(ResourceBuilder):
+     `min_days`, il vincolo `sum(qualificati) >= min_days` e' vacuo per
+     costruzione, mai infattibile.
+ 
+-    ⚠ Qui, e **solo qui** fra i tre minimi di questo file, l'affermazione
+-    regge senza eccezioni (review Task 7, Important 2): una congelata puo'
+-    solo *aumentare* `sum(occ)` per il giorno che occupa, mai renderlo non
++    ⚠ Qui vale una proprieta' **locale al singolo giorno** che gli altri due
++    minimi di questo file non hanno (review Task 7, Important 2 — corregge
++    un'affermazione precedente che diceva troppo): una congelata puo' solo
++    *aumentare* `sum(occ)` per il giorno che occupa, mai renderlo non
+     qualificante — non esiste un modo per una congelata di far scendere
+     `sm * sum(occ)` sotto la soglia per un giorno che altrimenti l'avrebbe
+-    superata. `ArrivalDepartureBuilder` e `FreeGuaranteedBuilder` non hanno
+-    questa proprieta': li' una congelata puo' *consumare* il minimo
+-    (occupare una fascia vietata, o un giorno/meta' che doveva restare
+-    libero), e serve il residuo per forzatura. La differenza e' nella forma
+-    del predicato: qui e' una soglia di **presenza cumulativa** (piu'
+-    occupazione aiuta sempre), la' una soglia di **assenza** (piu'
+-    occupazione puo' sempre nuocere)."""
++    superata. Ma questa proprieta' e' locale al giorno, **non implica
++    l'immunita' al passato a livello di vincolo**: il congelamento toglie
++    gradi di liberta', e puo' ridurre i giorni *distinti* raggiungibili sotto
++    `min_days`. Controesempio: 3 attivita', `min_minutes_per_day=60,
++    min_days=3` — tutte libere e' `OPTIMAL`; congelandone due sullo
++    **stesso** giorno (day 0, due fasce) restano al piu' due giorni
++    distinti raggiungibili (quello congelato e quello dell'unica libera
++    residua): `INFEASIBLE`, per colpa del passato.
++
++    `ArrivalDepartureBuilder` e `FreeGuaranteedBuilder` non hanno nemmeno la
++    proprieta' locale: li' una congelata puo' *consumare* il minimo gia' a
++    livello di un singolo giorno (occupare una fascia vietata, o un
++    giorno/meta' che doveva restare libero), e serve il residuo per
++    forzatura (`frozen_occupies`, non `residual_cap`). La differenza e'
++    nella forma del predicato: qui e' una soglia di **presenza cumulativa
++    per giorno** (piu' occupazione nello stesso giorno aiuta sempre quel
++    giorno), la' una soglia di **assenza** (piu' occupazione puo' sempre
++    nuocere)."""
+     TYPE = T.MIN_DISTRIBUTION
+ 
+     def post(self, ctx, model, row, rep):
+@@ -229,7 +241,8 @@ class FreeGuaranteedBuilder(ResourceBuilder):
+         v, key = ctx.vocab, row.resource_id
+         grid = ctx.grid
+         giorni_liberi, mezze_libere = [], []
+-        giorni_persi, mezze_perse = 0, 0
++        giorni_persi, giorni_interamente_persi = 0, 0
++        halves = v.halves()
+         for day in range(grid.days_per_cycle):
+             attivo = v.day_active(key, day, signature=rep)
+             if frozen_occupies(ctx, key, day, range(grid.slots_per_day), rep):
+@@ -238,9 +251,10 @@ class FreeGuaranteedBuilder(ResourceBuilder):
+                 libero = model.NewBoolVar(f"freeday_{key}_{rep}_{day}")
+                 model.Add(libero + attivo == 1)
+                 giorni_liberi.append(libero)
+-            for half, span in enumerate(v.halves()):
++            meta_perse_nel_giorno = 0
++            for half, span in enumerate(halves):
+                 if frozen_occupies(ctx, key, day, span, rep):
+-                    mezze_perse += 1  # quella meta' e' gia' occupata
++                    meta_perse_nel_giorno += 1  # quella meta' e' gia' occupata
+                     continue
+                 meta = v.half_active(key, day, half, signature=rep)
+                 libera = model.NewBoolVar(f"freehalf_{key}_{rep}_{day}_{half}")
+@@ -248,11 +262,26 @@ class FreeGuaranteedBuilder(ResourceBuilder):
+                 model.AddBoolAnd([attivo, meta.Not()]).OnlyEnforceIf(libera)
+                 model.AddBoolOr([attivo.Not(), meta]).OnlyEnforceIf(libera.Not())
+                 mezze_libere.append(libera)
++            # Se entrambe le meta' di questo giorno sono gia' occupate dal
++            # passato, il giorno non puo' contribuire nessuna mezza libera:
++            # e' un giorno interamente perso (review Task 7, Important 1).
++            if meta_perse_nel_giorno == len(halves):
++                giorni_interamente_persi += 1
+         minimo_giorni = row.params.get("free_days", 0)
+         if minimo_giorni:
+             soglia_giorni = min(minimo_giorni, grid.days_per_cycle - giorni_persi)
+             model.Add(sum(giorni_liberi) >= soglia_giorni)
+         minimo_mezze = row.params.get("free_half_days", 0)
+         if minimo_mezze:
+-            soglia_mezze = min(minimo_mezze, 2 * grid.days_per_cycle - mezze_perse)
++            # Il bound e' per **giorno**, non per meta': `libera = attivo AND
++            # NOT meta` puo' valere 1 al piu' una volta per giorno (se il
++            # giorno e' attivo, almeno una delle due meta' e' occupata; se e'
++            # inattivo entrambe valgono 0). Il massimo teorico e'
++            # `days_per_cycle`, non `2 * days_per_cycle` — il bound
++            # precedente sovrastimava di un fattore 2 (review Task 7,
++            # Important 1). Si sottrae poi un giorno per ciascun giorno
++            # **interamente** perso al passato (entrambe le meta' congelate):
++            # li' il massimo raggiungibile e' 0, non 1.
++            soglia_mezze = min(minimo_mezze,
++                               grid.days_per_cycle - giorni_interamente_persi)
+             model.Add(sum(mezze_libere) >= soglia_mezze)
+diff --git a/tests/test_solver_time_minimums.py b/tests/test_solver_time_minimums.py
+index 373ad89..ac02cd9 100644
+--- a/tests/test_solver_time_minimums.py
++++ b/tests/test_solver_time_minimums.py
+@@ -252,3 +252,58 @@ def test_free_guaranteed_meta_pomeriggio_vuota_normale_sulla_griglia_6():
+         params={"free_half_days": 1})
+     soluzione = solve(env["schedule"], time_limit=30)
+     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++
++
++def test_adr018_free_guaranteed_bound_delle_mezze_e_per_giorno():
++    """Important 1 del giro 1 della review Task 7. Il residuo di
++    `free_half_days` era calcolato come `2 * days_per_cycle - mezze_perse`,
++    cioe' assumendo che un giorno possa contribuire **due** mezze libere.
++    Non puo': `libera = attivo AND NOT meta`, quindi un giorno attivo ha per
++    forza almeno una meta' occupata (ne da' al massimo una libera) e un
++    giorno inattivo non ne da' nessuna — il massimo raggiungibile e'
++    `days_per_cycle`, e va tolto un giorno per ogni giorno **interamente**
++    congelato.
++
++    L'istanza: due congelate sul giorno 0, una per meta' (slot 0 mattina,
++    slot 4 pomeriggio), piu' sei attivita' libere, con `free_half_days=5`.
++    Il massimo raggiungibile e' 4 (i giorni 1..4, una mezza ciascuno): il
++    giorno 0 e' perso per intero. Col vecchio bound la soglia restava 5
++    (`min(5, 10 - 2)`) e il modello era INFEASIBLE **per colpa del solo
++    passato**, cio' che ADR-018 vieta. Col bound corretto
++    (`min(5, 5 - 1) = 4`) e' risolvibile."""
++    env = mini_school()
++    for slot in (0, 4):
++        congelata = make_activity(
++            env["subject"], teachers=[env["teacher"]], classes=[env["klass"]],
++            immobility=Activity.Immobility.LOCKED_IN_PLACE)
++        place(env["schedule"], congelata, day=0, slot=slot)
++    libere = [make_activity(env["subject"], teachers=[env["teacher"]],
++                            classes=[env["klass"]]) for _ in range(6)]
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.FREE_GUARANTEED,
++        params={"free_half_days": 5})
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    assert all(soluzione.placements[a.id] is not None for a in libere)
++
++
++def test_free_guaranteed_bound_delle_mezze_morde_ancora_senza_congelate():
++    """Controprova del test sopra: senza congelate il bound non deve
++    ammorbidire nulla. Griglia 5x6, sei attivita' libere e
++    `free_half_days=5` — il massimo raggiungibile e' esattamente 5 (una
++    mezza libera per ciascuno dei cinque giorni), quindi il vincolo e'
++    stretto e la soluzione deve lasciare almeno cinque mezze giornate
++    libere secondo il checker."""
++    env = mini_school()
++    for _ in range(6):
++        make_activity(env["subject"], teachers=[env["teacher"]],
++                      classes=[env["klass"]])
++    ResourceTimeConstraint.objects.create(
++        resource=env["klass"], type=T.FREE_GUARANTEED,
++        params={"free_half_days": 5})
++
++    soluzione = solve(env["schedule"], time_limit=30)
++    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
++    apply(soluzione, env["schedule"])
++    assert violazioni(env["schedule"], {"free_guaranteed"}) == set()

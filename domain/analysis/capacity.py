@@ -13,7 +13,7 @@ from domain.models import (
     Activity, ClassPart, Group, ResourceTimeConstraint, ResourceUnavailability,
     SchoolClass, SchoolYear, SubjectConstraint, TimeGrid,
 )
-from domain.analysis.state import activity_tokens
+from domain.analysis.state import activity_tokens, AtomMap
 
 T = SubjectConstraint.Type
 RT = ResourceTimeConstraint.Type
@@ -198,7 +198,8 @@ def analyze_capacity():
                 .select_related("subject")
                 .prefetch_related("teachers", "classes", "parts", "groups",
                                   "rooms", "staff", "material_requirements"))
-    tokens = {a.id: activity_tokens(a)[0] for a in acts}
+    atoms = AtomMap.build()
+    tokens = {a.id: activity_tokens(a, atoms=atoms)[0] for a in acts}
     teacher_sets = {a.id: frozenset(t.pk for t in a.teachers.all()) for a in acts}
     teacher_names = {t.pk: t.name
                      for a in acts for t in a.teachers.all()}
