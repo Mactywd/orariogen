@@ -248,5 +248,5 @@ def test_adr018_il_quarto_ramo_puo_rendere_il_modello_infattibile():
     SubjectConstraint.objects.create(
         subject_a=env["subject"], subject_b=matematica,
         school_class=env["klass"], type=T.SAME_DAY_INCOMPATIBLE)
-    soluzione = solve(env["schedule"])
+    soluzione = solve(env["schedule"], allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats

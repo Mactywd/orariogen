@@ -45,7 +45,19 @@ CODICI = {
     "subject_max_hours_day", "subject_weekly_order",
     "subject_imposed_succession", "subject_half_day_gap",
     "subject_parts_order",
+    # lo scarto: il solver lo decide, quindi l'oracolo lo sorveglia. Un
+    # piazzamento che c'era nella baseline e che il solve ha rinunciato a
+    # tenere e' un finding **nuovo**, e va visto.
+    "activity_unplaced",
 }
+
+# La legalita' di cio' che **e' piazzato**, separata dalla completezza
+# dell'orario. Un'attivita' fuori dall'estrazione, o che il solver ha
+# rinunciato a piazzare, non e' un'illegalita': e' un buco. I test che
+# pretendono un orario *legale* usano questo insieme; il confronto
+# differenziale di `nuove()` resta su CODICI, dove uno scarto **nuovo** —
+# qualcosa che era piazzato e non lo e' piu' — deve vedersi.
+LEGALITA = CODICI - {"activity_unplaced"}
 
 # Le tre causali del catalogo che restano **deliberatamente** fuori.
 FUORI = {
@@ -155,7 +167,7 @@ def test_oracolo_sulla_scuola_media():
     soluzione = solve(env["schedule"], time_limit=30)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     apply(soluzione, env["schedule"])
-    assert violazioni(env["schedule"]) == set()
+    assert violazioni(env["schedule"], LEGALITA) == set()
 
 
 def test_oracolo_sul_fermi_per_una_classe():
@@ -169,7 +181,7 @@ def test_oracolo_sul_fermi_per_una_classe():
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     assert len(soluzione.placements) == classe.activities.count()
     apply(soluzione, dataset["schedule"])
-    assert violazioni(dataset["schedule"]) == set()
+    assert violazioni(dataset["schedule"], LEGALITA) == set()
 
 
 def test_oracolo_puo_fallire():
@@ -187,7 +199,7 @@ def test_oracolo_puo_fallire():
     soluzione = solve(env["schedule"], time_limit=30)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     apply(soluzione, env["schedule"])
-    assert violazioni(env["schedule"]) == set()
+    assert violazioni(env["schedule"], LEGALITA) == set()
 
     ita = env["ita_activities"]  # [1A×2, 1B×2, 1C×2], stesso docente per tutte
     docente_ita = env["docenti"]["ITA"]
@@ -199,13 +211,13 @@ def test_oracolo_puo_fallire():
     giorno_orig, fascia_orig = p_b.day, p_b.start_slot
     p_b.day, p_b.start_slot = p_a.day, p_a.start_slot
     p_b.save()
-    codici = {codice for (codice, *_), _settimana in violazioni(env["schedule"])}
+    codici = {codice for (codice, *_), _settimana in violazioni(env["schedule"], LEGALITA)}
     assert "resource_occupied" in codici
 
     # Ripristino: la corruzione precedente non deve contaminare la successiva.
     p_b.day, p_b.start_slot = giorno_orig, fascia_orig
     p_b.save()
-    assert violazioni(env["schedule"]) == set()
+    assert violazioni(env["schedule"], LEGALITA) == set()
 
     # Famiglia "indisponibilita'": un'attivita' del docente ITA spostata sulla
     # fascia (giorno=0, fascia=1), dichiarata indisponibile hard per lui.
@@ -213,7 +225,7 @@ def test_oracolo_puo_fallire():
         resource=docente_ita, day=0, slot=1, level="hard").exists()
     p_a.day, p_a.start_slot = 0, 1
     p_a.save()
-    codici = {codice for (codice, *_), _settimana in violazioni(env["schedule"])}
+    codici = {codice for (codice, *_), _settimana in violazioni(env["schedule"], LEGALITA)}
     assert "unavailability" in codici
 
 
@@ -282,7 +294,11 @@ def test_oracolo_su_istanza_multi_firma():
     solver rispondeva OPTIMAL, e check_schedule bocciava il piazzamento con
     un HARD max_gap — il fallimento che questo test scopre."""
     env = _scuola_multi_firma()
-    soluzione = solve(env["schedule"], time_limit=30)
+    # `allow_unplaced=False`: la domanda qui e' «il buco e' colmabile?», e con
+    # lo scarto ammesso la risposta sarebbe «no, e allora rinuncio», che e'
+    # un'altra domanda. Il modello che pretende il piazzamento e' quello in cui
+    # l'infattibilita' e' la risposta.
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 
@@ -374,7 +390,7 @@ def test_oracolo_su_istanza_multi_firma_fattibile():
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     assert len(soluzione.placements) == len(env["attivita"])
     apply(soluzione, env["schedule"])
-    assert violazioni(env["schedule"]) == set()
+    assert violazioni(env["schedule"], LEGALITA) == set()
 
     # la prova diretta che le due firme non sono state fuse: due attivita' di
     # settimane diverse condividono docente, classe e collocazione
@@ -456,7 +472,7 @@ def test_nuove_vede_una_violazione_ripetuta_su_unaltra_settimana():
     env = _due_settimane_stessa_violazione()
     schedule = env["schedule"]
 
-    prima = violazioni(schedule)
+    prima = violazioni(schedule, LEGALITA)
     assert len(prima) == 1
     (chiave, settimana), = prima
     assert chiave[0] == "max_gap"
@@ -466,10 +482,10 @@ def test_nuove_vede_una_violazione_ripetuta_su_unaltra_settimana():
     place(schedule, env["a3"], day=0, slot=0)
     place(schedule, env["a4"], day=0, slot=2)
 
-    dopo = violazioni(schedule)
+    dopo = violazioni(schedule, LEGALITA)
     assert dopo == prima | {(chiave, 1)}
 
-    trovate = nuove(schedule, prima)
+    trovate = nuove(schedule, prima, LEGALITA)
     assert trovate == {(chiave, 1)}
 
 
@@ -483,9 +499,17 @@ def test_fermi_intero_misurato():
     `SubjectConstraint` e i quattro tetti di peso a `None`: delle ventisei
     famiglie modellate ne esercita **cinque** — griglia, indisponibilita' (42
     righe), occupazione, sedi e D.T.B. — e ventuno builder su ventisei non
-    postano nulla. Il numero lo dimostra: **8140 variabili e 1082 constraint,
-    identici a quelli dello spike a cinque vincoli** del 2026-08-09, e lo
-    stesso 0,56s.
+    postano nulla. Il numero lo dimostrava: **8140 variabili e 1082
+    constraint, identici a quelli dello spike a cinque vincoli** del
+    2026-08-09, e lo stesso 0,56s.
+
+    ⚠ Dal 2026-08-26 i numeri sono **8425 e 1083**, e la differenza e' tutta
+    la macchina dello scarto, contata: +284 booleani `piazzata` (uno per
+    attivita' libera) e +1 per i minuti scartati; i 284 `AddExactlyOne`
+    diventano 284 `somma(celle) == piazzata`, quindi sui constraint resta il
+    solo +1 dell'uguaglianza dell'obiettivo. Il resto del modello e' identico
+    a prima, ed e' la forma in cui «le quote a zero danno il modello di oggi»
+    si vede su un dataset vero.
 
     Quindi «OPTIMAL sul Fermi col modello completo» **non e' una misura del
     modello completo**: e' una misura del dataset. La misura del modello sta
@@ -502,5 +526,10 @@ def test_fermi_intero_misurato():
     assert soluzione.status in ("OPTIMAL", "FEASIBLE", "INFEASIBLE", "UNKNOWN")
     if soluzione.status in ("OPTIMAL", "FEASIBLE"):
         assert soluzione.placements
+        # Il Fermi si piazza per intero: nessuna rinuncia. Se un giorno
+        # comparisse uno scarto qui, sarebbe la notizia — non un dettaglio.
+        assert soluzione.stats["scartate"] == 0, soluzione.stats
+        assert soluzione.stats["variabili"] == 8425
+        assert soluzione.stats["constraint"] == 1083
         apply(soluzione, dataset["schedule"])
-        assert violazioni(dataset["schedule"]) == set()
+        assert violazioni(dataset["schedule"], LEGALITA) == set()

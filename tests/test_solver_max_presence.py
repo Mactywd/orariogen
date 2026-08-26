@@ -73,7 +73,7 @@ def test_la_presenza_non_si_spezza_a_cavallo_del_pranzo():
         make_activity(env["subject"], teachers=[docente], classes=[env["klass"]])
     ResourceTimeConstraint.objects.create(
         resource=env["klass"], type=T.MAX_PRESENCE, params={"max_minutes": 60})
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 
@@ -186,7 +186,7 @@ def test_max_presence_giorni_morde():
         make_activity(env["subject"], teachers=[docente], classes=[env["klass"]])
     ResourceTimeConstraint.objects.create(
         resource=env["klass"], type=T.MAX_PRESENCE, params={"days": 2})
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 

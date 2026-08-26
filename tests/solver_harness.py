@@ -354,6 +354,15 @@ def run_family(key, seed):
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), (
         f"{key} INFEASIBLE con un testimone disponibile (seed {seed}): "
         f"{soluzione.stats}")
+    # ⚠ Da quando il modello ammette lo scarto, «lo status non e' INFEASIBLE»
+    # non basta piu': una soluzione che **scarta** e' pulita per qualunque
+    # famiglia, perche' un'attivita' non piazzata non viola niente. Il
+    # testimone esiste, quindi l'ottimo e' zero scarti: se il solver ne
+    # produce, e' un builder piu' stretto del testimone travestito da
+    # successo — o un limite di tempo che morde.
+    assert soluzione.stats["scartate"] == 0, (
+        f"{key} lascia {soluzione.stats['scartate']} attivita' scartate con un "
+        f"testimone disponibile (seed {seed}): {soluzione.stats}")
 
     # 3. e qualunque soluzione restituisca dev'essere pulita
     apply(soluzione, w.schedule)
@@ -437,6 +446,16 @@ def run_tutte_le_famiglie(seed, time_limit=120):
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), (
         f"modello completo INFEASIBLE con un testimone disponibile "
         f"(seed {seed}): {soluzione.stats}")
+    # ⚠ Da quando il modello ammette lo scarto, «lo status non e' INFEASIBLE»
+    # non basta piu': una soluzione che **scarta** e' pulita per qualunque
+    # famiglia, perche' un'attivita' non piazzata non viola niente. Il
+    # testimone esiste, quindi l'ottimo e' zero scarti: se il solver ne
+    # produce, e' un builder piu' stretto del testimone travestito da
+    # successo — o un limite di tempo che morde.
+    assert soluzione.stats["scartate"] == 0, (
+        f"il modello completo lascia {soluzione.stats['scartate']} attivita' "
+        f"scartate con un testimone disponibile (seed {seed}): "
+        f"{soluzione.stats}")
 
     apply(soluzione, w.schedule)
     dopo = _hard(w.schedule, codici)
@@ -2648,7 +2667,13 @@ def run_modello_sporco(seed, time_limit=120):
         f"il passato, che ADR-018 vieta")
 
     # Prova B
-    soluzione = solve(w.schedule, time_limit=time_limit)
+    # ⚠ `workers=1`: questo banco osserva *quale* ottimo torna — la deriva
+    # d'identita' e il ramo pigro sono proprieta' della soluzione, non
+    # dell'istanza. Con la ricerca in parallelo due esecuzioni della stessa
+    # istanza danno due orari entrambi ottimi, e i test che pretendono di
+    # vedere quei fenomeni diventano rossi a intermittenza. Misurato: verdi
+    # da soli, rossi nella suite intera.
+    soluzione = solve(w.schedule, time_limit=time_limit, workers=1)
     # ⚠ Stessa ragione della prova A, e qui la vacuita' e' anche piu' insidiosa:
     # con `UNKNOWN` i piazzamenti sono vuoti, `apply()` e' un no-op dichiarato
     # (domain/solver/model.py), e l'oracolo differenziale confronta la baseline
@@ -2657,6 +2682,14 @@ def run_modello_sporco(seed, time_limit=120):
         f"solve {soluzione.status} (seed {seed}) mentre la prova A ha trovato "
         f"lo status quo: il modello libero non puo' essere piu' stretto di uno "
         f"dei suoi punti ammissibili — {soluzione.stats}")
+    # La prova A ha appena dimostrato che lo status quo — tutte le libere
+    # dov'erano — e' ammissibile: l'ottimo di L1 e' quindi zero scarti, e una
+    # soluzione che rinuncia sarebbe il modello che si sottrae invece di
+    # rispondere.
+    assert soluzione.stats["scartate"] == 0, (
+        f"il solve libero scarta {soluzione.stats['scartate']} attivita' "
+        f"(seed {seed}) mentre lo status quo le piazza tutte: "
+        f"{soluzione.stats}")
     apply(soluzione, w.schedule)
     nuove = _per_settimana(_findings(w.schedule, codici)) - prima
     deriva, pigro, vere = _classifica_nuove(nuove, prima)

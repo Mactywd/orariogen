@@ -65,7 +65,10 @@ def test_copertura_monte_ore():
     service = Service.objects.get(study_plan=env["plan"], subject=env["subject"])
     service.class_minutes = 120                            # 60' contro 120'
     service.save()
-    findings = check_schedule(env["schedule"])
+    # Da quando lo scarto e' uno stato nominato, un'attivita' mai piazzata
+    # porta il suo `activity_unplaced`: qui si guarda la copertura, non quello.
+    findings = [f for f in check_schedule(env["schedule"])
+                if f.code != "activity_unplaced"]
     assert [f.code for f in findings] == ["coverage_mismatch"]
     assert findings[0].quantities == {"expected_minutes": 120, "actual_minutes": 60}
 
@@ -73,7 +76,8 @@ def test_copertura_monte_ore():
 def test_copertura_quadrata_nessun_finding():
     env = mini_school()
     make_activity(env["subject"], classes=[env["klass"]], slots=2)
-    assert check_schedule(env["schedule"]) == []
+    assert [f for f in check_schedule(env["schedule"])
+            if f.code != "activity_unplaced"] == []
 
 
 def test_registro_completo():
@@ -87,5 +91,5 @@ def test_registro_completo():
     assert structural == {
         "structural:occupation", "structural:unavailability", "structural:grid",
         "structural:site_transition", "structural:didactic_weight",
-        "structural:coverage",
+        "structural:coverage", "structural:placement",
     }

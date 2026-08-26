@@ -21,11 +21,18 @@ def test_capienza_del_fermi_pulita():
     assert analyze_capacity() == []
 
 
-def test_conformita_su_schedule_vuoto_pulita():
-    """Senza piazzamenti, l'unico checker che potrebbe scattare è la
-    copertura: sul Fermi corretto non scatta."""
+def test_conformita_su_schedule_vuoto_e_solo_attivita_non_piazzate():
+    """Senza piazzamenti, l'unico checker che potrebbe scattare sui **dati** è
+    la copertura, e sul Fermi corretto non scatta.
+
+    ⚠ Sull'**orario**, invece, scatta `structural:placement`: 284 attività
+    tutte «Non piazzata», che è letteralmente lo stato in cui EDT le crea. È
+    la ragione per cui il checker esiste — senza, «scarta tutto» sarebbe un
+    orario pulito."""
     env = fermi.build()
-    assert check_schedule(env["schedule"]) == []
+    findings = check_schedule(env["schedule"])
+    assert {f.code for f in findings} == {"activity_unplaced"}
+    assert len(findings) == Activity.objects.count() == 284
 
 
 def test_inversione_sto_sci_rilevata():
@@ -38,7 +45,8 @@ def test_inversione_sto_sci_rilevata():
         sci = Service.objects.get(study_plan=plan, subject=env["subjects"]["SCI"])
         sto.class_minutes, sci.class_minutes = sci.class_minutes, sto.class_minutes
         sto.save(); sci.save()
-    findings = check_schedule(env["schedule"])
+    findings = [f for f in check_schedule(env["schedule"])
+                if f.code != "activity_unplaced"]   # nessun piazzamento: vedi sopra
     assert all(f.code == "coverage_mismatch" for f in findings)
     assert len(findings) == 12  # 6 classi del triennio × 2 materie
 

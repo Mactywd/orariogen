@@ -12,9 +12,13 @@ N_WEEKS = 4
 FULL = weeks.full_mask(N_WEEKS)
 
 
-def mini_school():
+def mini_school(days=5, slots=6):
+    """`days`/`slots` restringono la griglia. Servono ai test che devono
+    rendere l'istanza **sovravincolata per aritmetica** — sette ore da piazzare
+    in sei fasce — senza costruire trenta attivita' per arrivarci."""
     grid = TimeGrid.objects.create(
-        days_per_cycle=5, slots_per_day=6, slot_minutes=60, morning_end_slot=4
+        days_per_cycle=days, slots_per_day=slots, slot_minutes=60,
+        morning_end_slot=min(4, slots),
     )
     year = SchoolYear.objects.create(
         start_date=dt.date(2026, 9, 14), end_date=dt.date(2026, 10, 11),

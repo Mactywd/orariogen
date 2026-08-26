@@ -60,7 +60,8 @@ results.md             output dell'ultima esecuzione del prototipo
 requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
-  analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza
+  analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
+                        e lo scarto come stato nominato (checkers/placement.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
@@ -147,10 +148,19 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > testimone: 22–23 famiglie con righe su 26, 48–73 righe, `OPTIMAL` su tutti e
 > cinque i seed, oracolo pulito.
 >
-> Restano i **tre pezzi dichiarati fuori**: l'assegnazione delle aule, gli
-> alleggerimenti a quota con l'ottimizzazione lessicografica, e il violatore di
-> Hall (che non usa il solver: è un conteggio di capienza). Più i punti aperti
-> elencati sotto.
+> Dal 2026-08-26 è **in corso il pezzo 3** — alleggerimenti a quota e
+> ottimizzazione lessicografica
+> ([spec](docs/superpowers/specs/2026-08-26-alleggerimenti-lessicografico-design.md),
+> [piano](docs/superpowers/plans/2026-08-26-alleggerimenti-lessicografico.md)):
+> la prima delle sette ondate è fatta, e il modello **ha smesso di pretendere
+> il piazzamento**. `AddExactlyOne` è diventato `somma(celle) == piazzata`,
+> l'attività che non ci sta resta **scartata** e un checker la nomina
+> (`structural:placement`, ventottesimo del registro), e L1 minimizza le ore
+> scartate. **458 test verdi**, 16 skip.
+>
+> Restano i **due pezzi dichiarati fuori** — l'assegnazione delle aule e il
+> violatore di Hall (che non usa il solver: è un conteggio di capienza) — più
+> le sei ondate restanti del pezzo 3 e i punti aperti elencati sotto.
 
 ### Prototipo solver — parcheggiato
 
@@ -364,9 +374,15 @@ delle aule e il violatore di Hall. Vedi
       **strettamente** — solo un peggioramento su una (causale, risorsa) già
       violata, mai una violazione su una risorsa pulita.
 
-- [ ] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
+- [~] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
       piazzamento**, e il tetto **settimanale** del peso didattico è il primo
-      caso incontrato. `AddExactlyOne` obbliga a piazzare ogni attività, e il
+      caso incontrato. ⚠ **Metà chiuso il 2026-08-26 (pezzo 3, ondata 1)**: la
+      «somma costante» che rendeva il vincolo vero-sempre o falso-sempre era
+      `AddExactlyOne`. Con lo scarto ammesso il tetto torna evadibile come lo
+      evade EDT — scartando — e la chiave grossolana diventa una scelta invece
+      di un obbligo. Resta il caso in cui a sforare sono le **sole congelate**,
+      che è un fatto e non una decisione. Il testo che segue è quello
+      originale, e vale per quella metà. `AddExactlyOne` obbliga a piazzare ogni attività, e il
       secchio settimanale di un'unità-studente contiene *tutte* le sue celle
       candidate: la somma dei letterali liberi è quindi una **costante**, e il
       vincolo è vero sempre o falso sempre. Ne discendono due cose. La prima è
@@ -408,6 +424,93 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, pezzo 3)** — **Il modello smette di pretendere il
+  piazzamento.** Comincia il **pezzo 3** — alleggerimenti a quota e
+  ottimizzazione lessicografica — con la spec
+  ([design](docs/superpowers/specs/2026-08-26-alleggerimenti-lessicografico-design.md))
+  e le sue quattro decisioni chiuse in sessione: **L1 conta le ore** (il numero
+  di attività è lo spareggio), lo scarto è **`HARD`**, il ramo pigro di §9.7 si
+  chiude dentro **L3**, la stabilità fra periodi è **L4** di questa catena. Poi
+  la prima delle sette ondate: `AddExactlyOne` diventa
+  `somma(celle) == piazzata`, e ciò che non ci sta resta **scartato** invece di
+  rendere infattibile tutto l'orario.
+
+  ⚠ **Lo scarto va nominato, o l'oracolo diventa vacuo** — previsto scrivendo
+  la spec, non scoperto dopo. In `domain/analysis` non esisteva alcuna causale
+  sul non-piazzamento e nessun checker guardava le attività prive di
+  `Placement` (l'occupazione si costruisce **dai** piazzamenti): appena cade
+  `AddExactlyOne`, «scarta tutto» è una soluzione con zero occupazioni, zero
+  findings, verde. Da qui `structural:placement`. **Il registro ha ora 28
+  checker e 26 builder**, e la seconda assenza è dichiarata da un test come la
+  prima: la traduzione dello scarto esiste — è `somma(celle) == piazzata` — ma
+  non è un builder, perché crea le **variabili di decisione** e deve esistere
+  prima che qualunque builder giri (`vocabulary.pos` la legge).
+
+  🔑 **Il «tetto inevadibile» di §9.5 era inevadibile per colpa di
+  `AddExactlyOne`.** L'argomento diceva che le libere «vanno collocate, e
+  ovunque vadano pesano»: vero solo finché il piazzamento è obbligatorio. Con
+  `somma(celle) == piazzata` la somma dei letterali liberi torna a dipendere
+  dalle decisioni, e il tetto settimanale del peso didattico torna evadibile
+  **nel modo in cui lo evade EDT: scartando**. La chiave grossolana per le
+  famiglie indipendenti dal piazzamento diventa una scelta invece di un
+  obbligo. ⚠ Resta la metà delle congelate, che è un fatto e non una decisione.
+
+  ⚠ **E la regola della casa cambia forma.** «Forza la violazione e attendi
+  `INFEASIBLE`» smette di funzionare: con lo scarto ammesso la risposta a una
+  violazione forzata non è l'infattibilità ma la **rinuncia** — misurato,
+  `OPTIMAL` con esattamente uno scarto in 23 test su 27 rossi. Da qui
+  `build_model(allow_unplaced=False)`, che è il modello di prima e resta il
+  modo di chiedere «questo vincolo morde?». I 23 test lo usano; la domanda che
+  ponevano è intatta.
+
+  ⚠ **Il banco a testimone si era indebolito in silenzio**, ed è la forma
+  vecchia del difetto nuovo: cancella i piazzamenti, risolve e controlla che la
+  soluzione sia pulita per la famiglia — ma **una soluzione che scarta è pulita
+  per qualunque famiglia**, perché un'attività non piazzata non viola niente.
+  Il testimone esiste, quindi l'ottimo è zero scarti: preteso in tre punti
+  (`run_family`, `run_tutte_le_famiglie`, prova B del banco che congela).
+
+  🔑 **La presolve espandeva l'obiettivo, e il banco ci passava dentro senza
+  accorgersene.** Quattro test del testimone erano passati da ~0,5 s a **60 s
+  esatti** — il limite di tempo — restando verdi. Il log lo dice per nome:
+  *«objective: expanded via tight equality»*, 36 volte su un testimone da 32
+  attività. I 32 booleani `piazzata` spariscono dall'obiettivo e al loro posto
+  entrano **723 letterali di cella**; il dominio iniziale passa da `[0, 660]` a
+  `[-35460, 2040]`. Il solver trova `best:0` in un decimo di secondo e poi
+  spende un minuto a dimostrare che non esiste un ottimo negativo — vero per
+  costruzione, ma non più per lui. Con `presolve_substitution_level = 0`:
+  **`OPTIMAL` in 0,09 s**. ⚠ Il dominio dichiarato di un `IntVar` da solo
+  **non basta** (misurato: bound −720, tempo pieno), e nemmeno `AddHint` sui
+  `piazzata` (nessun guadagno: rimosso, perché un meccanismo che nessuna misura
+  giustifica è peso morto).
+
+  ⚠ **I due fenomeni del banco sporco dipendono da *quale* ottimo torna, e
+  CP-SAT in parallelo non è riproducibile.** La deriva d'identità e il ramo
+  pigro si sono spostati di seme due volte in una sessione — una per
+  l'obiettivo, una per la presolve — e la prima volta erano **verdi da soli e
+  rossi nella suite intera**. Non era il seme: con più lavoratori CP-SAT
+  restituisce l'ottimo che il primo thread trova. Da qui `workers=1` nella
+  prova B (e il parametro su `solve()`); rimisurati due volte di fila con lo
+  stesso esito, il ramo pigro sta al **20** (e al 35, 41, 45, 52), la deriva
+  d'identità all'**11**, unica su sessanta semi.
+
+  ⚠ **Due mutazioni hanno bocciato metà del lavoro nuovo, di nuovo.** Il test
+  su `apply()` che cancella il piazzamento di ciò che è stato scartato
+  **restava verde** con la cancellazione rimossa: l'attività scartata non aveva
+  una riga da cancellare. E i due guardiani di `pos` — la sentinella «oltre la
+  griglia» e la guardia del builder d'ordine — erano coperti da **un solo**
+  test che nessuna delle due mutazioni faceva diventare rosso, perché in
+  quell'istanza ciascun meccanismo bastava da solo. Separati in due test, uno
+  per meccanismo, ciascuno ucciso dalla propria mutazione.
+
+  **I numeri.** Fermi: `OPTIMAL`, **zero scarti**, 0,74 s, **8425 variabili e
+  1083 constraint** — la differenza dai vecchi 8140/1082 è tutta la macchina
+  dello scarto, contata: +284 booleani `piazzata`, +1 per i minuti scartati, e
+  sui constraint il solo +1 dell'obiettivo (i 284 `AddExactlyOne` sono
+  diventati 284 uguaglianze). Suite: **458 test verdi**, 16 skip, e il tempo
+  totale è **quello di prima** (74,8 s contro 74,6 s) — che è il vero verdetto
+  sulla riparazione della presolve.
 
 - **2026-08-26 (notte)** — **La review della PR #1, e il gemello del difetto
   nella famiglia che il banco non poteva vedere.** Quattro rilievi sistemati

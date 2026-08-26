@@ -71,11 +71,16 @@ def test_l_attivita_congelata_non_viene_ripulita():
     assert soluzione.placements[a.id] == (0, 3)   # il piazzamento esistente e' un dato
 
 
-def test_dominio_azzerato_dai_prefiltri_da_infeasible():
+def test_dominio_azzerato_dai_prefiltri_da_uno_scarto():
+    """Un docente indisponibile tutta la settimana: nessuna cella sopravvive
+    al pre-filtro. L'attivita' resta scartata, e con `allow_unplaced=False` —
+    il modello che pretende il piazzamento — torna a essere infattibile."""
     env = mini_school()
     for giorno in range(5):
         for fascia in range(6):
             ResourceUnavailability.objects.create(
                 resource=env["teacher"], day=giorno, slot=fascia, level="hard")
-    make_activity(env["subject"], teachers=[env["teacher"]])
-    assert solve(env["schedule"]).status == "INFEASIBLE"
+    a = make_activity(env["subject"], teachers=[env["teacher"]])
+    soluzione = solve(env["schedule"])
+    assert soluzione.unplaced == (a.id,), soluzione.stats
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"

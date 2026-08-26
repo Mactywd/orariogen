@@ -89,19 +89,44 @@ def test_modello_sporco(seed):
           f"{esiti['soluzione'].status}")
 
 
-def test_le_due_esenzioni_sono_esercitate():
+def test_l_esenzione_del_ramo_pigro_e_esercitata():
     """Un'esenzione che non scatta mai non e' un'esenzione: e' codice che
-    nessun test afferma. Qui si pretende che entrambe scattino su un seme
-    dichiarato, cosi' che toglierle faccia diventare rosso qualcosa.
+    nessun test afferma. Qui si pretende che scatti su un seme dichiarato,
+    cosi' che toglierla faccia diventare rosso qualcosa.
 
-    ⚠ Il seme 20 e' l'unico dei dieci a esercitarle entrambe. Se cambia, va
-    rimisurato — non rimosso."""
+    ⚠ Fino al 2026-08-26 il seme 20 esercitava **entrambe** le esenzioni, e
+    il test era uno solo. Con lo scarto ammesso e L1 attivo i due fenomeni si
+    sono separati, perche' sono proprieta' della **soluzione restituita**, non
+    dell'istanza: cambia l'obiettivo, cambia l'ottimo che il solver sceglie,
+    si spostano.
+
+    ⚠⚠ E la prima volta che li si e' rimisurati erano ancora **instabili fra
+    un'esecuzione e l'altra**: verdi da soli, rossi nella suite intera. Non
+    era il seme, era la ricerca in parallelo — con piu' lavoratori CP-SAT
+    restituisce l'ottimo che il primo thread trova. Da qui `workers=1` nella
+    prova B del banco (vedi `solver_harness.run_modello_sporco`): rimisurati
+    due volte di fila con lo stesso esito, il ramo pigro sta al 20 (e al 35,
+    41, 45, 52) e la deriva d'identita' all'11, unico su sessanta semi."""
     esito = run_modello_sporco(20)
     assert esito is not None
     _w, _congelate, _libere, esiti = esito
-    assert esiti["deriva"], (
-        "nessuna deriva d'identita' al seme 20: l'esenzione `_grossa` non e' "
-        "piu' esercitata da nessun test")
     assert esiti["pigro"], (
         "nessun ramo pigro al seme 20: l'esenzione sul debito di §9.7 non e' "
-        "piu' esercitata da nessun test")
+        "piu' esercitata da nessun test — rimisurare i semi, non togliere il "
+        "test")
+
+
+def test_l_esenzione_della_deriva_d_identita_e_esercitata():
+    """L'altra meta' del test di sopra, sul seme che la esercita oggi (11):
+    ⚠ **uno solo su sessanta semi provati**, quindi il piu' fragile dei due —
+    se sparisce, si riscansiona prima di concludere qualunque cosa.
+    stessa causale, stessa risorsa, stesse quantita', **altra** coppia
+    nominata in `activities` — il finding cambia identita' senza che la
+    violazione cambi."""
+    esito = run_modello_sporco(11)
+    assert esito is not None
+    _w, _congelate, _libere, esiti = esito
+    assert esiti["deriva"], (
+        "nessuna deriva d'identita' al seme 11: l'esenzione `_grossa` non e' "
+        "piu' esercitata da nessun test — rimisurare i semi, non togliere il "
+        "test")

@@ -43,12 +43,27 @@ def test_structural_coverage_non_ha_un_builder_ed_e_voluto():
     assert "structural:coverage" not in BUILDERS
 
 
+def test_structural_placement_non_ha_un_builder_ed_e_voluto():
+    """`PlacementChecker` nomina le attivita' scartate. La sua traduzione
+    esiste — e' `somma(celle) == piazzata` — ma **non e' un builder**: crea le
+    variabili di decisione stesse, quindi deve stare in `build_model`, dove
+    nascono le `x`, e deve esistere **prima** che qualunque builder giri
+    (`vocabulary.pos` la legge). Un builder che la postasse dopo arriverebbe
+    tardi per costruzione.
+
+    Come per `structural:coverage`, l'assenza e' dichiarata qui perche' non
+    sembri una dimenticanza."""
+    assert "structural:placement" in CHECKERS
+    assert "structural:placement" not in BUILDERS
+
+
 def test_il_registro_dei_builder_e_completo():
-    """Ventisei chiavi su ventisette. Il numero e' scritto qui apposta: se
+    """Ventisei chiavi su ventotto. I numeri sono scritti qui apposta: se
     un checker nuovo entra in `domain/analysis` senza il builder
     corrispondente, questo test lo dice per nome."""
+    senza_builder = {"structural:coverage", "structural:placement"}
     mancanti = sorted(str(k) for k in CHECKERS
-                      if k not in BUILDERS and k != "structural:coverage")
+                      if k not in BUILDERS and k not in senza_builder)
     assert mancanti == []
-    assert len(CHECKERS) == 27
+    assert len(CHECKERS) == 28
     assert len(BUILDERS) == 26

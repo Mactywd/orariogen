@@ -192,21 +192,64 @@ class Vocabulary:
     # --- posizione e sede -------------------------------------------------
 
     def pos(self, aid):
-        """giorno * slots_per_day + fascia di inizio, canalizzato da x."""
+        """giorno * slots_per_day + fascia di inizio, canalizzato da x.
+
+        ⚠ La canalizzazione `var == somma(posizione * x)` vale **solo** finche'
+        esattamente un letterale e' a 1. Da quando il modello ammette lo scarto
+        (spec pezzo 3, §2.1) non e' piu' garantito: un'attivita' scartata ha
+        tutti i letterali a zero, e la somma varrebbe zero — cioe' «giorno 0,
+        fascia 0», che e' una posizione **vera** e la piu' precoce di tutte.
+        Un builder d'ordine crederebbe che la scartata preceda tutto; e dove il
+        dominio non contiene quella cella il modello diventerebbe infattibile
+        proprio quando lo scarto e' la via d'uscita.
+
+        Quindi la scartata vale `fuori` — una posizione oltre l'ultima della
+        griglia, che ordina **dopo** ogni collocazione reale. E' il verso
+        giusto: i checker d'ordine leggono le sole occorrenze piazzate
+        (`_placed_of`), quindi una scartata non deve mai *anticipare* nulla.
+        ⚠ Non basta da solo: un lato interamente scartato va escluso dal
+        vincolo, e quello lo fa il builder (`subject_order.py`)."""
         def make():
             cells = sorted(self.ctx.cells[aid])
             width = self.ctx.grid.slots_per_day
+            fuori = self.ctx.grid.days_per_cycle * width
             if not cells:
-                # dominio vuoto: build_model ha gia' reso il modello
-                # infattibile in modo esplicito, qui basta non rompere
-                return self.model.NewIntVar(0, 0, f"pos_{aid}")
+                # dominio vuoto: nessuna cella sopravvive ai pre-filtri, quindi
+                # l'attivita' e' scartata per costruzione.
+                return self.model.NewIntVar(fuori, fuori, f"pos_{aid}")
             values = [day * width + slot for (day, slot) in cells]
-            var = self.model.NewIntVar(min(values), max(values), f"pos_{aid}")
-            self.model.Add(var == sum(
-                (day * width + slot) * self.ctx.x[(aid, day, slot)]
-                for (day, slot) in cells))
+            canale = sum((day * width + slot) * self.ctx.x[(aid, day, slot)]
+                         for (day, slot) in cells)
+            piazzata = self.ctx.placed_var.get(aid)
+            if piazzata is None:
+                # congelata: piazzata per costruzione, la somma vale sempre 1.
+                var = self.model.NewIntVar(min(values), max(values), f"pos_{aid}")
+                self.model.Add(var == canale)
+                return var
+            var = self.model.NewIntVar(min(values), fuori, f"pos_{aid}")
+            self.model.Add(var == canale).OnlyEnforceIf(piazzata)
+            self.model.Add(var == fuori).OnlyEnforceIf(piazzata.Not())
             return var
         return self._memo("pos", aid, make)
+
+    def qualcuna_piazzata(self, aids):
+        """Letterale «almeno una di queste attivita' e' piazzata», o `None` se
+        la risposta e' sempre si' (c'e' almeno una congelata fra loro).
+
+        Serve ai vincoli che i checker valutano **sulle sole occorrenze
+        piazzate** e dichiarano vacui quando non ce ne sono
+        (`if not a or not b: return`, WeeklyOrderChecker)."""
+        aids = tuple(sorted(aids))
+        def make():
+            lits = [self.ctx.placed_var[aid] for aid in aids
+                    if aid in self.ctx.placed_var]
+            if len(lits) < len(aids):
+                return None
+            if not lits:
+                return None
+            var = self.model.NewBoolVar(f"qualcuna_{hash(aids) & 0xffff}")
+            return self._max_or_zero(var, lits)
+        return self._memo("qualcuna", aids, make)
 
     def site_occupied(self, key, day, slot, site_id, signature=None):
         """Un'attivita' di sede `site_id` occupa quella cella."""

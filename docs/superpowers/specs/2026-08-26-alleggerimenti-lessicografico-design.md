@@ -3,7 +3,8 @@
 **Data.** 2026-08-26
 **Stato.** Bozza. Le **quattro decisioni aperte sono state chiuse in sessione**
 il 2026-08-26 (D1–D4, marcate «deciso» dove comparivano); il resto del documento
-resta rivedibile.
+resta rivedibile. **L'ondata 1 è implementata** — vedi il piano e il changelog
+di `CLAUDE.md`; §2 è quindi consuntivo, non progetto.
 **Segue.** Il modello hard completo ([spec](2026-08-24-modello-hard-completo-design.md),
 merge `528cebe`): ventisei builder su ventisette, 450 test verdi.
 **Precede.** Il piano di implementazione (§7).

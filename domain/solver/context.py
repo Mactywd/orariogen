@@ -27,6 +27,7 @@ class SolverContext:
     time_rows: list           # righe ResourceTimeConstraint
     subject_rows: list        # [(riga SubjectConstraint, unit_keys precalcolate)]
     x: dict = field(default_factory=dict)        # (id, giorno, fascia) → BoolVar
+    placed_var: dict = field(default_factory=dict)  # id → BoolVar «piazzata», solo le libere
     by_cell: dict = field(default_factory=dict)  # (chiave, giorno, fascia) → [(id, letterale)]
     vocab: object = None      # Vocabulary, assegnato da build_model
 

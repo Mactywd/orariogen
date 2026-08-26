@@ -140,7 +140,7 @@ def test_il_tetto_settimanale_di_istituto_morde():
 
     InstituteSettings.objects.update_or_create(
         pk=1, defaults={"max_weight_week": 5})
-    assert _infeasible(build_model(env["schedule"])[0])
+    assert _infeasible(build_model(env["schedule"], allow_unplaced=False)[0])
 
 
 def test_il_tetto_della_classe_prevale_su_quello_di_istituto():
@@ -163,7 +163,7 @@ def test_il_tetto_della_classe_prevale_su_quello_di_istituto():
 
     SchoolClass.objects.filter(pk=env["klass"].pk).update(
         max_weekly_weight_per_student=4)
-    assert _infeasible(build_model(env["schedule"])[0])
+    assert _infeasible(build_model(env["schedule"], allow_unplaced=False)[0])
 
     InstituteSettings.objects.update_or_create(
         pk=1, defaults={"max_weight_week": 4})
@@ -197,7 +197,7 @@ def test_il_tetto_della_classe_si_trova_passando_dalla_parte():
     SchoolClass.objects.filter(pk=env["klass"].pk).update(
         max_weekly_weight_per_student=3)
 
-    assert _infeasible(build_model(env["schedule"])[0])
+    assert _infeasible(build_model(env["schedule"], allow_unplaced=False)[0])
 
     SchoolClass.objects.filter(pk=env["klass"].pk).update(
         max_weekly_weight_per_student=4)
@@ -349,10 +349,10 @@ def test_il_tetto_settimanale_morde_quando_il_colpevole_non_e_il_passato():
     InstituteSettings.objects.update_or_create(
         pk=1, defaults={"max_weight_week": 3})
 
-    assert _infeasible(build_model(env["schedule"])[0])
+    assert _infeasible(build_model(env["schedule"], allow_unplaced=False)[0])
 
     InstituteSettings.objects.update_or_create(
         pk=1, defaults={"max_weight_week": 6})
-    assert _feasible(build_model(env["schedule"])[0]), (
+    assert _feasible(build_model(env["schedule"], allow_unplaced=False)[0]), (
         "col tetto a 6 le tre attivita' ci stanno: l'INFEASIBLE di sopra "
         "dev'essere il tetto, non altro")

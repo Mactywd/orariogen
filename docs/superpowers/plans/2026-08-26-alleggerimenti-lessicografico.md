@@ -46,25 +46,34 @@ pytest + `pytest-django`. Nessuna nuova dipendenza.
    `INFEASIBLE`.** Mai «risolvi e guarda dove è finita»: è un rilevatore
    debole, misurato 1 su 11 nella spec precedente.
 
-## Task 1 — Lo scarto, con L1 attaccato
+## Task 1 — Lo scarto, con L1 attaccato ✅ (2026-08-26)
 
 ⚠ L'obiettivo non è un miglioramento di questo task: è ciò che lo rende un
 task. Senza, «scarta tutto» è ammissibile e CP-SAT la restituisce.
 
-- [ ] `causali.py`: la causale dello scarto.
-- [ ] `domain/analysis/checkers/placement.py`: `structural:placement`, un
+- [x] `causali.py`: la causale dello scarto (`activity_unplaced`).
+- [x] `domain/analysis/checkers/placement.py`: `structural:placement`, un
       finding `HARD` per ogni attività senza piazzamento.
-- [ ] `model.py`: `piazzata[aid]`, `sum(lits) == piazzata`, e il ramo del
+- [x] `model.py`: `piazzata[aid]`, `sum(lits) == piazzata`, e il ramo del
       dominio vuoto che diventa uno scarto invece di un'infattibilità.
-- [ ] Il builder registrato sotto `structural:placement`, così che il registro
-      resti in parità e `test_solver_registry_completo` continui a dichiarare
-      **un solo** checker senza builder.
-- [ ] L1: minimizza le **ore** scartate.
-- [ ] I due test di §2.1 riscritti: dimostrano lo stesso dominio vuoto,
-      pretendendo lo scarto nominato.
-- [ ] Un test che pretende che il Fermi resti a **zero scarti**.
-- [ ] Un test che pretende che un'istanza infattibile dia scarti **contati**,
-      non solo «status diverso da INFEASIBLE».
+- [x] ~~Il builder registrato sotto `structural:placement`~~ → **no**: la
+      traduzione esiste ma non è un builder, perché crea le variabili di
+      decisione e deve esistere prima che qualunque builder giri
+      (`vocabulary.pos` la legge). Seconda assenza **dichiarata** da un test.
+- [x] L1: minimizza le **ore** scartate.
+- [x] I due test del dominio vuoto riscritti, più il loro gemello con
+      `allow_unplaced=False`.
+- [x] Il Fermi resta a **zero scarti** (e i numeri del modello aggiornati:
+      8425 variabili, 1083 constraint — +284 `piazzata`, +1 obiettivo).
+- [x] Un test che pretende scarti **contati**, non «status diverso da
+      INFEASIBLE».
+- [x] *(non previsto)* `allow_unplaced=False`: il modello che pretende il
+      piazzamento, per i 23 test che dimostrano che un vincolo morde.
+- [x] *(non previsto)* Il banco a testimone pretende **zero scarti** in tre
+      punti: una soluzione che scarta è pulita per qualunque famiglia, quindi
+      senza quell'assert il banco si era indebolito in silenzio.
+- [x] *(non previsto)* `presolve_substitution_level = 0` e `workers=1` nel
+      banco. Le due misure sono nel changelog.
 
 ## Task 2 — La catena
 
