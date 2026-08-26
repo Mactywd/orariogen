@@ -2635,17 +2635,27 @@ def run_modello_sporco(seed, time_limit=120):
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = float(time_limit)
     stato = solver.Solve(model)
-    assert stato != cp_model.INFEASIBLE, (
-        f"il modello rifiuta lo status quo (seed {seed}): con "
-        f"{len(congelate)} congelate in violazione e {len(libere)} libere, "
-        f"rimetterle dove stavano non aggiunge nessuna violazione — "
-        f"rifiutarlo e' pretendere che riparino il passato, che ADR-018 vieta")
+    # ⚠ `in (OPTIMAL, FEASIBLE)`, non `!= INFEASIBLE`: `UNKNOWN` e' un
+    # fallimento come il rifiuto. Senza una soluzione la prova non ha misurato
+    # niente, e la forma `!= INFEASIBLE` la faceva passare in silenzio appena
+    # il limite di tempo mordeva — cioe' proprio il criterio con cui questo
+    # file ha bocciato `test_famiglia_con_congelate` (review della PR #1).
+    assert stato in (cp_model.OPTIMAL, cp_model.FEASIBLE), (
+        f"la prova A non ha trovato lo status quo (seed {seed}, stato "
+        f"{solver.StatusName(stato)}): con {len(congelate)} congelate in "
+        f"violazione e {len(libere)} libere, rimetterle dove stavano non "
+        f"aggiunge nessuna violazione — rifiutarlo e' pretendere che riparino "
+        f"il passato, che ADR-018 vieta")
 
     # Prova B
     soluzione = solve(w.schedule, time_limit=time_limit)
-    assert soluzione.status != "INFEASIBLE", (
-        f"solve INFEASIBLE (seed {seed}) mentre la prova A ha trovato lo "
-        f"status quo: il modello libero non puo' essere piu' stretto di uno "
+    # ⚠ Stessa ragione della prova A, e qui la vacuita' e' anche piu' insidiosa:
+    # con `UNKNOWN` i piazzamenti sono vuoti, `apply()` e' un no-op dichiarato
+    # (domain/solver/model.py), e l'oracolo differenziale confronta la baseline
+    # pre-solve con se' stessa — verde per non aver misurato niente.
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), (
+        f"solve {soluzione.status} (seed {seed}) mentre la prova A ha trovato "
+        f"lo status quo: il modello libero non puo' essere piu' stretto di uno "
         f"dei suoi punti ammissibili — {soluzione.stats}")
     apply(soluzione, w.schedule)
     nuove = _per_settimana(_findings(w.schedule, codici)) - prima

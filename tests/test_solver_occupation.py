@@ -2,7 +2,11 @@
 import pytest
 
 from domain import weeks
-from domain.models import ClassPart, ClassPartition, Material, Room
+from domain.analysis.conformity import check_schedule
+from domain.analysis.findings import Severity
+from domain.models import (
+    Activity, ClassPart, ClassPartition, Material, Placement, Room,
+)
 from domain.models.activities import ActivityMaterialRequirement
 from domain.solver.model import solve
 from tests.analysis_helpers import FULL, make_activity, mini_school
@@ -99,3 +103,43 @@ def test_parti_della_stessa_partizione_possono_coincidere():
     soluzione = solve(env["schedule"])
     assert soluzione.status in ("OPTIMAL", "FEASIBLE")
     assert _stessa_cella(soluzione, a, b)
+
+
+def test_adr018_due_congelate_in_conflitto_non_bloccano_la_libera():
+    """⚠ Trovato dalla review della PR #1 (2026-08-26), ed e' lo **stesso**
+    difetto di `SiteTransitionBuilder`: il gate `any_free` guarda chi **tocca**
+    la cella, non chi ne **realizza** la saturazione.
+
+    Due congelate sulla stessa cella dello stesso docente sono gia' una
+    violazione — il checker la nomina, `resource_occupied_locked`, ed e' HARD.
+    Bastava pero' una libera che potesse toccare quella cella perche' il
+    vincolo venisse postato come `costante + libere <= 1` con la sola costante
+    a 2: `INFEASIBLE` per colpa del solo passato, cioe' la meta' vietata di
+    ADR-018.
+
+    ⚠ Il banco che congela non poteva trovarlo: `sporca()` ripacka solo in
+    celle libere da conflitti di occupazione, e lo asserisce.
+
+    Il residuo clampato dice anche **cosa** deve succedere, non solo che non
+    si deve rompere: la cella e' satura per il passato, quindi la libera va
+    altrove — non ci si aggiunge sopra."""
+    env = mini_school()
+    congelate = [
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      immobility=Activity.Immobility.LOCKED_IN_PLACE)
+        for _ in range(2)
+    ]
+    for a in congelate:
+        Placement.objects.create(schedule=env["schedule"], activity=a,
+                                 day=0, start_slot=0)
+    libera = make_activity(env["subject"], teachers=[env["teacher"]])
+
+    # la premessa: senza la violazione gia' nella baseline il test passerebbe
+    # per il motivo sbagliato.
+    prima = [f for f in check_schedule(env["schedule"])
+             if f.severity == Severity.HARD and f.code == "resource_occupied_locked"]
+    assert prima, "il passato non e' in violazione: il test non misura ADR-018"
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    assert soluzione.placements[libera.id] != (0, 0)   # residuo zero, non 1

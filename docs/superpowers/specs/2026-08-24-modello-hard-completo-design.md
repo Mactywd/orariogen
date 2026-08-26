@@ -666,7 +666,16 @@ sorveglia i builder troppo stretti, ed è quello che ha trovato più difetti.
   ⚠ Il banco **non sostituisce** i test scritti a mano: sul clamp di
   `residual_cap` non aggiunge un solo rosso (misurato su sette mutazioni).
   Aggiunge la sola cosa che nessuno di loro sapeva fare — trovare un difetto
-  che nessuno cercava. ⚠ E la stessa misura ha **bocciato metà del banco**: un
+  che nessuno cercava.
+  ⚠ **E ha una cecità, misurata dalla review (2026-08-26 notte): la chiusura
+  non è totale.** `sporca()` ripacka **solo** in celle libere da conflitti di
+  occupazione — è ciò che rende lo status quo un'assegnazione ancora
+  disponibile — e lo asserisce. Quindi il banco non produce mai una baseline
+  con `resource_occupied_locked`, e `OccupationBuilder` era rimasto con lo
+  stesso difetto di `SiteTransitionBuilder` («tocca» contro «realizza»):
+  trovato rileggendo, non misurando, e corretto con `residual_cap`. Regola
+  generale da portarsi dietro: **un banco che si costruisce escludendo una
+  famiglia non la copre**, e va scritto dove non guarda. ⚠ E la stessa misura ha **bocciato metà del banco**: un
   secondo `test_famiglia_con_congelate` su baseline pulita, 78 test e 28
   secondi, non è diventato rosso su nessuna delle sette mutazioni ed è stato
   rimosso.

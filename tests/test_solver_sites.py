@@ -21,7 +21,7 @@ import pytest
 from domain.analysis.conformity import check_schedule
 from domain.analysis.findings import Severity
 from domain.models import (
-    Activity, InstituteSettings, Placement, ResourceTimeConstraint, Site,
+    Activity, InstituteSettings, Placement, ResourceTimeConstraint, Room, Site,
 )
 from domain.solver.model import solve
 from tests.analysis_helpers import make_activity, mini_school
@@ -328,6 +328,43 @@ def test_adr018_site_transition_gia_violato_dalle_congelate_non_blocca():
     # la premessa: il checker vede gia' la violazione, e la vede sulle sole
     # congelate. Senza questo assert il test potrebbe passare per il motivo
     # sbagliato (nessuna violazione da riparare, quindi nessuna clausola).
+    prima = [f for f in check_schedule(env["schedule"])
+             if f.code == "site_transition" and f.severity == Severity.HARD]
+    assert prima, "il passato non e' in violazione: il test non misura ADR-018"
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    assert libera.id in soluzione.placements
+
+
+def test_adr018_site_transition_due_sedi_gia_sulla_stessa_fascia_non_blocca():
+    """Il gemello del test qui sopra sul ramo **`s == t`** del builder — la
+    meta' del guardiano che il caso ridotto al seme 38 non tocca.
+
+    ⚠ Aggiunto dalla review della PR #1 dopo averlo **misurato**: rimuovendo
+    solo il `continue` di quel ramo, e lasciando l'altro, la suite intera
+    restava verde. Meta' del guardiano non era asserita da niente.
+
+    `site_transition_slots` a zero, cosi' il ramo `s < t` e' interamente
+    vacuo e resta in piedi solo la clausola «due sedi diverse sulla stessa
+    fascia», che il builder posta indipendentemente da `needed`. Il ramo e'
+    raggiungibile solo a capienza simultanea > 1 (a capienza 1
+    `structural:occupation` vieta gia' la coincidenza), quindi le due
+    congelate condividono un'aula da due posti e nient'altro: nessun docente,
+    nessuna classe in comune."""
+    env = mini_school()
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"site_transition_slots": 0})
+    palestra = Room.objects.create(name="PALESTRA", simultaneous_capacity=2)
+    a_site = Site.objects.create(name="A")
+    b_site = Site.objects.create(name="B")
+    for sede in (a_site, b_site):
+        attivita = make_activity(env["subject"], rooms=[palestra], site=sede,
+                                 immobility=Activity.Immobility.LOCKED_IN_PLACE)
+        Placement.objects.create(schedule=env["schedule"], activity=attivita,
+                                 day=0, start_slot=0)
+    libera = make_activity(env["subject"], rooms=[palestra])
+
     prima = [f for f in check_schedule(env["schedule"])
              if f.code == "site_transition" and f.severity == Severity.HARD]
     assert prima, "il passato non e' in violazione: il test non misura ADR-018"

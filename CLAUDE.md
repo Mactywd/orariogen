@@ -356,8 +356,11 @@ delle aule e il violatore di Hall. Vedi
       di correttezza: nessun finding nuovo, l'oracolo differenziale regge. Tre
       strade in §9.7 della spec, nessuna adottata. ⚠ **Ora misurato anche dal
       banco che congela** (2026-08-26 sera), che è la prima volta che questo
-      debito si vede da solo invece di essere dichiarato: `free_guaranteed`
-      peggiora da 2 mezze giornate libere a 1. Il banco lo esenta
+      debito si vede da solo invece di essere dichiarato — e in una forma più
+      precisa di quella dichiarata qui: è uno **scambio**, non un peggioramento
+      secco. `free_guaranteed` passa da `free_days 4 / free_half_days 1` a
+      `free_days 1 / free_half_days 4`: ripara la soglia delle mezze e rompe
+      quella dei giorni, che era soddisfatta. Il banco lo esenta
       **strettamente** — solo un peggioramento su una (causale, risorsa) già
       violata, mai una violazione su una risorsa pulita.
 
@@ -405,6 +408,39 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte)** — **La review della PR #1, e il gemello del difetto
+  nella famiglia che il banco non poteva vedere.** Quattro rilievi sistemati
+  sopra il banco che congela.
+  🔑 **`OccupationBuilder` aveva lo stesso difetto di `SiteTransitionBuilder`,
+  ed è la conferma che «tocca» contro «realizza» è un pattern, non un
+  incidente.** Il gate `any_free` guarda chi tocca la cella, non chi ne
+  realizza la saturazione: due congelate in conflitto su una cella che una
+  libera può toccare producevano `costante + libere <= capienza` con la sola
+  costante oltre il tetto — `INFEASIBLE` per colpa del solo passato, con il
+  checker che quello stato lo prevede e lo nomina (`resource_occupied_locked`,
+  HARD). Corretto con `residual_cap`, come tutti gli altri tetti. ⚠ **Il banco
+  che congela non poteva trovarlo**: `sporca()` ripacka solo in celle libere da
+  conflitti di occupazione e lo asserisce, quindi la famiglia esclusa per
+  costruzione dal banco è proprio quella in cui il difetto è sopravvissuto. La
+  chiusura di Ruling 20 resta valida, ma **non è totale**: un banco ha sempre
+  una cecità, e va detto dove.
+  ⚠ **Metà del guardiano nuovo non era asserita da niente.** Misurato:
+  rimuovendo il solo `continue` del ramo `s == t` di `SiteTransitionBuilder` e
+  lasciando l'altro, la suite intera restava verde. Aggiunto il test del ramo
+  (`test_adr018_site_transition_due_sedi_gia_sulla_stessa_fascia_non_blocca`),
+  che è raggiungibile solo a capienza simultanea > 1. Entrambi i test nuovi
+  sono **verificati per mutazione**: senza la correzione diventano rossi.
+  ⚠ **Le due prove del banco passavano su `UNKNOWN`.** `!= INFEASIBLE` non è
+  `in (OPTIMAL, FEASIBLE)`: al timeout la prova A passava senza soluzione, e la
+  prova B pure — con i piazzamenti vuoti `apply()` è un no-op dichiarato e
+  l'oracolo differenziale confrontava la baseline pre-solve con sé stessa.
+  Verde per non aver misurato niente, cioè il criterio con cui questa stessa
+  sessione aveva bocciato `test_famiglia_con_congelate`. Corretto in entrambe.
+  Corretta infine una contraddizione interna: «Ancora aperto» dava
+  `free_guaranteed` in peggioramento da 2 mezze giornate a 1, mentre la misura
+  (spec §9.7) è uno **scambio** — `free_days 4 / free_half_days 1` →
+  `free_days 1 / free_half_days 4`. **450 test verdi**, 16 skip.
 
 - **2026-08-26 (sera)** — **Il banco congela, e il primo builder a cadere è
   quello che si dichiarava già a posto.** Chiude il debito che §9.7 chiamava
