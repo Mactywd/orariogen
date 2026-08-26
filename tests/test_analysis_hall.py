@@ -3,8 +3,9 @@ contano di piu' — il difetto temuto e' il falso positivo, che manda l'utente a
 smontare vincoli sani."""
 import pytest
 
+from domain.analysis.capacity import analyze_capacity
 from domain.analysis.hall import STATEMENT_SINGOLA, analyze_hall
-from domain.models import Activity, ResourceUnavailability
+from domain.models import Activity, ResourceUnavailability, Teacher
 from tests.analysis_helpers import make_activity, mini_school, place
 
 pytestmark = pytest.mark.django_db
@@ -96,3 +97,30 @@ def test_le_sorelle_gia_piazzate_non_si_tolgono_il_dominio():
     place(env["schedule"], a, day=0, slot=2)           # fuori dalla finestra di classe
 
     assert analyze_hall(env["schedule"]) == []
+
+
+def test_l_incrociata_la_classe_satura_i_docenti_restringono():
+    # Il caso che la fase 4 non puo' vedere: sette docenti diversi, ciascuno
+    # libero solo il giorno 0, tutti sulla stessa classe. Nessun docente e'
+    # sopra capienza (una lezione a testa, sei fasce disponibili) e la classe
+    # non ha un solo vincolo — ma le sette lezioni si contendono le sei fasce
+    # del giorno 0. La risorsa satura e' la classe; a restringere sono i
+    # docenti. `analyze_capacity` tace, perche' bucketizza per (unita', materia)
+    # e l'insieme di docenti comune alle sette attivita' e' vuoto.
+    env = mini_school()
+    for i in range(7):
+        docente = Teacher.objects.create(
+            name=f"Docente {i}", last_name=f"Cognome{i}", first_name=f"Nome{i}")
+        _blocca(docente, giorni=(1, 2, 3, 4))
+        make_activity(env["subject"], teachers=[docente],
+                      classes=[env["klass"]], slots=1)
+
+    assert analyze_capacity() == []                     # la fase 4 non lo vede
+
+    findings = analyze_hall(env["schedule"])
+    assert len(findings) == 1
+    f = findings[0]
+    assert f.n_activities == 7
+    assert f.required_minutes == 7 * 60
+    assert f.placeable_minutes == 6 * 60
+    assert f.binding_label == env["klass"].name         # satura la classe, non un docente
