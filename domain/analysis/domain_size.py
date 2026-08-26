@@ -24,15 +24,16 @@ def _hard_keys(state, resources, checkers):
     return keys
 
 
-def residual_domain(activity, state):
-    """Piazzamento di prova su ogni collocazione: ammissibile se non introduce
-    nuove violazioni hard rispetto alla baseline. Le violazioni preesistenti
-    non squalificano (l'orario invalido è ammesso)."""
+def admissible_starts(activity, state):
+    """Gli avvii ammissibili: (giorno, fascia) dove il piazzamento di prova non
+    introduce violazioni hard nuove rispetto alla baseline. Le violazioni
+    preesistenti non squalificano (l'orario invalido è uno stato ammesso).
+    S.P. ne è il conteggio; il violatore di Hall ne usa la lista."""
     # I checker "placement-independent" (es. CoverageChecker) producono
     # finding che dipendono solo dai dati anagrafici, mai dal piazzamento di
     # prova: compaiono identici nella baseline e in ogni tentativo, quindi il
     # loro delta è sempre vuoto. Escluderli dal loop di prova non cambia il
-    # risultato ed evita di ripetere il loro lavoro per ogni cella del dominio.
+    # risultato ed evita di ripetere il loro lavoro per ogni cella.
     checkers = [c for c in all_checkers() if not c.PLACEMENT_INDEPENDENT]
     was = state.placed.get(activity.id)
     if was is not None:
@@ -40,7 +41,7 @@ def residual_domain(activity, state):
     resources = state.tokens[activity.id]
     baseline = _hard_keys(state, resources, checkers)
     grid = state.grid
-    count, days = 0, set()
+    out = []
     try:
         for day in range(grid.days_per_cycle):
             for start in range(grid.slots_per_day - activity.duration_slots + 1):
@@ -48,9 +49,13 @@ def residual_domain(activity, state):
                 fresh = _hard_keys(state, resources, checkers) - baseline
                 state.unplace(activity.id)
                 if not fresh:
-                    count += 1
-                    days.add(day)
+                    out.append((day, start))
     finally:
         if was is not None and activity.id not in state.placed:
             state.place(activity, was.day, was.start_slot)
-    return DomainSize(count, len(days))
+    return out
+
+
+def residual_domain(activity, state):
+    starts = admissible_starts(activity, state)
+    return DomainSize(len(starts), len({day for day, _ in starts}))

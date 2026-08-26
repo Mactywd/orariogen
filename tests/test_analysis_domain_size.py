@@ -1,7 +1,7 @@
 """S.P. / Nr G.: il dominio residuo, ricalcolato mai memorizzato (ADR-007)."""
 import pytest
 
-from domain.analysis.domain_size import residual_domain
+from domain.analysis.domain_size import admissible_starts, residual_domain
 from domain.analysis.state import ScheduleState
 from domain.models import ResourceUnavailability
 from tests.analysis_helpers import make_activity, mini_school, place
@@ -73,3 +73,24 @@ def test_violazioni_preesistenti_non_squalificano():
     altra = make_activity(env["subject"], classes=[env["klass"]])
     state = ScheduleState.build(env["schedule"])
     assert residual_domain(altra, state).placements == 30
+
+
+def test_admissible_starts_e_la_lista_di_cui_sp_e_il_conteggio():
+    env = mini_school()
+    a = make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+    state = ScheduleState.build(env["schedule"])
+    starts = admissible_starts(a, state)
+    size = residual_domain(a, state)
+    assert size.placements == len(starts)
+    assert size.days == len({day for day, _ in starts})
+    assert starts == sorted(starts)
+
+
+def test_admissible_starts_non_lascia_l_attivita_spiazzata():
+    env = mini_school()
+    a = make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
+    place(env["schedule"], a, day=2, slot=3)
+    state = ScheduleState.build(env["schedule"])
+    admissible_starts(a, state)
+    assert state.placed[a.id].day == 2
+    assert state.placed[a.id].start_slot == 3
