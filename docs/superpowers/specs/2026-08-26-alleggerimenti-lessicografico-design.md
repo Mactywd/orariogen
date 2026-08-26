@@ -1,7 +1,9 @@
 # Alleggerimenti a quota e ottimizzazione lessicografica — design
 
 **Data.** 2026-08-26
-**Stato.** ⚠ **Bozza.** Da approvare sezione per sezione, come le precedenti.
+**Stato.** Bozza. Le **quattro decisioni aperte sono state chiuse in sessione**
+il 2026-08-26 (D1–D4, marcate «deciso» dove comparivano); il resto del documento
+resta rivedibile.
 **Segue.** Il modello hard completo ([spec](2026-08-24-modello-hard-completo-design.md),
 merge `528cebe`): ventisei builder su ventisette, 450 test verdi.
 **Precede.** Il piano di implementazione (§7).
@@ -104,10 +106,12 @@ Quindi lo scarto entra nel registro dei predicati come tutti gli altri:
   («una riga di dato, due facce»), e il ventisettesimo checker senza builder
   resta uno solo — `structural:coverage`.
 
-**Decisione aperta (D2).** La severità dello scarto. In EDT «Non piazzata» è uno
-*stato*, non una violazione; nel nostro registro `HARD` significa «va risolto».
-Propongo **`HARD`**, perché è ciò che l'oracolo deve contare, con la nota che il
-finding descrive un orario **incompleto**, non illegale.
+**D2 — deciso: `HARD`.** In EDT «Non piazzata» è uno *stato*, non una
+violazione; nel nostro registro `HARD` significa «va risolto», ed è ciò che
+l'oracolo deve contare. Una severità nuova avrebbe toccato `findings.py`,
+l'ordinamento delle severità, i report di `analyze` e ogni test che filtra per
+`HARD`, per una distinzione che nessuno di quei percorsi userebbe. La causale
+dice in chiaro che l'orario è **incompleto**, non illegale.
 
 ### 2.3 🔑 Il tetto inevadibile smette di esserlo
 
@@ -261,9 +265,10 @@ attività scartate, potete alleggerire»* è esattamente «L3 dopo L1»: il mode
 consuma un alleggerimento solo quando quell'alleggerimento **riduce gli scarti**,
 perché a scarti pari L3 preferisce zero violazioni.
 
-**Decisione aperta (D1).** Ore prima o numero prima. Propongo le ore, perché uno
-scarto da 3h fa più danno di tre da 1h nel monte ore di una classe; EDT conta le
-attività nella sua finestra, ma riporta entrambi (*«284 attività / 288h00»*).
+**D1 — deciso: le ore prima, il numero come spareggio.** Uno scarto da 3h fa
+più danno al monte ore di una classe di tre da 1h. EDT conta le attività nella
+sua finestra ma riporta entrambi (*«284 attività / 288h00»*), quindi la scelta
+non contraddice il prodotto: ne fissa lo spareggio.
 
 ### 4.2 🔑 L'obiettivo scioglie il debito del ramo pigro — se lo si vuole
 
@@ -285,8 +290,10 @@ preferisce**.
 alleggerimento** e non deve consumare quota. Sono due cose che finiscono nello
 stesso livello lessicografico ma in due conteggi separati.
 
-**Decisione aperta (D3).** Se prendere questa strada qui, o lasciare §9.7 aperto
-e trattarlo dopo.
+**D3 — deciso: sì, i booleani di riparazione entrano in L3.** È la quarta
+strada oltre alle tre elencate in §9.7, e l'unica senza rischio semantico. ⚠ Con
+i due conteggi **separati** dentro lo stesso livello: una riparazione mancata non
+consuma quota, perché non è un alleggerimento.
 
 ### 4.3 La stabilità, e ADR-010
 
@@ -298,9 +305,8 @@ numero di attività che cambiano cella rispetto ai `Placement` esistenti — ed 
 anche ciò che EDT fa nel risolutore passo-passo (*«minimizzare il numero di
 variabili che cambiano valore rispetto alla soluzione corrente»*).
 
-**Decisione aperta (D4).** Dentro questo pezzo come L4, o pezzo a sé. Propongo
-**dentro**: la macchina lessicografica la si scrive una volta, e un quarto
-livello costa un `minimize` in più, non un'architettura.
+**D4 — deciso: dentro, come L4.** La macchina lessicografica la si scrive una
+volta, e un quarto livello costa un `minimize` in più, non un'architettura.
 
 ### 4.4 Il costo, e il limite di tempo
 
@@ -369,10 +375,17 @@ anche quando un livello scade in tempo.
 
 ## 7. Le ondate
 
-1. **Lo scarto** — `piazzata`, il checker `structural:placement`, la causale, i
-   due test da riscrivere. Nessuna quota, nessun obiettivo: il solver piazza
-   tutto quel che può e nomina il resto. *È già utile da sola.*
-2. **La catena lessicografica** su L1/L2 soltanto, con i `stats` per livello.
+1. **Lo scarto, con L1 attaccato** — `piazzata`, il checker
+   `structural:placement`, la causale, i due test da riscrivere, **e la
+   minimizzazione delle ore scartate**.
+   ⚠ **La prima stesura di questa spec metteva l'obiettivo nell'ondata 2 e
+   dichiarava l'ondata 1 «già utile da sola»: è falso, ed è la stessa forma di
+   §9.8.** Tolto `AddExactlyOne` senza metterci nulla sopra, «scarta tutto» è
+   una soluzione *ammissibile* e CP-SAT la restituisce in un millisecondo: il
+   modello non peggiora un po', smette di piazzare. L'obiettivo non è un
+   miglioramento dell'ondata 1, è ciò che la rende un'ondata.
+2. **La catena** vera e propria — L2, il fissaggio, il limite per livello e i
+   `stats` livello per livello.
 3. **Le quote** — schema (`params`, tetto globale), `relaxation.py`, e le
    famiglie a clausola (§3.1–3.3).
 4. **Le quote nei pre-filtri** (§3.4), che è il caso storto e va da solo.
