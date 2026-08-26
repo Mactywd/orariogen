@@ -138,7 +138,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. Il
 > **violatore di Hall** (fase 5 dell'Analisi dei vincoli, `domain/analysis/hall.py`)
 > **è anch'esso implementato**: nessun solver, teorema di Hall in forma
-> deficitaria su flusso massimo e taglio minimo. **481 test verdi**, 16 skip
+> deficitaria su flusso massimo e taglio minimo. **516 test verdi**, 16 skip
 > tutti misurati e attribuiti (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -430,12 +430,13 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   `--schedule`, a differenza della fase 4 che lavora sull'anagrafica grezza).
 
   🔑 **Prima volta su questo progetto: due trappole scritte in spec *prima* di
-  implementarle, non scoperte dopo.** Il pattern ricorrente qui (`CLAUDE.md`
-  ne conta almeno sette istanze fra il 2026-07-26 e il 2026-08-25) è sempre lo
-  stesso: il documento dichiara vera una proprietà che si rivela falsa solo
-  controllandola contro il checker o i dati. Questa volta la spec (§2, §4.1)
-  ha **previsto** due falsi positivi specifici e ha chiesto un test dedicato
-  per ciascuno, prima che il codice esistesse. Tengono entrambi.
+  implementarle, non scoperte dopo.** Il pattern ricorrente qui — il
+  changelog arriva a contarlo alla «tredicesima volta» entro il
+  2026-08-26 (sera), sempre nella stessa forma — è che un documento dichiara
+  vera una proprietà che si rivela falsa solo controllandola contro il
+  checker o i dati. Questa volta la spec (§2, §4.1) ha **previsto** due falsi
+  positivi specifici e ha chiesto un test dedicato per ciascuno, prima che il
+  codice esistesse. Tengono entrambi.
   **§2 — le firme di settimana.** Due attività di settimane disgiunte non
   competono per la stessa cella; trattarle come concorrenti produrrebbe
   deficienze fantasma — il difetto peggiore possibile per una fase che dice
@@ -451,7 +452,7 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   avrebbe rivelato. `_split` lo fa, e
   `test_le_sorelle_gia_piazzate_non_si_tolgono_il_dominio` lo dimostra.
 
-  **Cinque scoperte durante l'esecuzione, non previste dalla spec.**
+  **Quattro scoperte durante l'esecuzione, non previste dalla spec.**
   `MaxFlow.max_flow` sollevava un loop infinito quando sorgente e pozzo
   coincidono (misurato: `exit 124`); irraggiungibile dalla rete di Hall così
   com'è costruita, ma un hang è il modo peggiore di fallire in uno strumento
@@ -460,8 +461,6 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   `OccupationChecker.check` (`checkers/occupation.py` riga 25): contare le
   attività invece delle quantità avrebbe sovrastimato la capienza residua ogni
   volta che un'immobile già piazzata ne occupa più di una.
-  Il banco a testimone del Task 6 ha allargato i seed da 5 a 40 in review, non
-  nel piano originale.
   I due test del Task 4 non dimostravano davvero il ciclo sulle firme — tre
   mutazioni realistiche passavano indisturbate, incluso il codice pre-task —
   corretti spostando la deficienza alla settimana 1 e aggiungendo un test
@@ -469,20 +468,22 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   E un test del Task 3 non testava ciò che il suo nome diceva
   (`test_l_insieme_nominato_e_irriducibile` non esercitava `_reduce`, perché
   in quello scenario il taglio minimo restituisce già l'insieme irriducibile):
-  rinominato, e aggiunto `test_la_riduzione_toglie_la_terza_di_tre_sulla_stessa_cella`,
-  costruito apposta perché il taglio minimo sia strettamente più largo
-  dell'irriducibile.
+  rinominato `test_il_taglio_minimo_esclude_le_attivita_estranee`, e aggiunto
+  `test_la_riduzione_toglie_la_terza_di_tre_sulla_stessa_cella`, costruito
+  apposta perché il taglio minimo sia strettamente più largo dell'irriducibile.
 
-  ⚠ **L'oracolo (Task 6) misura la precisione, mai il richiamo — per
-  costruzione, non per pigrizia.** `tests/test_hall_oracle.py` verifica due
-  direzioni: ogni finding dev'essere confermato dal solver (`INFEASIBLE`), e
-  su istanze fattibili per costruzione (i testimoni di `solver_harness`) la
-  fase 5 deve tacere. Il richiamo — trovare *tutti* i sottoinsiemi infattibili
-  — non si promette da nessuna parte: enumerare tutti i sottoinsiemi di
-  risorse è esponenziale, ed è la ragione per cui l'alternativa è stata
-  scartata già in §1.2 della spec. Il risultato: **zero finding sui 40 semi**.
-  Ma la review del Task 6 ha qualificato il dato, e la qualificazione conta
-  quanto il numero — i testimoni di `build_witness` non aggiungono mai
+  ⚠ **L'oracolo misura la precisione, mai il richiamo — per costruzione, non
+  per pigrizia.** `tests/test_hall_oracle.py` verifica due direzioni: ogni
+  finding dev'essere confermato dal solver (`INFEASIBLE`), e su istanze
+  fattibili per costruzione (i testimoni di `solver_harness`) la fase 5 deve
+  tacere — parametrizzata su **quaranta semi** (`range(1, 41)`), non i cinque
+  del piano originale: **misurato**, 42 test in 6,4 s. Il richiamo — trovare
+  *tutti* i sottoinsiemi infattibili — non si promette da nessuna parte:
+  enumerare tutti i sottoinsiemi di risorse è esponenziale, ed è la ragione
+  per cui l'alternativa è stata scartata già in §1.2 della spec. Il risultato:
+  **zero finding sui 40 semi, nella suite** — non una misura di review
+  rimasta fuori dal repository. E la qualificazione che conta quanto il
+  numero resta: i testimoni di `build_witness` non aggiungono mai
   indisponibilità e lasciano circa metà griglia libera, quindi i 40 semi
   misurano **l'assenza di rumore su istanze lasche**, non la tenuta sul
   confine di Hall. Quel confine lo dimostrano solo i due casi scritti a mano
@@ -501,7 +502,8 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   zero finding è l'esito atteso, non un risultato.
 
   Suite **misurata a fine task** (non prevista): `venv/bin/pytest -q` →
-  **481 test verdi**, 16 skip. Corretto anche il **436** dichiarato nella nota
+  **516 test verdi**, 16 skip (i 35 in più sono i seed 6-40 dell'oracolo,
+  appena portati nella suite). Corretto anche il **436** dichiarato nella nota
   di stato più sopra: era la misura di prima dei due commit di review della
   PR #1 (`modello-hard-completo`), non il numero corrente neppure a inizio di
   questo lavoro. E i **tre pezzi dichiarati fuori** nella nota di stato

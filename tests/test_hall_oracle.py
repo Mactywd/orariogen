@@ -54,7 +54,7 @@ def test_il_solver_conferma_anche_il_confine():
     assert solve(env["schedule"], time_limit=30).status in ("OPTIMAL", "FEASIBLE")
 
 
-@pytest.mark.parametrize("seed", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("seed", list(range(1, 41)))
 def test_nessun_finding_su_un_istanza_fattibile_per_costruzione(seed):
     w = build_witness(seed)
     findings = analyze_hall(w.schedule)
