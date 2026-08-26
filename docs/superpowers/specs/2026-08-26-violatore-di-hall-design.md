@@ -64,10 +64,16 @@ aule e materiali cumulativi).
 UI, scritto in `aule.md`.
 
 **Le settimane sono una dimensione, non un dettaglio.** La deficienza si cerca
-**per firma di settimana**, riusando `_week_groups` di `capacity.py` — che va
-promossa da funzione privata a funzione condivisa (in `state.py`, accanto alle
-altre primitive di stato), non duplicata: due copie di quella logica
-divergerebbero, ed è la dimensione su cui questo progetto ha già sbagliato. Due
+**per firma di settimana**, riusando `week_signatures(schedule)` di
+`conformity.py` — la primitiva **già condivisa** fra `check_schedule` e
+`SolverContext`, non `_week_groups` di `capacity.py`. Le due non sono
+equivalenti: `week_signatures` include nella firma anche le **indisponibilità
+datate** e i **festivi**, non solo le maschere delle attività, ed è la stessa
+firma su cui il modello CP-SAT posta i suoi vincoli. Usare l'altra
+disallineerebbe la fase 5 dall'oracolo che deve confermarla.
+
+Per ogni rappresentante si costruisce `ScheduleState.build(schedule, week=rep)`,
+che filtra già le attività attive in quella settimana. Due
 attività di settimane disgiunte non competono per la stessa cella, e trattarle
 come concorrenti produce **falsi positivi** — il difetto peggiore possibile per
 questa fase, che dice «impossibile» e manda l'utente a smontare vincoli sani.
@@ -77,6 +83,21 @@ volta: in `MaxGapBuilder` unire le firme vincolava **di meno** (il difetto
 corretto il 2026-08-24); qui unirle vincolerebbe **di più**. Stesso oggetto,
 verso opposto. Per questo si riusa il codice di `_week_groups`, che il verso
 giusto ce l'ha già, invece di riderivare il ragionamento.
+
+### 2.1 La firma della funzione
+
+```python
+def analyze_hall(schedule) -> list[HallFinding]
+```
+
+⚠ **Diversamente da `analyze_capacity()`, la fase 5 richiede uno `Schedule`**:
+le serve lo stato (piazzamenti delle immobili, indisponibilità datate della
+settimana, festivi), e `ScheduleState` si costruisce solo da uno schedule. La
+fase 4 lavora sull'anagrafica grezza e non ne ha bisogno.
+
+Conseguenza sul comando: `manage.py analyze` esegue la fase 4 sempre e la
+fase 5 **solo con `--schedule`**, dichiarandolo quando la salta invece di
+tacere.
 
 ## 3. Il motore
 
@@ -294,7 +315,7 @@ invece che lasciato intendere.
 | `domain/analysis/flow.py` | **nuovo** — flusso massimo bipartito (Dinic) più la raggiungibilità residua. ~70 righe, nessuna dipendenza |
 | `domain/analysis/hall.py` | **nuovo** — `HallFinding`, la rete, il certificato, la riduzione. ~200 righe |
 | `domain/analysis/domain_size.py` | **modifica mirata** — si estrae `admissible_starts` |
-| `domain/management/commands/analyze.py` | la fase 5 accanto alla 4, stesso formato, flag `--no-hall` |
+| `domain/management/commands/analyze.py` | la fase 5 accanto alla 4, sotto `--schedule`, flag `--no-hall` |
 | `tests/test_analysis_flow.py` | il massimo flusso da solo |
 | `tests/test_analysis_hall.py` | livello 1 |
 | `tests/test_hall_oracle.py` | livello 2 |
@@ -310,7 +331,8 @@ i builder.
 → soluzione → azioni`, e i suoi finding entrano nel riepilogo e nell'exit code.
 Il flag `--no-hall` la spegne: EDT le fasi le fa spuntare singolarmente, tutte
 attive di default, e i ~3,5 s sul Fermi sono accettabili ma non da imporre a
-chi vuole solo la fase 4 in CI.
+chi vuole solo la fase 4 in CI. Senza `--schedule` la fase 5 non si esegue
+affatto (§2.1) e il comando lo scrive.
 
 ## 8. Fuori scope, dichiarato
 
