@@ -15,6 +15,7 @@ rispondere INFEASIBLE senza che nessun insieme sia deficiente."""
 from collections import defaultdict
 from dataclasses import dataclass
 
+from domain.analysis.conformity import week_signatures
 from domain.analysis.domain_size import admissible_starts
 from domain.analysis.flow import INF, MaxFlow
 from domain.analysis.state import ScheduleState, resource_sort_key
@@ -45,10 +46,22 @@ class HallFinding:
 
 
 def analyze_hall(schedule):
+    """⚠ Le firme di settimana sono una dimensione, non un dettaglio: due
+    attivita' di settimane disgiunte non competono per la stessa fascia, e
+    trattarle come concorrenti produce falsi positivi.
+
+    Si usa `week_signatures` — la primitiva gia' condivisa con `check_schedule`
+    e `SolverContext` — e non `_week_groups` di capacity.py: la prima include
+    nella firma anche le indisponibilita' datate e i festivi, ed e' la stessa
+    firma su cui il modello CP-SAT posta i suoi vincoli. Usarne un'altra
+    disallineerebbe la fase 5 dall'oracolo che deve confermarla."""
     if TimeGrid.objects.first() is None:
         return []
-    state = ScheduleState.build(schedule)
-    return _analyze_state(state, seen=set())
+    findings, seen = [], set()
+    for representative, _weeks in week_signatures(schedule):
+        state = ScheduleState.build(schedule, week=representative)
+        findings += _analyze_state(state, seen)
+    return findings
 
 
 def _split(state):

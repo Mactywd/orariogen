@@ -158,3 +158,34 @@ def test_la_capienza_cumulativa_si_pesa_per_quantita():
     assert len(findings) == 1
     assert findings[0].n_activities == 2
     assert findings[0].binding_label == "Carrello tablet"
+
+
+def test_le_settimane_disgiunte_non_competono():
+    # Trappola §2: unendo le firme le due attivita' si contendono l'unica
+    # fascia e esce un falso positivo. Per firma, ognuna entra da sola.
+    from domain import weeks
+
+    env = mini_school()
+    _blocca(env["teacher"], giorni=(1, 2, 3, 4),
+            celle=[(0, s) for s in range(1, 6)])       # resta la sola (0,0)
+    make_activity(env["subject"], teachers=[env["teacher"]], slots=1,
+                  mask=weeks.single_week(0))
+    make_activity(env["subject"], teachers=[env["teacher"]], slots=1,
+                  mask=weeks.single_week(1))
+
+    assert analyze_hall(env["schedule"]) == []
+
+
+def test_una_deficienza_in_una_sola_settimana_esce_lo_stesso():
+    from domain import weeks
+
+    env = mini_school()
+    _blocca(env["teacher"], giorni=(1, 2, 3, 4),
+            celle=[(0, s) for s in range(1, 6)])
+    for _ in range(2):
+        make_activity(env["subject"], teachers=[env["teacher"]], slots=1,
+                      mask=weeks.single_week(0))
+
+    findings = analyze_hall(env["schedule"])
+    assert len(findings) == 1
+    assert findings[0].n_activities == 2
