@@ -2327,3 +2327,335 @@ def _derive_weight(w):
             accesi += 1
     settings.save()
     return accesi
+
+
+# --- il banco che congela ------------------------------------------------
+#
+# ⚠ Fino al 2026-08-26 il banco **non congelava mai nulla** (Ruling 20,
+# §9.7 della spec: «il buco strutturale piu' grande che resta»). Ogni
+# attivita' del testimone era libera, quindi in ogni test `ctx.free` conteneva
+# tutto: `split()` restituiva sempre `frozen = 0`, `any_free` sempre `True`,
+# `frozen_occupies` sempre `False`, e i rami disgiuntivi di ADR-018 non
+# venivano mai imboccati. Tutta la copertura di ADR-018 — cinque casi, due dei
+# quali trovati falsificando la spec il giorno dopo averla scritta — poggiava
+# sui soli test scritti a mano.
+#
+# Il banco qui sotto congela. La costruzione e' in quattro tempi:
+#
+# 1. si genera il testimone **pulito** e si derivano le righe, come sempre;
+# 2. si **ripacka**: alcune attivita' si spostano in celle libere da conflitti
+#    di occupazione. Il vincolo «libere da conflitti» non e' cosmetico — e'
+#    cio' che tiene il resto dell'orario dove sta, e quindi rende lo status
+#    quo un'assegnazione ancora disponibile;
+# 3. si guarda **chi e' implicato** nelle violazioni cosi' create e lo si
+#    congela — vedi `implicate` per le due forme dell'attribuzione, e per
+#    quale delle due va usata dove (sbagliarlo non rompe il banco: lo rende
+#    verde per non aver misurato niente);
+# 4. le altre restano libere e i loro piazzamenti si cancellano.
+#
+# Quel che si ottiene e' esattamente la premessa di ADR-018: congelate **gia'
+# in violazione**, libere da piazzare, e la garanzia — per costruzione, non
+# per fortuna — che rimettere le libere dove stavano non aggiunge niente.
+
+def _occupazione(w, escludi=()):
+    """(settimana, chiave, giorno, fascia) occupate dal testimone corrente."""
+    busy = set()
+    for aid, (day, slot) in w.placement.items():
+        if aid in escludi:
+            continue
+        act = w.act(aid)
+        for wk in w.weeks_of[aid]:
+            for k in w.tokens[aid]:
+                for t in range(slot, slot + act.duration_slots):
+                    busy.add((wk, k, day, t))
+    return busy
+
+
+def celle_libere(w, aid):
+    """Le celle dove `aid` puo' andare **senza** creare un conflitto di
+    occupazione con nessun altro. Stessa lettura della griglia di `_try_place`
+    e di `GridBuilder.restrict`: festivo e intervallo esclusi."""
+    grid, act = w.env["grid"], w.act(aid)
+    holiday_week, holiday_day = w.env["holiday"]
+    break_boundary = w.env["break_boundary"]
+    busy = _occupazione(w, escludi=(aid,))
+    vieta_festivo = holiday_week in w.weeks_of[aid]
+    out = []
+    for day in range(grid.days_per_cycle):
+        if vieta_festivo and day == holiday_day:
+            continue
+        for slot in range(grid.slots_per_day - act.duration_slots + 1):
+            if act.respects_breaks and slot < break_boundary < slot + act.duration_slots:
+                continue
+            if any((wk, k, day, t) in busy
+                   for wk in w.weeks_of[aid] for k in w.tokens[aid]
+                   for t in range(slot, slot + act.duration_slots)):
+                continue
+            out.append((day, slot))
+    return out
+
+
+def muovi(w, aid, cella):
+    w.placement[aid] = cella
+    Placement.objects.filter(schedule=w.schedule, activity_id=aid).update(
+        day=cella[0], start_slot=cella[1])
+
+
+def congela(w, aids):
+    Activity.objects.filter(id__in=list(aids)).update(
+        immobility=Activity.Immobility.FIXED)
+
+
+def _codici_di_tutte_le_famiglie():
+    codici = set()
+    for d in DERIVERS.values():
+        codici |= set(d.codes)
+    return codici
+
+
+def _findings(schedule, codes):
+    return [f for f in check_schedule(schedule)
+            if f.severity == Severity.HARD and f.code in codes]
+
+
+def implicate(w, findings):
+    """Le attivita' a cui una violazione e' attribuibile.
+
+    Due forme, e la seconda scatta **solo dove serve**: i findings degli otto
+    vincoli orari sulla risorsa (`_finding` in
+    domain/analysis/checkers/time_constraints.py) e quelli di `sites.py` **non
+    portano `activities`** — nominano solo la risorsa, perche' la quantita'
+    che violano (buchi, mezze giornate libere, presenza) e' una proprieta'
+    della giornata della risorsa, non di una singola attivita'. Li' attribuire
+    la violazione alle sole attivita' nominate significherebbe non attribuirla
+    a nessuno, e lasciare libere attivita' che ne cambierebbero la quantita':
+    serve congelare tutte quelle che toccano la risorsa.
+
+    ⚠ **Ma solo li'.** Estendere per risorsa anche i findings che *nominano*
+    le attivita' congelerebbe l'intera classe a ogni violazione di una riga di
+    materia (`_unit_resources` restituisce le chiavi dell'unita'), e il caso
+    misto congelata/libera **dentro la riga violata** — il cuore di ADR-018 —
+    non verrebbe mai esercitato. Misurato: con l'estensione ovunque, 24 semi
+    su 40 producono una costruzione utilizzabile e la deriva d'identita' non
+    compare mai; restringendola ai soli findings senza `activities` i semi
+    utilizzabili salgono e la deriva compare. Dove il finding nomina le
+    attivita' le nomina **tutte quelle del secchio**, quindi l'attribuzione e'
+    gia' completa senza estendere."""
+    out = set()
+    for f in findings:
+        if f.activities:
+            out |= set(f.activities)
+        elif f.resources:
+            risorse = set(f.resources)
+            out |= {aid for aid in w.placement if w.tokens[aid] & risorse}
+    return out
+
+
+def sporca(w, seed, quota=6):
+    """Ripacka una frazione delle attivita' in celle libere da conflitti, poi
+    divide fra congelate (le implicate) e libere (tutte le altre).
+
+    Restituisce `(congelate, libere, prima)` o `None` se la costruzione non e'
+    utilizzabile per questo seed — misurato su 40 semi: **36** la producono, 2
+    danno un ripack pulito e 2 lasciano meno di tre libere (una violazione su
+    un docente congela tutte le attivita' di quel docente, e i docenti del
+    testimone sono pochi). Il chiamante decide: `tests/test_solver_frozen.py`
+    lavora su dieci semi **dichiarati**, dove `None` e' un fallimento e non uno
+    skip — cosi' una decadenza della costruzione diventa rossa invece di
+    svuotare il banco in silenzio."""
+    codici = _codici_di_tutte_le_famiglie()
+    rng = random.Random(f"sporca-{seed}")
+    tutte = list(w.placement)
+    ordine = list(tutte)
+    rng.shuffle(ordine)
+    for aid in ordine[:max(1, len(ordine) // quota)]:
+        celle = celle_libere(w, aid)
+        if celle:
+            muovi(w, aid, rng.choice(celle))
+
+    prima = _findings(w.schedule, codici)
+    if not prima:
+        return None
+    libere = sorted(set(tutte) - implicate(w, prima))
+    if len(libere) < 3:
+        return None
+    congelate = [aid for aid in tutte if aid not in libere]
+
+    congela(w, congelate)
+    # Il congelamento non deve cambiare i findings: l'unico checker che guarda
+    # `immobility` e' OccupationChecker (resource_occupied vs
+    # resource_occupied_locked), e il ripack e' privo di conflitti apposta.
+    # Asserito invece che dichiarato — e' la differenza che questo progetto ha
+    # pagato dodici volte.
+    assert {f.key for f in _findings(w.schedule, codici)} == {f.key for f in prima}, (
+        "congelare ha cambiato i findings: il ripack ha creato un conflitto "
+        "di occupazione, e il banco non sta piu' misurando cio' che dice")
+    # ⚠ Si cancellano i **Placement**, non `w.placement`: il dizionario del
+    # testimone resta com'era, ed e' cio' che la prova A rimette in forza.
+    Placement.objects.filter(schedule=w.schedule, activity_id__in=libere).delete()
+    return congelate, libere, prima
+
+
+# Le famiglie a **ramo disgiuntivo** (ADR-018 caso 5): il builder posta «o si
+# ripara, oppure non si peggiora», e legge la baseline `B` chiamando il
+# checker di domain/analysis. ⚠ Nel solve incrementale con le libere **non
+# ancora piazzate** lo status quo non e' rappresentabile, `B` scende a zero e
+# il ramo diventa vacuo: la riga smette di vincolare. E' il debito dichiarato
+# in §9.7 della spec, ed e' perdita di qualita', non di correttezza.
+# I tre builder che postano il ramo disgiuntivo sono `WeeklyOrderBuilder`
+# (domain/solver/builders/subject_order.py), `MinDistributionBuilder` e
+# `FreeGuaranteedBuilder` (time_counting.py) — cercare `riparato` per
+# trovarli. Se un quarto adottasse la stessa forma, la sua causale va aggiunta
+# qui, altrimenti il banco lo dara' per rotto.
+DISGIUNTIVI = {"min_distribution", "free_guaranteed", "subject_weekly_order"}
+
+
+def _per_settimana(findings):
+    """{(chiave, settimana)}. Stessa espansione di `violazioni()` in
+    tests/test_solver_oracle.py, e per la stessa ragione: `Finding.key` esclude
+    `weeks` per costruzione, quindi senza espandere una violazione identica
+    comparsa su un'altra firma si fonderebbe con quella gia' vista."""
+    return {(f.key, w) for f in findings for w in f.weeks}
+
+
+def _grossa(chiave_settimana):
+    """La chiave **senza l'identita' delle attivita'**: (causale, risorse,
+    quantita', settimana).
+
+    ⚠ Serve perche' diverse famiglie nominano in `activities` non il secchio
+    intero ma la **coppia argmin** o la **coppia consecutiva** — chi viola,
+    non chi partecipa. Piazzare una libera in una mezza giornata gia' occupata
+    da una congelata puo' quindi cambiare *quale* coppia e' l'argmin senza
+    cambiare la violazione: stessa causale, stessa risorsa, stesse quantita',
+    `activities` diverso. Misurato al seme 20: `subject_imposed_succession`
+    sulla risorsa 1 passa da `(5, 7)` a `(4, 5)` con `gap 3 / max_gap 2`
+    **identici**. E' la stessa causa a monte del tie-break di `_placed_of` in
+    «Ancora aperto» di CLAUDE.md."""
+    (code, resources, _activities, quantities), week = chiave_settimana
+    return (code, resources, quantities, week)
+
+
+def _causale_risorsa(chiave_settimana):
+    (code, resources, _activities, _quantities), week = chiave_settimana
+    return (code, resources, week)
+
+
+def _classifica_nuove(nuove, base):
+    """Divide le violazioni comparse dopo il solve in tre mucchi, e solo il
+    terzo e' un fallimento.
+
+    - **deriva d'identita'**: stessa causale, risorsa e quantita' gia' nella
+      baseline, altre attivita' nominate. Vedi `_grossa`.
+    - **ramo pigro**: un peggioramento su una famiglia a ramo disgiuntivo
+      dove la stessa (causale, risorsa) era **gia'** violata. E' il debito di
+      §9.7, dichiarato e non risolto: senza funzione di costo CP-SAT non
+      preferisce riparare, e con le libere non piazzate lo status quo non e'
+      rappresentabile, quindi il ramo scende a `>= 0` ed e' vacuo. Misurato al
+      seme 20, ed e' uno **scambio**, non un peggioramento secco:
+      `free_guaranteed` sulla risorsa 3 passa da `free_days 4 / free_half_days
+      1` a `free_days 1 / free_half_days 4` — ripara la soglia delle mezze
+      (min 3) e rompe quella dei giorni (min 2), che era soddisfatta. Le due
+      soglie stanno sotto **lo stesso** booleano proprio per impedirlo, ma il
+      ramo vacuo scavalca il booleano.
+      ⚠ L'esenzione e' stretta apposta: una violazione su una risorsa
+      **pulita** resta un fallimento anche per queste tre famiglie.
+    - **vere**: tutto il resto."""
+    grosse = {_grossa(k) for k in base}
+    coppie = {_causale_risorsa(k) for k in base}
+    deriva, pigro, vere = [], [], []
+    for k in sorted(nuove, key=str):
+        if _grossa(k) in grosse:
+            deriva.append(k)
+        elif k[0][0] in DISGIUNTIVI and _causale_risorsa(k) in coppie:
+            pigro.append(k)
+        else:
+            vere.append(k)
+    return deriva, pigro, vere
+
+
+def run_modello_sporco(seed, time_limit=120):
+    """Il banco con le congelate **in violazione**: la premessa di ADR-018.
+
+    Due prove, e la prima e' quella che morde.
+
+    **Prova A — lo status quo forzato.** Si costruisce il modello e si
+    **impone** a ogni libera la cella dove il testimone la teneva, poi si
+    chiede `INFEASIBLE`/no. Quell'assegnazione produce esattamente i findings
+    della baseline — per costruzione, perche' la baseline e' stata calcolata
+    su di essa e ogni attivita' implicata e' stata congelata. Un modello che
+    la rifiuta sta pretendendo che le libere **riparino** il passato, che e'
+    testualmente cio' che ADR-018 vieta. E' la forma della casa: si forza e si
+    attende uno stato, non si risolve e si guarda dove e' finita.
+
+    **Prova B — il solve libero e l'oracolo differenziale.** Il solver sceglie
+    da se', e nessuna violazione **nuova** deve comparire. «Nuova» ha due
+    esenzioni dichiarate: vedi `_classifica_nuove`.
+
+    Restituisce `(w, congelate, libere, esiti)` o `None` se la costruzione non
+    e' utilizzabile per questo seed."""
+    from ortools.sat.python import cp_model
+
+    from domain.solver.model import build_model
+
+    w = build_witness(seed)
+    codici = set()
+    for key in ordine_derivatori():
+        d = DERIVERS[key]
+        d.fn(w)
+        codici |= set(d.codes)
+    pulito = _findings(w.schedule, codici)
+    assert pulito == [], (
+        f"il testimone e' gia' sporco prima del ripack (seed {seed}): "
+        f"{sorted(f.key for f in pulito)}")
+
+    esito = sporca(w, seed)
+    if esito is None:
+        return None
+    congelate, libere, prima_completa = esito
+    # La baseline e' l'**unione** di due stati, e servono entrambi: lo stato
+    # con tutto piazzato (`prima_completa`, dove la violazione delle congelate
+    # e' visibile nella sua forma piena) e lo stato pre-solve con le libere
+    # cancellate — dove le famiglie che contano una quantita' *presente*
+    # (successione imposta, minimi) sono violate proprio perche' manca
+    # qualcosa. Il solver puo' legittimamente restituire un orario che porta
+    # le une o le altre.
+    prima = _per_settimana(_findings(w.schedule, codici)) | _per_settimana(prima_completa)
+
+    # Prova A
+    model, ctx = build_model(w.schedule)
+    assert set(ctx.free) == set(libere), (
+        "il modello non vede come libere le stesse attivita' del banco")
+    for aid in libere:
+        day, slot = w.placement[aid]
+        assert (aid, day, slot) in ctx.x, (
+            f"la cella del testimone per {aid} e' stata potata dai pre-filtri: "
+            "lo status quo non e' nemmeno esprimibile, e la prova A non "
+            "misurerebbe piu' cio' che dice")
+        model.Add(ctx.x[(aid, day, slot)] == 1)
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = float(time_limit)
+    stato = solver.Solve(model)
+    assert stato != cp_model.INFEASIBLE, (
+        f"il modello rifiuta lo status quo (seed {seed}): con "
+        f"{len(congelate)} congelate in violazione e {len(libere)} libere, "
+        f"rimetterle dove stavano non aggiunge nessuna violazione — "
+        f"rifiutarlo e' pretendere che riparino il passato, che ADR-018 vieta")
+
+    # Prova B
+    soluzione = solve(w.schedule, time_limit=time_limit)
+    assert soluzione.status != "INFEASIBLE", (
+        f"solve INFEASIBLE (seed {seed}) mentre la prova A ha trovato lo "
+        f"status quo: il modello libero non puo' essere piu' stretto di uno "
+        f"dei suoi punti ammissibili — {soluzione.stats}")
+    apply(soluzione, w.schedule)
+    nuove = _per_settimana(_findings(w.schedule, codici)) - prima
+    deriva, pigro, vere = _classifica_nuove(nuove, prima)
+    assert vere == [], (
+        f"il solver ha introdotto violazioni nuove (seed {seed}): "
+        f"{[k[0][0] for k in vere]}\n" + "\n".join(str(k) for k in vere))
+    return w, congelate, libere, {
+        "dirt": sorted({f.code for f in prima_completa}),
+        "deriva": [k[0][0] for k in deriva],
+        "pigro": [k[0][0] for k in pigro],
+        "soluzione": soluzione,
+    }

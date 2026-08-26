@@ -333,7 +333,13 @@ delle aule e il violatore di Hall. Vedi
       ramo status-quo (divieto per attività, non sul minimo aggregato) — ma
       la causa a monte resta nel tie-break di `domain/analysis`, non
       toccabile da questo giro: va decisa quando si generalizza la famiglia
-      d'ordine ai Task 13-17.
+      d'ordine ai Task 13-17. ⚠ **Il banco che congela lo vede** (2026-08-26
+      sera): `subject_imposed_succession` cambia la coppia nominata lasciando
+      causale, risorsa e quantità identiche, ed è per questo che l'oracolo del
+      banco sporco porta una chiave grossolana **dichiarata** (`_grossa` in
+      `tests/solver_harness.py`) invece di un'eccezione implicita. Il fenomeno
+      è quindi più largo di quanto §9.5 dichiarasse: riguarda ogni famiglia il
+      cui finding nomina l'argmin invece del secchio intero.
 - [ ] ⚠ **Il ramo «status quo» è pigro, e nel caso misto spegne la riga.**
       Riguarda la **famiglia** dei rami disgiuntivi introdotti da ADR-018 —
       `WeeklyOrderBuilder` dal Task 12, `MinDistributionBuilder` e
@@ -348,7 +354,12 @@ delle aule e il violatore di Hall. Vedi
       su due giorni è ammesso, mentre prima era vietato (al prezzo però di
       `INFEASIBLE` su 33 istanze sporche su 45). È perdita di **qualità**, non
       di correttezza: nessun finding nuovo, l'oracolo differenziale regge. Tre
-      strade in §9.7 della spec, nessuna adottata.
+      strade in §9.7 della spec, nessuna adottata. ⚠ **Ora misurato anche dal
+      banco che congela** (2026-08-26 sera), che è la prima volta che questo
+      debito si vede da solo invece di essere dichiarato: `free_guaranteed`
+      peggiora da 2 mezze giornate libere a 1. Il banco lo esenta
+      **strettamente** — solo un peggioramento su una (causale, risorsa) già
+      violata, mai una violazione su una risorsa pulita.
 
 - [ ] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
       piazzamento**, e il tetto **settimanale** del peso didattico è il primo
@@ -394,6 +405,104 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (sera)** — **Il banco congela, e il primo builder a cadere è
+  quello che si dichiarava già a posto.** Chiude il debito che §9.7 chiamava
+  «il buco strutturale più grande che resta» (Ruling 20): fino a qui **nessun
+  test del banco congelava niente**, quindi in ogni modello che il banco
+  costruiva `ctx.free` conteneva tutto — `split()` con `frozen = 0` sempre,
+  `any_free` sempre vero, `frozen_occupies` sempre falso, `residual_cap` che
+  non clampava mai, i rami disgiuntivi mai imboccati. Tutta la copertura di
+  ADR-018 poggiava sui test scritti a mano.
+
+  **La costruzione.** Si genera il testimone pulito, si derivano le righe di
+  **tutte** e ventisei le famiglie, poi si **ripacka**: alcune attività si
+  spostano in celle libere da conflitti di occupazione — «libere da conflitti»
+  non è cosmetico, è ciò che lascia il resto dell'orario dov'è. Chi risulta
+  **implicato** nelle violazioni così create viene congelato; gli altri restano
+  liberi e i loro piazzamenti si cancellano. Il risultato è letteralmente la
+  premessa di ADR-018: congelate **già in violazione**, libere da piazzare.
+
+  🔑 **La prova che morde è la prima, non l'oracolo.** Si **forza** ogni libera
+  nella cella dove il testimone la teneva e si attende che il modello non
+  risponda `INFEASIBLE`. Quell'assegnazione non aggiunge niente — per
+  costruzione, perché la baseline è calcolata su di essa e ogni attività
+  implicata è congelata — quindi rifiutarla è *pretendere una riparazione*, la
+  metà vietata del criterio di ADR-018. È la forma della casa (forzare e
+  attendere uno stato), applicata a un modello intero invece che a una riga.
+
+  ⚠ **`SiteTransitionBuilder` non aveva il guardiano ADR-018 che due commenti
+  gli attribuivano.** Trovato al seme 38, ridotto alla forma minima in
+  `tests/test_solver_sites.py`. `any_free` guarda chi **tocca** le due fasce,
+  non chi **realizza** la coppia di sedi vietata: due congelate di sede diversa
+  a distanza insufficiente sono già una violazione, ma basta una qualunque
+  libera che tocchi una delle due fasce perché la clausola venga postata — e
+  quella clausola ha **entrambi** i letterali forzati a 1 dalle congelate.
+  `INFEASIBLE` per colpa del solo passato. Il commento di
+  `builders/time_sites.py` diceva «ha già ADR-018 nella forma della regola
+  dell'implicazione (`any_free`): non toccato», e il docstring di
+  `test_adr018_cambio_gia_prodotto_dalle_congelate_non_blocca` lo ripeteva.
+  **Il pattern di questo progetto per la tredicesima volta**, e stavolta l'ha
+  trovato una misura, non una rilettura. Corretto con `_sede_congelata`, che
+  rispecchia **letteralmente** la selezione dei letterali di
+  `Vocabulary.site_occupied` — leggere il codice invece del proprio ricordo è
+  la stessa regola che vale per `B` nei rami disgiuntivi.
+
+  🔑 **E la mutazione ha bocciato metà del lavoro.** Il banco nasceva con
+  **due** parti: oltre a quella sporca, un `test_famiglia_con_congelate` che
+  congelava una parte del testimone dov'è, famiglia per famiglia, su baseline
+  pulita — 78 test, 28 secondi, i due terzi del tempo aggiunto. Su **sette**
+  mutazioni della macchina ADR-018 non è diventato rosso **una sola volta**,
+  mentre il banco sporco le ha colte su **sei** delle sette (`split` 4 rossi,
+  congelate a dominio pieno 8, `any_free` 2, `_sede_congelata` 1,
+  `_status_quo_rappresentabile` 1, `frozen_occupies` 1 — e **zero** entrambi
+  sul clamp di `residual_cap`, che resta difeso dai soli test scritti a mano).
+  Rimosso: un test che non diventa rosso quando il codice che afferma sparisce
+  non sta affermando niente. ⚠ Il banco **non sostituisce** i test a mano —
+  aggiunge la sola cosa che nessuno di loro sapeva fare, trovare un difetto che
+  nessuno cercava.
+
+  **Due esenzioni dichiarate, entrambe misurate, entrambe esercitate da un test
+  apposta.** ⚠ La prima estende §9.5 oltre le famiglie indipendenti dal
+  piazzamento: la **deriva d'identità**. Diverse famiglie non nominano in
+  `activities` il secchio intero ma la **coppia argmin** o la coppia
+  consecutiva — chi viola, non chi partecipa; piazzare una libera accanto a una
+  congelata cambia allora *quale* coppia è l'argmin senza cambiare la
+  violazione. Misurato al seme 20: `subject_imposed_succession` sulla risorsa 1
+  passa da `(5, 7)` a `(4, 5)` con `gap 3 / max_gap 2` **identici**. È la stessa causa a monte del
+  tie-break di `_placed_of` già in «Ancora aperto».
+  La seconda è il **ramo pigro** di §9.7, per la prima volta misurato invece
+  che dichiarato — e con una forma più precisa di quella descritta lì: è uno
+  **scambio**, non un peggioramento secco. Al seme 20 `free_guaranteed` passa
+  da `free_days 4 / free_half_days 1` a `free_days 1 / free_half_days 4`:
+  ripara la soglia delle mezze (min 3) e rompe quella dei giorni (min 2), che
+  era soddisfatta. Le due soglie stanno sotto **lo stesso** booleano proprio
+  per impedirlo (correzione del 2026-08-26 mattina), ma con le libere non
+  ancora piazzate lo status quo non è rappresentabile, il ramo scende a `>= 0`
+  e scavalca il booleano. Perdita di qualità, non di correttezza:
+  l'esenzione è stretta apposta — una violazione su una risorsa **pulita**
+  resta rossa anche per quelle tre famiglie.
+
+  ⚠ **E un docstring del banco è stato falsificato entro l'ora.**
+  `run_family_congelata` dichiarava «la baseline resta pulita»: falso.
+  Cancellando i piazzamenti delle libere, le famiglie che contano una quantità
+  *presente* — successione imposta, minimi, distribuzione — sono violate
+  proprio **perché manca qualcosa** (misurato: `imposed_succession` al seme 3,
+  finding `(2,) max_gap 2` già prima del solve). Il criterio giusto è il
+  **contenimento** rispetto alla baseline pre-solve, non `== set()`.
+
+  **Osservazione a margine, non risolta**: `residual_floor` non è chiamato da
+  **nessun** builder — solo dal proprio test. I minimi di §3.1 non sono mai
+  stati trattati per sottrazione di termini: i cinque casi di ADR-018 usano
+  `frozen_occupies` o la disgiunzione reificata. È il gemello documentale di
+  `residual_cap`, non codice morto per distrazione, ma va detto.
+
+  **I numeri.** Su 40 semi, **36** producono una costruzione sporca
+  utilizzabile (saltano 13, 14, 17 e 28: le violazioni implicano quasi tutto e
+  restano meno di tre libere) e la dirt copre **26 causali distinte**. Dieci
+  semi entrano nella suite, scelti per fenomeni diversi e non a caso; su quelli
+  la costruzione **non può saltare**, così che una decadenza diventi rossa
+  invece di svuotarsi in silenzio. Suite: **448 test verdi**, 16 skip.
 
 - **2026-08-26** — **La review finale, e due builder che rifiutavano il
   presente.** Sei findings su tutte e ventisei le famiglie, con i seed allargati

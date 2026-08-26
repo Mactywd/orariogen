@@ -18,6 +18,8 @@ vedi `domain/solver/builders/time_sites.py` per la spiegazione e il report
 del Task 9 per la riproduzione verbatim del difetto prima della correzione."""
 import pytest
 
+from domain.analysis.conformity import check_schedule
+from domain.analysis.findings import Severity
 from domain.models import (
     Activity, InstituteSettings, Placement, ResourceTimeConstraint, Site,
 )
@@ -109,9 +111,12 @@ def test_adr018_cambio_gia_prodotto_dalle_congelate_non_blocca():
     resta risolvibile e l'attivita' libera trova comunque posto.
 
     ⚠ `site_transition_slots` a zero: e' un test isolato su MAX_SITE_CHANGES,
-    non su `structural:site_transition` (quello ha gia' un guardiano ADR-018
-    proprio, non toccato da questo task — vedi il report per la scoperta
-    fatta scrivendo questo test)."""
+    non su `structural:site_transition`.
+    ⚠ **Questo docstring diceva anche che `structural:site_transition` «ha gia'
+    un guardiano ADR-018 proprio». Era falso**, e l'ha smentito il banco che
+    congela il 2026-08-26: vedi
+    `test_adr018_site_transition_gia_violato_dalle_congelate_non_blocca` in
+    fondo a questo file."""
     env = mini_school()
     InstituteSettings.objects.update_or_create(
         pk=1, defaults={"site_transition_slots": 0})
@@ -279,3 +284,54 @@ def test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa():
 # dimostrazione che *invece* morde e' `test_max_site_changes_intercetta_il_
 # cambio_con_una_senza_sede_in_mezzo` sopra: la stessa istanza ristretta a un
 # solo giorno, dove non c'e' via di fuga, e l'asserzione e' INFEASIBLE.
+
+
+def test_adr018_site_transition_gia_violato_dalle_congelate_non_blocca():
+    """⚠ La scoperta del banco che congela (2026-08-26), e la smentita di una
+    riga scritta qui sopra: il docstring di
+    `test_adr018_cambio_gia_prodotto_dalle_congelate_non_blocca` dichiara che
+    `structural:site_transition` «ha gia' un guardiano ADR-018 proprio». Non
+    ce l'aveva.
+
+    `any_free` guarda chi **tocca** le due fasce, non chi **realizza** la
+    coppia di sedi vietata. Due congelate di sede diversa a distanza
+    insufficiente sono gia' una violazione nella baseline; basta pero' una
+    qualunque attivita' **libera** che tocchi una delle due fasce perche'
+    `any_free` sia vero e la clausola venga postata. Ma quella clausola e'
+    `site_occupied(s, A).Not() OR site_occupied(t, B).Not()` con **entrambi i
+    letterali forzati a 1 dalle congelate**: insoddisfacibile comunque vada il
+    piazzamento delle libere. `INFEASIBLE` per colpa del solo passato — cioe'
+    la meta' vietata del criterio di ADR-018: *pretendere una riparazione*.
+
+    Qui la libera non ha nemmeno una sede, quindi non puo' riparare niente:
+    serve solo a rendere `any_free` vero. Trovato dal banco al seme 38, dove
+    il ripack aveva prodotto proprio questa configurazione; ridotto qui alla
+    forma minima."""
+    env = mini_school()
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"site_transition_slots": 1})
+    a_site = Site.objects.create(name="A")
+    b_site = Site.objects.create(name="B")
+    frozen_a = make_activity(env["subject"], teachers=[env["teacher"]],
+                             classes=[env["klass"]], site=a_site,
+                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
+    frozen_b = make_activity(env["subject"], teachers=[env["teacher"]],
+                             classes=[env["klass"]], site=b_site,
+                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
+    Placement.objects.create(schedule=env["schedule"], activity=frozen_a,
+                             day=0, start_slot=0)
+    Placement.objects.create(schedule=env["schedule"], activity=frozen_b,
+                             day=0, start_slot=1)
+    libera = make_activity(env["subject"], teachers=[env["teacher"]],
+                           classes=[env["klass"]])
+
+    # la premessa: il checker vede gia' la violazione, e la vede sulle sole
+    # congelate. Senza questo assert il test potrebbe passare per il motivo
+    # sbagliato (nessuna violazione da riparare, quindi nessuna clausola).
+    prima = [f for f in check_schedule(env["schedule"])
+             if f.code == "site_transition" and f.severity == Severity.HARD]
+    assert prima, "il passato non e' in violazione: il test non misura ADR-018"
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    assert libera.id in soluzione.placements

@@ -604,6 +604,17 @@ Lo stesso vale, in piccolo, per la Ruling 22: `quantities` dentro
 `Finding.key` rende «peggiorato» e «migliorato» entrambi finding *nuovi*.
 Con `CODICI` esteso a ventisei famiglie la questione è ora reale, non teorica.
 
+⚠ **E il fenomeno è più largo di quanto questa sezione dichiarava** (misurato
+dal banco che congela, 2026-08-26 sera). Non riguarda solo le famiglie
+indipendenti dal piazzamento: riguarda **ogni famiglia il cui finding nomina in
+`activities` la coppia argmin o la coppia consecutiva** invece del secchio
+intero — chi viola, non chi partecipa. Piazzare una libera accanto a una
+congelata cambia allora *quale* coppia è l'argmin lasciando causale, risorsa e
+quantità **identiche**: misurato su `subject_imposed_succession`. È la stessa
+causa a monte del tie-break di `_placed_of` in «Ancora aperto» di `CLAUDE.md`.
+Il banco lo tratta con una chiave grossolana **dichiarata** (`_grossa` in
+`tests/solver_harness.py`), non con un'eccezione implicita.
+
 ### 9.6 Il criterio di riuscita, e quale metà lo regge davvero
 
 `CODICI` in `tests/test_solver_oracle.py` era rimasto alle cinque famiglie
@@ -640,9 +651,25 @@ sorveglia i builder troppo stretti, ed è quello che ha trovato più difetti.
 
 ### 9.7 Debiti dichiarati
 
-- **Il banco non congela mai nulla** (Ruling 20). Ogni attività del testimone
-  è libera, quindi tutta la copertura di ADR-018 poggia sui test scritti a
-  mano. È il buco strutturale più grande che resta.
+- ~~**Il banco non congela mai nulla** (Ruling 20)~~ — **chiuso il 2026-08-26
+  (sera)**, e la voce resta perché quel che ha trovato conta più della voce.
+  `tests/test_solver_frozen.py` congela: `run_modello_sporco` costruisce la
+  premessa di ADR-018 — congelate **già in violazione**, libere da piazzare — e
+  chiede due cose: che il modello **ammetta lo status quo forzato** (la prova
+  che morde) e che il solve libero non introduca violazioni nuove.
+  Ha trovato al primo colpo che **`SiteTransitionBuilder` non aveva il
+  guardiano ADR-018** che il suo commento di modulo, e il docstring di
+  `tests/test_solver_sites.py::test_adr018_cambio_gia_prodotto_dalle_congelate_non_blocca`,
+  gli attribuivano: `any_free` guarda chi **tocca** le due fasce, non chi
+  **realizza** la coppia di sedi vietata, e la clausola postata ha entrambi i
+  letterali forzati a 1 dalle congelate. §9.8 alla tredicesima occorrenza.
+  ⚠ Il banco **non sostituisce** i test scritti a mano: sul clamp di
+  `residual_cap` non aggiunge un solo rosso (misurato su sette mutazioni).
+  Aggiunge la sola cosa che nessuno di loro sapeva fare — trovare un difetto
+  che nessuno cercava. ⚠ E la stessa misura ha **bocciato metà del banco**: un
+  secondo `test_famiglia_con_congelate` su baseline pulita, 78 test e 28
+  secondi, non è diventato rosso su nessuna delle sette mutazioni ed è stato
+  rimosso.
 - **`coverage_mismatch` sul testimone** (Ruling 102): i `Service` della
   fixture sono per (piano, materia) mentre `student_units` attribuisce il
   monte ore alle **parti**. Innocuo — `structural:coverage` non ha un builder
@@ -670,7 +697,17 @@ sorveglia i builder troppo stretti, ed è quello che ha trovato più difetti.
   ammassarle tutte su due giorni è ammesso, e prima della correzione era
   vietato (al prezzo però di `INFEASIBLE` su 33 istanze sporche su 45).
   È perdita di **qualità**, non di correttezza: nessun finding nuovo,
-  l'oracolo differenziale regge. Tre strade, nessuna adottata: `AddHint` sul
+  l'oracolo differenziale regge. ⚠ **Misurato anche dal banco che congela**
+  (2026-08-26 sera) — la prima volta che questo debito si vede da solo invece
+  di essere dichiarato, e in una forma più precisa: è uno **scambio**, non un
+  peggioramento secco. `free_guaranteed` passa da `free_days 4 / free_half_days
+  1` a `free_days 1 / free_half_days 4` — ripara la soglia delle mezze e rompe
+  quella dei giorni, che era soddisfatta. Le due soglie stanno sotto lo stesso
+  booleano proprio per impedirlo, ma con le libere non ancora piazzate
+  `_status_quo_rappresentabile` è falso, il ramo scende a `>= 0` e scavalca il
+  booleano. Il banco lo esenta **strettamente**: solo
+  un peggioramento su una (causale, risorsa) già violata, mai una violazione su
+  una risorsa pulita. Tre strade, nessuna adottata: `AddHint` sul
   booleano di riparazione (zero rischio semantico, meccanismo nuovo per questo
   branch); clamp sul massimo raggiungibile (non pigro, ma è una **sovrastima**
   — sarebbe il quarto «bound dichiarato conservativo e non lo è»); oppure

@@ -2058,3 +2058,108 @@ del checker e **zero** piu' stretti del testimone. I difetti trovati stanno
 tutti su input **sporco** (ADR-018), copertura di test e vacuita' del banco —
 non nella traduzione dei vincoli. — Costo se sbagliato: si generalizza «la
 review ha trovato sei cose» in «il modello e' fragile», che i numeri smentiscono.
+
+## Coda — il banco che congela (2026-08-26 sera)
+
+Fuori dai diciassette task: chiude il debito §9.7 «il banco non congela mai
+nulla» (Ruling 20).
+
+Ruling 124: **come si costruisce un input sporco senza perdere la premessa.**
+Il banco ha bisogno di congelate **già in violazione**, ma anche della
+garanzia che rimettere le libere dove stavano non aggiunga niente — altrimenti
+`INFEASIBLE` non è più diagnosticabile (ADR-018 ne ammette metà). — Decisione:
+ripack in **celle libere da conflitti di occupazione** (così il resto
+dell'orario resta dov'è), poi congelare **chi è implicato** nelle violazioni
+prodotte. L'attribuzione ha due forme e vanno usate dove servono: le attività
+che il finding **nomina**, e — solo per i findings che non ne nominano nessuna
+— tutte quelle che toccano la **risorsa**. ⚠ Gli otto vincoli orari sulla
+risorsa (`_finding` in `time_constraints.py`) e `sites.py` non portano **mai**
+`activities`. — Costo se sbagliato: misurato. Estendendo per risorsa **ovunque**
+si congela l'intera classe a ogni violazione di materia (`_unit_resources`
+restituisce le chiavi dell'unità), i semi utilizzabili scendono da 36/40 a
+24/40 e il caso misto congelata/libera **dentro la riga violata** — il cuore di
+ADR-018 — non viene mai esercitato.
+
+Ruling 125: **la prova che morde è il forzare, non l'oracolo.** Su un input
+sporco «risolvi e guarda» soffre lo stesso difetto misurato nella §9.6: CP-SAT
+non cerca la soluzione cattiva. — Decisione: `build_model` + `model.Add(x[a, d,
+s] == 1)` su ogni libera alla cella del testimone, e si attende che non sia
+`INFEASIBLE`. Quell'assegnazione produce esattamente la baseline, quindi
+rifiutarla è *pretendere una riparazione*. — Costo se sbagliato: è la prova che
+ha trovato il difetto del Ruling 126; l'oracolo differenziale, da solo, non
+l'avrebbe visto (il seme 38 dà `OPTIMAL` e zero nuove appena il difetto è
+corretto).
+
+Ruling 126: **`SiteTransitionBuilder` non aveva il guardiano ADR-018 che due
+commenti gli attribuivano.** `any_free` guarda chi **tocca** le due fasce, non
+chi **realizza** la coppia di sedi vietata: con due congelate di sede diversa a
+distanza insufficiente — già una violazione per il checker — basta una libera
+qualunque che tocchi una delle due fasce perché la clausola venga postata, e
+quella clausola ha **entrambi** i letterali forzati a 1 dalle congelate.
+`INFEASIBLE` per colpa del solo passato. Il commento di modulo di
+`time_sites.py` («ha già ADR-018 nella forma della regola dell'implicazione:
+non toccato») e il docstring di
+`test_adr018_cambio_gia_prodotto_dalle_congelate_non_blocca` dichiaravano
+entrambi il contrario. — Decisione: `_sede_congelata`, che salta la clausola
+quando **entrambe** le sedi sono forzate da congelate, e che rispecchia
+**letteralmente** la selezione dei letterali di `Vocabulary.site_occupied` —
+stessa lettura di `by_cell`, stesso filtro su `site_id`, stesso filtro di
+firma. Con una sola sede forzata la clausola resta ed è un divieto, che ADR-018
+concede (caso 3). — Costo se sbagliato: un solve incrementale su una scuola con
+più sedi risponde `INFEASIBLE` ogni volta che l'orario di partenza porta un
+cambio di sede troppo stretto, cioè proprio nel caso d'uso per cui ADR-018
+esiste. Mutazione: `_sede_congelata → False` fa due rossi,
+`test_modello_sporco[38]` e il test ridotto.
+
+Ruling 127 (**metodo**): **la mutazione ha bocciato metà del banco appena
+scritto.** Il banco nasceva con due parti; la seconda,
+`test_famiglia_con_congelate`, congelava una parte del testimone dov'è,
+famiglia per famiglia, su baseline pulita: 78 test, 28 secondi, i due terzi del
+tempo aggiunto. Misurato su **sette** mutazioni (`residual_cap` senza clamp,
+`split` che conta le congelate come libere, `frozen_occupies` sempre falso,
+`any_free` sempre vero, `_sede_congelata` sempre falso,
+`_status_quo_rappresentabile` sempre vero, congelate con dominio pieno):
+**zero rossi**, mentre il banco sporco le coglie su sei delle sette (4, 8, 2,
+1, 1, 1 rossi; zero entrambi sul clamp di `residual_cap`, difeso dai soli test
+scritti a mano). — Decisione: rimosso. — Costo se sbagliato: 28 secondi di
+suite per un test che non afferma niente, e la falsa sicurezza di «il banco
+copre anche il caso pulito con congelate». ⚠ Ricostruirlo solo dopo avergli
+trovato una mutazione che lo faccia cadere.
+
+Ruling 128: **la deriva d'identità, e perché l'oracolo del banco sporco ha una
+chiave grossolana.** §9.5 attribuiva la crescita della `Finding.key` alle sole
+famiglie indipendenti dal piazzamento. ⚠ **È più largo**: riguarda ogni
+famiglia il cui finding nomina in `activities` la **coppia argmin** o la coppia
+consecutiva invece del secchio intero. Misurato: `subject_imposed_succession`
+al seme 20 passa da `(5, 7)` a `(4, 5)` sulla risorsa 1 con `gap 3 / max_gap
+2` **identici**, perché una libera piazzata accanto a una congelata cambia
+*quale* coppia è consecutiva. Sullo stesso seme il ramo pigro si vede come uno
+**scambio**: `free_guaranteed` da `free_days 4 / free_half_days 1` a
+`free_days 1 / free_half_days 4` — ripara una soglia e rompe l'altra,
+scavalcando il booleano unico che esiste apposta per impedirlo. È
+la stessa causa a monte del tie-break di `_placed_of` già in «Ancora aperto».
+— Decisione: due esenzioni **dichiarate** in `_classifica_nuove`, non
+implicite: la deriva d'identità (stessa causale, risorsa e quantità) e il ramo
+pigro di §9.7 (peggioramento su una (causale, risorsa) **già** violata, e solo
+per le tre famiglie a ramo disgiuntivo). Un test apposta pretende che entrambe
+scattino sul seme 20. — Costo se sbagliato: un'esenzione larga renderebbe
+l'oracolo cieco proprio dove serve; un'esenzione mai esercitata sarebbe codice
+che nessun test afferma — la stessa forma del Ruling 127.
+
+Ruling 129: **il docstring del banco falsificato entro l'ora.**
+`run_family_congelata` dichiarava «la baseline resta pulita»: cancellando i
+piazzamenti delle libere, le famiglie che contano una quantità *presente* —
+successione imposta, minimi, distribuzione — sono violate proprio **perché
+manca qualcosa**. Misurato: `imposed_succession` al seme 3, finding `(2,)
+max_gap 2` già prima del solve. — Decisione: criterio di **contenimento**, non
+`== set()`. — Costo se sbagliato: il banco rosso su una violazione che ADR-018
+concede esplicitamente, cioè il contrario di quel che deve misurare. ⚠ §9.8 su
+un documento vecchio di un'ora, scritto da chi stava già cercando quel pattern.
+
+Ruling 130 (**osservazione, non risolta**): **`residual_floor` non è chiamato
+da nessun builder** — solo dal proprio test. I «minimi» di §3.1 non sono mai
+stati trattati per sottrazione di termini: i cinque casi di ADR-018 usano
+`frozen_occupies` o la disgiunzione reificata. — Decisione: lasciato dov'è (è
+il gemello documentale di `residual_cap`, non codice morto per distrazione) e
+annotato. — Costo se sbagliato: si crede che esista un trattamento dei minimi
+per sottrazione, e lo si riusa dove serve invece il residuo per forzatura.

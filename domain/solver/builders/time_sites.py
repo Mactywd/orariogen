@@ -90,9 +90,19 @@ capienza 1** (confronto esaustivo nel report del Task 9, giro di correzione
 separabili: stesso schema di `MaxGapBuilder`/`MaxPresenceBuilder`
 (`time_presence.py`) — un tetto **clampato**, mai un salto del vincolo (il
 `continue` e' stato sbagliato due volte su questo piano: review Task 6
-Important 2, e Ruling 23 sul Task 8). `SiteTransitionBuilder` invece ha gia'
-ADR-018 nella forma della regola dell'implicazione (`any_free`): non
-toccato.
+Important 2, e Ruling 23 sul Task 8).
+
+⚠ **`SiteTransitionBuilder` invece non aveva ADR-018 affatto**, e fino al
+2026-08-26 il commento qui ha dichiarato il contrario («ha gia' ADR-018 nella
+forma della regola dell'implicazione (`any_free`): non toccato»). `any_free` guarda
+chi **tocca** le due fasce, non chi **realizza** la coppia di sedi vietata:
+con due congelate di sede diversa a distanza insufficiente — gia' una
+violazione per il checker — basta una libera qualunque che tocchi una delle
+due fasce perche' la clausola venga postata, e quella clausola ha **entrambi**
+i letterali forzati a 1 dalle congelate. `INFEASIBLE` per colpa del solo
+passato, cioe' la meta' vietata del criterio di ADR-018. Trovato dal banco che
+congela (`tests/test_solver_frozen.py`, seme 38) il 2026-08-26; il guardiano
+vero e' `_sede_congelata` qui sotto.
 
 ⚠ **Minor 2 (review Task 9): filtro a costo zero sul numero di clausole —
 applicato, ma misurato a effetto nullo sul Fermi.** Entrambi i builder
@@ -233,15 +243,42 @@ class MaxSiteChangesBuilder(ResourceBuilder):
             model.Add(sum(tutti) <= max(per_settimana, consumo_settimana))
 
 
+def _sede_congelata(ctx, key, day, slot, site_id, rep):
+    """La sede `site_id` e' occupata in quella cella da una **congelata**?
+
+    Rispecchia letteralmente la selezione dei letterali di
+    `Vocabulary.site_occupied` (domain/solver/vocabulary.py): stessa lettura
+    di `ctx.by_cell`, stesso filtro su `site_id`, stesso filtro di attivita'
+    attiva nella firma. Se la selezione divergesse anche di un letterale il
+    residuo sarebbe peggiore del difetto — e' la regola della casa sul modo di
+    leggere `B`, applicata qui a una costante invece che a una soglia."""
+    active = ctx.states[rep].activities
+    return any(aid not in ctx.free
+               and ctx.activities[aid].site_id == site_id
+               and aid in active
+               for aid, _ in ctx.by_cell.get((key, day, slot), ()))
+
+
 @register("structural:site_transition")
 class SiteTransitionBuilder(Builder):
     """Fra due lezioni su sedi diverse servono `site_transition_slots` fasce
     libere. Vale su **ogni** chiave di occupazione, non su una riga di
     vincolo: e' strutturale, come l'occupazione.
 
-    ADR-018 e' gia' presente nella forma della regola dell'implicazione
-    (`any_free`): se nessuna delle attivita' che toccano le due fasce e'
-    libera, il vincolo e' un fatto sul passato e non si posta.
+    ADR-018 si applica in **due** forme, e per mesi ce n'e' stata una sola.
+    La regola dell'implicazione (`any_free`): se nessuna delle attivita' che
+    toccano le due fasce e' libera, il vincolo e' un fatto sul passato e non si
+    posta. ⚠ E — aggiunta il 2026-08-26 — il salto della **singola coppia gia'
+    realizzata dalle congelate**: se `sa` e `sb` sono entrambe forzate da
+    attivita' congelate (`_sede_congelata`), la clausola avrebbe entrambi i
+    letterali a 1 ed e' insoddisfacibile comunque vada il piazzamento delle
+    libere. La prima forma non copre la seconda: basta **una** libera che
+    tocchi una delle due fasce — anche senza sede, anche incapace di riparare
+    niente — perche' `any_free` sia vero e la clausola venga postata.
+    Con una sola delle due sedi forzata la clausola resta, ed e' un divieto su
+    una decisione del solver: ADR-018 lo concede anche quando produce
+    `INFEASIBLE` (stesso caso 3 di `ImposedSuccessionBuilder` con finestra
+    vuota).
 
     `build` posta due famiglie di clausole: `s == t` (due sedi diverse sulla
     stessa fascia, indipendente da `needed` — Important 1, Ruling 33) e
@@ -276,6 +313,8 @@ class SiteTransitionBuilder(Builder):
                         if not any_free(ctx, tocca):
                             continue
                         for sa in per_fascia[s]:
+                            sa_congelata = _sede_congelata(
+                                ctx, key, day, s, sa, rep)
                             for sb in per_fascia[s]:
                                 # `sb <= sa`, non `sb == sa`: qui s e t sono
                                 # la stessa fascia, quindi la clausola e'
@@ -291,6 +330,9 @@ class SiteTransitionBuilder(Builder):
                                 # e scambiare le sedi e' un'altra clausola.
                                 if sb <= sa:
                                     continue
+                                if sa_congelata and _sede_congelata(
+                                        ctx, key, day, s, sb, rep):
+                                    continue   # vedi _sede_congelata
                                 firma = (key, day, s, s, sa, sb,
                                          frozenset(tocca))
                                 if firma in posted:
@@ -318,9 +360,14 @@ class SiteTransitionBuilder(Builder):
                             if not any_free(ctx, tocca):
                                 continue
                             for sa in per_fascia[s]:
+                                sa_congelata = _sede_congelata(
+                                    ctx, key, day, s, sa, rep)
                                 for sb in per_fascia[t]:
                                     if sa == sb:
                                         continue
+                                    if sa_congelata and _sede_congelata(
+                                            ctx, key, day, t, sb, rep):
+                                        continue   # vedi _sede_congelata
                                     firma = (key, day, s, t, sa, sb,
                                              frozenset(tocca))
                                     if firma in posted:
