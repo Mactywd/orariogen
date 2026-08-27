@@ -66,9 +66,10 @@ domain/                l'app Django del modello di dominio v1
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette,
                         la catena lessicografica (objective.py), le quote
-                        di alleggerimento (relaxation.py) e i criteri di
-                        qualità (quality.py + criteria.py)
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, il comando solve)
+                        di alleggerimento (relaxation.py), i criteri di
+                        qualità (quality.py + criteria.py) e la separazione
+                        per popolazione con la perdita tollerata (Arbitrato)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -190,10 +191,28 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > senza limite di tempo non tornano in nove minuti, con `--limite 15` chiudono
 > in 39,5 s lasciando due livelli su sei con l'ottimo non dimostrato.
 >
+> Dal 2026-08-27 (sera) c'è anche la **separazione per popolazione**
+> (`Arbitrato` in `domain/solver/quality.py`,
+> [spec](docs/superpowers/specs/2026-08-27-separazione-popolazione-design.md)):
+> EDT ottimizza docenti *oppure* classi, mai insieme, e dichiara **quanto è
+> disposto a peggiorare l'altra**. I criteri della popolazione sacrificata
+> smettono di essere livelli e diventano **tetti di non-regressione**
+> (`valore <= base + tolleranza`), dove la base è il valore che quel criterio
+> ha sull'orario di partenza — calcolato con la **stessa funzione** del
+> livello, su un modello usa-e-getta con i letterali di cella sostituiti da
+> costanti. `manage.py solve --popolazione teachers --tolleranza N`.
+>
+> ⚠ **E il pezzo ha trovato che i criteri di qualità erano inerti su ogni
+> orario già scritto.** L4 (la stabilità) precedeva la qualità, raggiungeva
+> zero conservando tutto e inchiodava ogni cella. Non si vedeva perché il
+> Fermi non ha piazzamenti di suo. Con l'arbitrato la stabilità scivola in
+> coda e diventa lo spareggio; senza, resta prima (ADR-010). Misura sul Fermi:
+> catena unica `gaps_teachers 420` in 0,06 s — cioè l'orario di prima,
+> misurato e non migliorato; con l'arbitrato **0**, al prezzo di 231 attività
+> spostate su 284.
+>
 > Resta **un solo pezzo dichiarato fuori** — l'assegnazione delle aule — più i
-> punti aperti elencati sotto e, sopra i criteri, la **separazione per
-> popolazione** con la perdita di qualità tollerata: EDT ottimizza docenti
-> *oppure* classi, mai insieme.
+> punti aperti elencati sotto.
 
 ### Prototipo solver — parcheggiato
 
@@ -443,6 +462,83 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-27 (separazione per popolazione)** — **EDT non cerca mai un ottimo
+  congiunto, e adesso nemmeno noi.** I comandi del prodotto sono due —
+  `Ottimizza gli orari dei docenti` / `... delle classi`, `TypeTypeOptim =
+  ttoProfs, ttoClasses` — e chi lancia dichiara **quanto è disposto a
+  peggiorare l'altra popolazione**. `Arbitrato(popolazione, tolleranza)`
+  ([spec](docs/superpowers/specs/2026-08-27-separazione-popolazione-design.md)):
+  i criteri della popolazione sacrificata escono dalla catena e diventano
+  `valore <= base + tolleranza`, un vincolo hard di non-regressione — mai un
+  peso in una somma, che è la frase con cui `motore-risoluzione.md` descrive il
+  meccanismo.
+
+  🔑 **Non basta riordinare i `rank`**, ed è il punto del pezzo. Con i soli
+  `rank` i criteri dell'altra popolazione restano **livelli**: si ottimizzano
+  comunque, e costano. L'arbitrato li declassa a tetti. Misurato in A/B sul
+  Fermi: la stessa riga come tetto costa i suoi ~640 variabili di definizione e
+  **zero** tempo di ricerca (31,6 s); come livello si prende una fetta intera
+  del limite e chiude senza dimostrare l'ottimo (41,9 s). Il risparmio è
+  limitato dal `--limite`, e senza limite non è limitato da niente.
+
+  🔑 **La base non è una seconda definizione del criterio: è la stessa
+  funzione.** Un criterio posta **solo definizioni** — l'invariante scritto in
+  testa a `quality.py` quando il pezzo precedente è nato — quindi lo si può
+  valutare su un orario *dato* chiamandolo con i letterali di cella sostituiti
+  dalle costanti `0`/`1` di quell'orario: ogni booleano derivato è determinato
+  per propagazione, e un `Solve` istantaneo restituisce il numero.
+  L'alternativa era riscrivere i cinque criteri in Python su `ScheduleState`,
+  cioè il difetto che questo progetto ha già intercettato due volte. Un test
+  tiene ferme le due strade: la base dev'essere il numero che il **livello** dà
+  sullo stesso orario.
+
+  ⚠ **E il pezzo ha trovato che i criteri di qualità non funzionavano su
+  nessun orario già scritto.** L'arbitrato ha bisogno di un orario di partenza,
+  e un orario di partenza mette in catena **L4**: la stabilità arriva a zero
+  conservando tutto, il suo fissaggio inchioda ogni cella, e da lì in giù ogni
+  livello di qualità è **inerte**. Sul Fermi con l'orario già scritto la catena
+  unica riporta `gaps_teachers 420`, `isolated_teachers 20`,
+  `regularity_classes 265` **in 0,06 s per livello** — non sono risultati, sono
+  i valori dell'orario che c'era, misurati e non migliorati. Un livello che
+  chiude in sessanta millisecondi su 284 attività non sta ottimizzando niente.
+  ⚠ Il difetto **non è di questo pezzo**: c'era dal giorno in cui i criteri
+  sono nati, e non si vedeva perché **il Fermi non ha piazzamenti di suo**,
+  quindi la misura che li aveva dichiarati funzionanti girava dove L4 non
+  esiste. È la forma di sempre — una proprietà del dataset scambiata per una
+  proprietà del codice — stavolta a ventiquattr'ore di distanza.
+  **La correzione è d'ordine, e la decisione viene da EDT**: là i comandi sono
+  due e il conflitto non si pone, perché `Ottimizza` rimescola un orario che
+  c'è già e rimescolare *è* lo scopo. Qui il comando è uno, quindi la corsa
+  deve dichiararsi: senza arbitrato vince la stabilità (ADR-010, il secondo
+  quadrimestre da non stravolgere), con l'arbitrato la stabilità scivola in
+  coda e diventa lo **spareggio**. Sul Fermi i buchi dei docenti passano da 420
+  a **0**, e il prezzo è dichiarato: **231 attività spostate su 284**.
+
+  ⚠ **L'istanza dei test è stata costruita dopo aver misurato che le ovvie non
+  funzionano.** Due docenti per due classi su una griglia 2×2 sembra la
+  tensione canonica e **non lo è**: due classi diverse possono occupare la
+  stessa cella, quindi comprimere i docenti comprime anche le classi e i due
+  ottimi coincidono — tolleranza 0 e tolleranza 2 davano la stessa risposta,
+  cioè un test incapace di distinguere. La tensione vera è fra `regularity` (la
+  materia sempre alla stessa fascia, quindi su giorni diversi) e
+  `free_half_days` (tutto lo stesso giorno, quindi su fasce diverse): l'una a 1
+  costringe l'altra a 2.
+
+  **Nove mutazioni, nove esiti distinti.** ⚠ E due sono servite dove una
+  sembrava bastare: sfasare il **tetto** non tocca il test che confronta la
+  base col livello, perché quel test guarda la base. Ci vuole la mutazione
+  sulla **fonte** per farlo diventare rosso.
+
+  ⚠ Sul Fermi il tetto **non morde** — buchi e ore isolate arrivano a zero
+  comunque — quindi tolleranza 0 e 10 danno lo stesso orario. Come sempre su
+  questo dataset la misura è del **costo**, mai della **copertura**.
+
+  Dichiarato fuori, e come decisione: il valore **raggiunto** dal criterio
+  sacrificato. Il rendiconto dice base e tetto, non dove si è atterrati;
+  leggerlo vorrebbe `solve_chain` che restituisce il solver, o una seconda
+  valutazione con le righe ripescate e riappaiate per nome — parecchia coppia
+  incidentale per un numero solo. **612 test verdi**, 16 skip.
 
 - **2026-08-27 (criteri di qualità)** — **La catena impara a distinguere due
   orari legali.** Sei ondate

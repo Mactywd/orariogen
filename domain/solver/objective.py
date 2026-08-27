@@ -43,7 +43,7 @@ class Esito:
                 "ottimo": self.ottimo, "secondi": self.secondi}
 
 
-def livelli(ctx, model):
+def livelli(ctx, model, arbitrato=None):
     """La catena, da L1 a L4. ⚠ **L'ordine è la decisione D1 della spec**:
     prima le ore, poi
     il numero di attività come spareggio. Uno scarto da 3h fa più danno al
@@ -107,17 +107,50 @@ def livelli(ctx, model):
         nuove = model.NewIntVar(0, len(quote) + len(mancate), "violazioni_nuove")
         model.Add(nuove == sum(quote) + sum(mancate))
         catena.append(Level("violazioni_nuove", nuove))
-    # L4 — la stabilità. Rigenerando l'orario a ogni periodo (ADR-010) serve un
-    # criterio «mantieni il più possibile le collocazioni precedenti», o il
-    # secondo quadrimestre viene stravolto per tutti: è la conseguenza che il
-    # progetto si porta dietro da luglio, ed è un livello lessicografico, non
-    # un'architettura. È anche ciò che EDT minimizza nel risolutore passo-passo
-    # («il numero di variabili che cambiano valore rispetto alla soluzione
-    # corrente»).
+    stabilita = _stabilita(ctx, model)
+    # I criteri di qualità. Tabella vuota ⇒ nessun livello e nessuna variabile:
+    # è la catena di prima di quel pezzo, byte per byte. Con un `Arbitrato`, i
+    # criteri della popolazione sacrificata non arrivano fin qui: restano nel
+    # modello come tetti di non-regressione.
+    qualita = [Level(nome, var)
+               for nome, var in livelli_di_qualita(ctx, model, arbitrato)]
+
+    # 🔑 **L'ordine fra stabilità e qualità dipende da che corsa è questa, e la
+    # ragione è una misura, non un'opinione.** Con un orario di partenza
+    # completo la stabilità raggiunge zero conservando tutto, e il suo
+    # fissaggio inchioda ogni cella: **tutti i livelli di qualità diventano
+    # inerti**. Misurato — quattro attività su una griglia 2×2, con la qualità
+    # dei docenti che potrebbe scendere da 4 a 2 e restava a 4.
     #
-    # ⚠ Ultimo della catena, e non è un dettaglio d'ordine: la stabilità cede a
-    # tutto il resto. Un orario che conserva le collocazioni ma scarta un'ora
-    # in più è peggiore, non migliore.
+    # In EDT i comandi sono due e il conflitto non si pone: `Piazzamento
+    # automatico` costruisce, `Ottimizza gli orari dei docenti / delle classi`
+    # rimescola un orario che c'è già — e rimescolare *è* lo scopo, non un
+    # danno. Qui il comando è uno solo, quindi la corsa deve dichiararsi, e
+    # `arbitrato` è esattamente quella dichiarazione: nominare la popolazione
+    # da ottimizzare vuol dire «questa è un'ottimizzazione».
+    #
+    # Senza arbitrato vince la stabilità (ADR-010: rigenerando per il secondo
+    # quadrimestre non si stravolge l'orario di tutti). Con l'arbitrato la
+    # stabilità scivola in coda e diventa lo **spareggio**: fra due orari di
+    # pari qualità, il più vicino a quello che c'è.
+    coda = [stabilita] if stabilita is not None else []
+    catena += (qualita + coda) if arbitrato is not None else (coda + qualita)
+    return catena
+
+
+def _stabilita(ctx, model):
+    """L4 — la stabilità, o `None` senza un orario di partenza.
+
+    Rigenerando l'orario a ogni periodo (ADR-010) serve un criterio «mantieni
+    il più possibile le collocazioni precedenti», o il secondo quadrimestre
+    viene stravolto per tutti: è la conseguenza che il progetto si porta dietro
+    da luglio, ed è un livello lessicografico, non un'architettura. È anche ciò
+    che EDT minimizza nel risolutore passo-passo («il numero di variabili che
+    cambiano valore rispetto alla soluzione corrente»).
+
+    ⚠ Cede sempre a L1-L3: un orario che conserva le collocazioni ma scarta
+    un'ora in più è peggiore, non migliore. Dove si colloca rispetto alla
+    **qualità** lo decide `livelli()`, e non è un dettaglio d'ordine."""
     mosse, fisse = [], 0
     for aid, cella in sorted(ctx.placed_before.items()):
         lit = ctx.x.get((aid, cella[0], cella[1]))
@@ -128,18 +161,11 @@ def livelli(ctx, model):
             fisse += 1
         else:
             mosse.append(lit)
-    if mosse or fisse:
-        spostate = model.NewIntVar(0, len(mosse) + fisse, "spostamenti")
-        model.Add(spostate == len(mosse) + fisse - sum(mosse))
-        catena.append(Level("spostamenti", spostate))
-
-    # I criteri di qualità, in coda: la qualità cede a tutto il resto, come già
-    # la stabilità. Un orario più bello che scarta un'ora in più è peggiore.
-    # Tabella vuota ⇒ nessun livello e nessuna variabile: è la catena di prima
-    # di questo pezzo, byte per byte.
-    for nome, var in livelli_di_qualita(ctx, model):
-        catena.append(Level(nome, var))
-    return catena
+    if not (mosse or fisse):
+        return None
+    spostate = model.NewIntVar(0, len(mosse) + fisse, "spostamenti")
+    model.Add(spostate == len(mosse) + fisse - sum(mosse))
+    return Level("spostamenti", spostate)
 
 
 def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,

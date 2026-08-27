@@ -105,3 +105,50 @@ def test_il_comando_sul_fermi():
     assert "Violazioni residue" not in testo
     assert Placement.objects.filter(schedule=dataset["schedule"]).count() == 284
     print("\n" + testo)
+
+
+def test_il_comando_arbitra_fra_le_popolazioni():
+    """`--popolazione` e `--tolleranza`: la separazione di EDT da riga di
+    comando. Il rendiconto dichiara base e tetto, perché un tetto che non si
+    vede è un risultato che l'utente non sa spiegarsi."""
+    from domain.models import QualityCriterion
+    P = QualityCriterion.Population
+
+    env = mini_school(days=2, slots=2)
+    a1 = make_activity(env["subject"], teachers=[env["teacher"]],
+                       classes=[env["klass"]])
+    a2 = make_activity(env["subject"], teachers=[env["teacher"]],
+                       classes=[env["klass"]])
+    Placement.objects.create(schedule=env["schedule"], activity=a1, day=0, start_slot=0)
+    Placement.objects.create(schedule=env["schedule"], activity=a2, day=1, start_slot=0)
+    QualityCriterion.objects.create(kind=QualityCriterion.Kind.FREE_HALF_DAYS,
+                                    population=P.TEACHERS, rank=1)
+    QualityCriterion.objects.create(kind=QualityCriterion.Kind.REGULARITY,
+                                    population=P.CLASSES, rank=2)
+
+    testo, errore = _esegui(env["schedule"], popolazione=P.TEACHERS, tolleranza=0)
+    assert errore is None, testo
+    assert "Arbitrato fra popolazioni" in testo
+    assert "Si ottimizza: teachers" in testo
+    assert "Perdita tollerata per classes: 0" in testo
+    assert "regularity_classes: base 1, tetto 1" in testo
+    # il criterio sacrificato non compare fra i livelli della catena
+    criteri = testo.split("Criteri, in ordine di priorità")[1].split("Arbitrato")[0]
+    assert "free_half_days_teachers" in criteri
+    assert "regularity_classes" not in criteri
+
+
+def test_il_comando_dichiara_quando_non_c_e_una_base():
+    """Un tetto non posto cambia il risultato: si dichiara, mai in silenzio."""
+    from domain.models import QualityCriterion
+    P = QualityCriterion.Population
+
+    env = mini_school(days=2, slots=2)
+    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    QualityCriterion.objects.create(kind=QualityCriterion.Kind.REGULARITY,
+                                    population=P.CLASSES, rank=1)
+
+    testo, errore = _esegui(env["schedule"], popolazione=P.TEACHERS)
+    assert errore is None, testo
+    assert "nessun tetto" in testo
+    assert "non è completo" in testo

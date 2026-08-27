@@ -87,7 +87,7 @@ def build_model(schedule, extraction=None, allow_unplaced=True,
 
 
 def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
-          workers=None, ignora_opzionali=()):
+          workers=None, ignora_opzionali=(), arbitrato=None):
     """`workers=1` rende la ricerca **riproducibile**. Serve ai test che
     osservano *quale* ottimo torna e non solo che ne torni uno: con più
     lavoratori CP-SAT restituisce l'ottimo che il primo thread trova, e due
@@ -95,12 +95,18 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
     ottimi, ma con fenomeni diversi da osservare.
 
     ⚠ `time_limit` è **per livello** della catena lessicografica, non per la
-    chiamata: vedi `solve_chain`."""
+    chiamata: vedi `solve_chain`.
+
+    `arbitrato` è la separazione per popolazione di EDT: si ottimizza una
+    popolazione e si dichiara quanto si è disposti a peggiorare l'altra. Senza,
+    catena unica su tutte le righe — che non è ciò che fa EDT, ma è ciò che
+    serve a costruire un orario **da zero**, dove non c'è ancora niente da
+    peggiorare. Vedi `domain/solver/quality.Arbitrato`."""
     started = time.monotonic()
     model, ctx = build_model(schedule, extraction=extraction,
                              allow_unplaced=allow_unplaced,
                              ignora_opzionali=ignora_opzionali)
-    catena = livelli(ctx, model)
+    catena = livelli(ctx, model, arbitrato)
 
     def estrai(solver):
         return {aid: (day, slot) for (aid, day, slot), var in ctx.x.items()
@@ -139,6 +145,7 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
             "minuti_scartati": sum(ctx.activities[aid].duration_minutes
                                    for aid in unplaced),
             "livelli": tuple(e.as_dict() for e in esiti),
+            "arbitraggi": tuple(ctx.arbitraggi),
             "variabili": len(proto.variables),
             "constraint": len(proto.constraints),
             "secondi": round(time.monotonic() - started, 3),

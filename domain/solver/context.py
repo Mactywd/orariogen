@@ -37,6 +37,8 @@ class SolverContext:
                              # dei rami disgiuntivi di ADR-018: L3 li minimizza
     placed_before: dict = field(default_factory=dict)  # id → (giorno, fascia)
                              # com'era prima del solve: L4 minimizza gli spostamenti
+    arbitraggi: list = field(default_factory=list)   # il rendiconto dei tetti di
+                             # non-regressione posti sulla popolazione sacrificata
 
     @classmethod
     def build(cls, schedule, extraction=None, ignora_opzionali=()):

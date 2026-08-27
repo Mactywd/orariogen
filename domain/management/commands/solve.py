@@ -17,14 +17,22 @@ scade fissa l'ultimo valore trovato invece dell'ottimo, quindi diventa meno
 ambizioso, mai sbagliato. Il comando lo dichiara riga per riga, e chi legge
 «ottimo non dimostrato» sa che alzare il limite può migliorare quel numero.
 
+`--popolazione` è la separazione di EDT, che **non cerca mai un ottimo
+congiunto**: si ottimizza una popolazione, e `--tolleranza` dichiara di quanto
+si accetta che l'altra peggiori rispetto all'orario che c'è. Senza il flag la
+catena è unica su tutte le righe — che serve a costruire un orario da zero,
+dove non c'è ancora niente da peggiorare.
+
 Exit code ≠ 0 se qualcosa resta scartato: usabile in CI come `analyze`."""
 
 from django.core.management.base import BaseCommand, CommandError
 
 from domain.analysis.conformity import check_schedule
 from domain.analysis.findings import Severity
-from domain.models import Activity, Extraction, Resource, Schedule
+from domain.models import (Activity, Extraction, QualityCriterion, Resource,
+                           Schedule)
 from domain.solver.model import apply, solve
+from domain.solver.quality import Arbitrato
 
 
 def _hm(minutes):
@@ -50,6 +58,15 @@ class Command(BaseCommand):
                             choices=[k for k in Resource.Kind.values],
                             help="categorie di risorsa per cui le "
                                  "indisponibilità gialle non si rispettano")
+        parser.add_argument("--popolazione", type=str, default=None,
+                            choices=[QualityCriterion.Population.TEACHERS,
+                                     QualityCriterion.Population.CLASSES],
+                            help="quale popolazione ottimizzare; l'altra non "
+                                 "si ottimizza, si impedisce solo che peggiori")
+        parser.add_argument("--tolleranza", type=int, default=0,
+                            help="perdita di qualità tollerata sulla "
+                                 "popolazione non ottimizzata, per criterio e "
+                                 "nell'unità del criterio")
         parser.add_argument("--applica", action="store_true",
                             help="scrive i piazzamenti (senza, non tocca nulla)")
 
@@ -59,10 +76,15 @@ class Command(BaseCommand):
         if options["estrazione"]:
             estrazione = Extraction.objects.get(name=options["estrazione"])
 
+        arbitrato = None
+        if options["popolazione"]:
+            arbitrato = Arbitrato(options["popolazione"], options["tolleranza"])
+
         soluzione = solve(schedule, extraction=estrazione,
                           time_limit=options["limite"],
                           workers=options["lavoratori"],
-                          ignora_opzionali=options["ignora_opzionali"])
+                          ignora_opzionali=options["ignora_opzionali"],
+                          arbitrato=arbitrato)
         stats = soluzione.stats
 
         self.stdout.write(f"== Calcolo (schedule {schedule.pk}) ==")
@@ -83,11 +105,36 @@ class Command(BaseCommand):
                 self.stdout.write(f"  [{i}] {livello['nome']}: {esito}"
                                   f"   {livello['secondi']}s")
 
+        if arbitrato is not None:
+            self.stdout.write("\n== Arbitrato fra popolazioni ==")
+            self.stdout.write(f"  Si ottimizza: {arbitrato.popolazione}")
+            self.stdout.write(f"  Perdita tollerata per {arbitrato.sacrificata}: "
+                              f"{arbitrato.tolleranza} (per criterio)")
+            if not stats["arbitraggi"]:
+                self.stdout.write("  Nessun criterio dichiarato su quella "
+                                  "popolazione: niente da preservare.")
+            for a in stats["arbitraggi"]:
+                if a["base"] is None:
+                    # ⚠ Dichiarato, mai silenzioso: un tetto non posto cambia
+                    # il risultato, e chi legge deve sapere perché manca.
+                    self.stdout.write(
+                        f"  {a['nome']}: nessun tetto — l'orario di partenza "
+                        "non è completo, o una vecchia collocazione non è più "
+                        "ammissibile.")
+                else:
+                    self.stdout.write(f"  {a['nome']}: base {a['base']}, "
+                                      f"tetto {a['tetto']}")
+
         if soluzione.status not in ("OPTIMAL", "FEASIBLE"):
+            colpa = ("a bloccare è un vincolo sulle attività congelate o sui "
+                     "dati.")
+            if any(a["tetto"] is not None for a in stats["arbitraggi"]):
+                colpa = ("a bloccare può essere un vincolo sui dati oppure un "
+                         "tetto di non-regressione qui sopra: alzare "
+                         "`--tolleranza` è la mossa che lo scioglie.")
             raise CommandError(
                 "Nessuna soluzione: il modello è infattibile anche ammettendo "
-                "gli scarti. È una diagnosi da `manage.py analyze`, non da qui: "
-                "a bloccare è un vincolo sulle attività congelate o sui dati.")
+                f"gli scarti. È una diagnosi da `manage.py analyze`, non da qui: {colpa}")
 
         if soluzione.unplaced:
             self.stdout.write(f"\n== Attività scartate ({len(soluzione.unplaced)}, "

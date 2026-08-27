@@ -32,9 +32,20 @@ sbagliato ammette orari che il checker boccia. Qui la quantità entra solo in un
 `Minimize`. Un obiettivo approssimato **ordina male** orari tutti legali; non ne
 ammette uno illegale. Il costo dell'alternativa è la ragione della scelta: le
 firme sono una dimensione moltiplicativa (~0,3 s per firma, misurato sulla fase
-5) e un anno reale ne ha 35-40."""
+5) e un anno reale ne ha 35-40.
+
+🔑 **E l'invariante «solo definizioni» incassa qui un dividendo non previsto.**
+Perché un criterio non posta vincoli di ammissibilità, lo si può valutare su un
+orario **dato** semplicemente chiamandolo con i letterali di cella sostituiti da
+costanti: è così che `Arbitrato` calcola la base della non-regressione senza
+riscrivere una seconda volta la definizione del criterio."""
+
+from dataclasses import dataclass, replace
+
+from ortools.sat.python import cp_model
 
 from domain.models import QualityCriterion, Resource
+from domain.solver.vocabulary import Vocabulary
 
 _CRITERI = {}
 
@@ -75,15 +86,67 @@ def chiavi_di(ctx, popolazione):
         key=str)
 
 
-def livelli_di_qualita(ctx, model):
+def _nome(riga):
+    return f"{riga.kind}_{riga.population}"
+
+
+@dataclass(frozen=True)
+class Arbitrato:
+    """La separazione per popolazione, con la **perdita di qualità tollerata**.
+
+    EDT non cerca mai un ottimo congiunto: i comandi sono due, `Ottimizza gli
+    orari dei docenti` e `... delle classi`, e l'enum interna è
+    `TypeTypeOptim = ttoProfs, ttoClasses`. Chi lancia dichiara quale
+    popolazione si ottimizza e **quanto è disposto a peggiorare l'altra**.
+
+    ⚠ Non è un peso in una somma: è un **vincolo di non-regressione con
+    budget**, che è la frase con cui `motore-risoluzione.md` lo descrive. La
+    popolazione sacrificata non si ottimizza — i suoi criteri smettono di
+    essere livelli e diventano tetti — e questo è il punto del meccanismo, non
+    un effetto collaterale: ordinare i `rank` avrebbe dato la priorità senza
+    togliere il costo.
+
+    `tolleranza` è **per criterio, nell'unità del criterio** (minuti per i
+    buchi, conteggi per gli altri). Un budget unico su criteri di unità diverse
+    sarebbe la somma pesata che qui si rifiuta a ogni livello; ed è la stessa
+    forma di `RelaxationQuota.params["margine"]`, che è pure un numero per
+    famiglia nell'unità della famiglia."""
+
+    popolazione: str
+    tolleranza: int = 0
+
+    def __post_init__(self):
+        ammesse = (QualityCriterion.Population.TEACHERS,
+                   QualityCriterion.Population.CLASSES)
+        if self.popolazione not in ammesse:
+            # ⚠ `ALL` non è una popolazione di EDT: è la nostra estensione per
+            # il criterio che **non prende parte**, e non può quindi essere né
+            # quella ottimizzata né quella sacrificata.
+            raise ValueError(f"popolazione non arbitrabile: {self.popolazione}")
+
+    @property
+    def sacrificata(self):
+        P = QualityCriterion.Population
+        return P.CLASSES if self.popolazione == P.TEACHERS else P.TEACHERS
+
+    def sacrifica(self, riga):
+        return riga.population == self.sacrificata
+
+
+def livelli_di_qualita(ctx, model, arbitrato=None):
     """I livelli di qualità, nell'ordine dichiarato dalle righe.
 
     Tabella vuota ⇒ lista vuota ⇒ la catena di prima di questo pezzo, senza
     una variabile in più. È la proprietà conservativa per costruzione, e come
-    per le quote è un test e non un corollario."""
+    per le quote è un test e non un corollario.
+
+    Con un `Arbitrato`, le righe della popolazione **sacrificata** non
+    diventano livelli: la loro quantità si costruisce lo stesso — serve a
+    essere confrontata — ma finisce sotto un tetto di non-regressione invece
+    che dentro un `Minimize`."""
     from domain.solver import criteria  # noqa: F401 — forza la registrazione
 
-    livelli = []
+    livelli, sacrificati = [], []
     for riga in QualityCriterion.objects.all():   # Meta.ordering: rank, kind
         costruisci = _CRITERI.get(riga.kind)
         if costruisci is None:
@@ -95,7 +158,98 @@ def livelli_di_qualita(ctx, model):
         espressione, massimo = costruisci(ctx, model, chiavi_di(ctx, riga.population))
         if massimo <= 0:
             continue   # niente da misurare su queste chiavi: nessun livello
-        var = model.NewIntVar(0, massimo, f"qualita_{riga.kind}_{riga.population}")
+        var = model.NewIntVar(0, massimo, f"qualita_{_nome(riga)}")
         model.Add(var == espressione)
-        livelli.append((f"{riga.kind}_{riga.population}", var))
+        if arbitrato is not None and arbitrato.sacrifica(riga):
+            sacrificati.append((riga, var))
+        else:
+            livelli.append((_nome(riga), var))
+
+    if sacrificati:
+        _posta_i_tetti(ctx, model, arbitrato, sacrificati)
     return livelli
+
+
+def _posta_i_tetti(ctx, model, arbitrato, sacrificati):
+    """`valore <= base + tolleranza`, e il rendiconto su `ctx.arbitraggi`.
+
+    ⚠ Un tetto può rendere il modello **infattibile**: l'orario di partenza lo
+    soddisfa per costruzione, ma può essere illegale rispetto ai vincoli hard
+    (qui un orario in violazione è uno stato ammesso) e quindi irraggiungibile.
+    Cade dalla parte giusta del criterio di ADR-018 — vietare un peggioramento
+    è ammesso, pretendere una riparazione no — e un tetto di non-regressione è
+    la definizione stessa di «vieta un peggioramento»."""
+    base = _valori_di_base(ctx, [riga for riga, _ in sacrificati])
+    for riga, var in sacrificati:
+        nome = _nome(riga)
+        if base is None:
+            ctx.arbitraggi.append({"nome": nome, "base": None, "tetto": None})
+            continue
+        tetto = base[nome] + arbitrato.tolleranza
+        model.Add(var <= tetto)
+        ctx.arbitraggi.append({"nome": nome, "base": base[nome], "tetto": tetto})
+
+
+def _assegnazione_di_partenza(ctx):
+    """`{(id, giorno, fascia): 0|1}` dall'orario che c'è, o `None` se non c'è
+    un orario di partenza utilizzabile.
+
+    Due condizioni, e cadono entrambe dalla parte prudente. **Ogni** attività
+    libera dev'essere già piazzata: su un orario parziale la base sarebbe
+    ottimisticamente bassa — un orario vuoto non ha buchi — e il tetto
+    diventerebbe una pretesa assurda. E ogni vecchia collocazione dev'essere
+    **sopravvissuta ai pre-filtri**: se non è più ammissibile, quell'orario non
+    è rappresentabile in questo modello e non è una base.
+
+    ⚠ È la stessa precondizione di L4, che pure esiste solo con un orario
+    precedente; e l'avvertimento letterale di EDT dice la stessa cosa dal suo
+    lato — *«l'ottimizzazione tiene conto unicamente delle attività
+    estratte»*."""
+    scelte = {}
+    for aid in ctx.activities:
+        # la congelata ha per dominio la sola cella in cui sta (SolverContext)
+        cella = (ctx.placed_before.get(aid) if aid in ctx.free
+                 else next(iter(ctx.cells[aid]), None))
+        if cella is None or cella not in ctx.cells[aid]:
+            return None
+        scelte[aid] = cella
+    return {(aid, d, s): int((d, s) == scelte[aid])
+            for aid in ctx.activities for (d, s) in ctx.cells[aid]}
+
+
+def _valori_di_base(ctx, righe):
+    """Il valore di ogni criterio **sull'orario di partenza**, o `None`.
+
+    🔑 **Non è una seconda definizione del criterio: è la stessa funzione.** Un
+    criterio posta solo definizioni — l'invariante dichiarato in testa a questo
+    modulo — quindi basta chiamarlo su un modello usa-e-getta in cui i
+    letterali di cella sono le **costanti** `0`/`1` dell'orario esistente:
+    ogni booleano derivato è determinato per propagazione, e un `Solve`
+    istantaneo restituisce il numero.
+
+    L'alternativa era riscrivere i cinque criteri in Python su `ScheduleState`,
+    cioè una seconda definizione della stessa quantità. È il difetto che questo
+    progetto ha già intercettato due volte: `B` nei rami disgiuntivi di ADR-018
+    si **legge** chiamando il checker, mai riscrivendone la condizione."""
+    fissi = _assegnazione_di_partenza(ctx)
+    if fissi is None:
+        return None
+    model = cp_model.CpModel()
+    base = replace(ctx, x=fissi, placed_var={}, by_cell={}, vocab=None,
+                   riparazioni=[], arbitraggi=[])
+    base.index_cells()
+    base.vocab = Vocabulary(base, model)
+
+    variabili = {}
+    for riga in righe:
+        espressione, massimo = _CRITERI[riga.kind](
+            base, model, chiavi_di(base, riga.population))
+        var = model.NewIntVar(0, max(massimo, 0), f"base_{_nome(riga)}")
+        model.Add(var == espressione)
+        variabili[_nome(riga)] = var
+
+    solver = cp_model.CpSolver()
+    if solver.Solve(model) not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return None   # non può accadere: tutto è determinato. Ma se accadesse,
+                      # nessun tetto è meglio di un tetto inventato.
+    return {nome: solver.Value(var) for nome, var in variabili.items()}
