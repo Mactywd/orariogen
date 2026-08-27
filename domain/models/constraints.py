@@ -103,14 +103,41 @@ class RelaxationQuota(models.Model):
     («Non considerare le incompatibilità … una sola volta al giorno»), e lì il
     vincolo si deroga invece di allargarsi.
 
-    Chiavi attese in `params`, per famiglia:
-      MAX_HOURS, MAX_PRESENCE:  {"margine": minuti}
-      HALF_DAYS, FREE_GUARANTEED: {"margine": mezze giornate}
-      DIDACTIC_WEIGHT:          {"margine": pesi}
-      SITES:                    {"margine": cambi di sede}
-      SUBJECT_MAX_HOURS:        {"margine": minuti}
+    Chiavi attese in `params`, per famiglia — con l'unità del margine e la
+    granularità con cui la quota si consuma. Le due grandezze vengono da
+    `docs/edt/estratti/motore-punti-aperti.md` §1.2, e ciascuna è tenuta ferma
+    da un test verificato per mutazione: «la quota è collegata» passa anche se
+    il margine vale dieci volte quello dichiarato, o se un letterale solo copre
+    l'intera settimana.
+
+      MAX_HOURS          {"margine": minuti}          per tetto e per giorno
+      MAX_PRESENCE       {"margine": minuti}          per giorno
+      SUBJECT_MAX_HOURS  {"margine": minuti}          per secchio
+      HALF_DAYS          {"margine": mezze giornate}  il tetto una volta per
+                                                      settimana; la deroga
+                                                      «solo mezza giornata»
+                                                      una volta per giorno
+      FREE_GUARANTEED    {"margine": ⚠ vedi sotto}    per settimana, condiviso
+                                                      dalle due soglie
+      ARRIVAL_DEPARTURE  {"margine": giornate}        per settimana
+      DIDACTIC_WEIGHT    {"margine": pesi}            per secchio
+      SITES              {"margine": cambi di sede}   per settimana, condiviso
+                                                      dai due tetti
       SUBJECT_CONSTRAINT, SUBJECT_SEQUENCE:
                                 nessuna — il vincolo si deroga, non si allarga
+
+    ⚠ `FREE_GUARANTEED` porta **un margine per due soglie in unità diverse**.
+    La riga di EDT è «Togli se necessario N mezze giornate libere per
+    settimana», ma copre entrambe le soglie — si chiama «Giorni e 1/2 giornate
+    libere» — e nel builder lo stesso numero si sottrae 1:1 tanto da
+    `free_half_days` quanto da `free_days`. Non è l'errore di unità di
+    `MAX_PRESENCE`, dove un margine in minuti finiva su un tetto in giorni e lo
+    spegneva: qui le due soglie contano cose **disgiunte** (un giorno del tutto
+    libero contribuisce zero mezze giornate libere, perché il checker le conta
+    solo sui giorni che lavorano), quindi non esiste una conversione da
+    applicare, e una riga che non alleggerisse `free_days` resterebbe inerte
+    proprio sul vincolo che le scuole scrivono più spesso. È una scelta, ed è
+    scritta qui perché cambiarla sia una decisione.
 
     ⚠ Le famiglie che non compaiono qui **non sono alleggeribili**, ed è la
     scelta di EDT, non una dimenticanza: nessuna riga della finestra nomina

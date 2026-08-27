@@ -144,7 +144,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > vincolo da postare). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **571 test verdi**, 16 skip tutti misurati e attribuiti
+> minimo. **582 test verdi**, 16 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -431,6 +431,61 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-27 (audit delle quote)** — **Dodici call site di alleggerimento,
+  misurati uno per uno: nessun difetto di comportamento, due di
+  documentazione.** È il seguito diretto della review. Là erano emersi un
+  errore di unità (`MAX_PRESENCE`) e un'attribuzione decisa dall'ordine dei pk
+  (`risorsa_di`), entrambi su call site che nessun test sapeva distinguere da
+  quelli sani; gli altri dieci erano stati controllati **per lettura**, non per
+  misura. Ora lo sono.
+
+  🔑 **Il risultato positivo va detto per primo: ogni margine è la grandezza
+  che dichiara, e ogni granularità è quella della riga di EDT.** Sonda su tutte
+  le famiglie prima di scrivere un solo assert: il tetto delle mezze giornate
+  concede mezze giornate, quello del peso concede pesi, quello delle sedi
+  concede cambi, quello delle materie minuti — e nessuno concede il decuplo.
+
+  ⚠ **Ma i test che c'erano non potevano dirlo.** La forma `_senza_poi_con` —
+  «senza quota INFEASIBLE, con quota OPTIMAL» — prova che la quota è
+  **collegata**, mai *quanto* concede né *quante volte*: un margine
+  moltiplicato per mille e un letterale issato fuori dal ciclo la passano
+  entrambi indisturbati. È precisamente la vacuità che aveva lasciato passare
+  l'errore di unità di `MAX_PRESENCE`. **Undici test nuovi** la chiudono, uno
+  per la grandezza e uno per la granularità, famiglia per famiglia.
+
+  **Undici mutazioni, undici esiti distinti, esattamente un rosso ciascuna** —
+  il margine di una famiglia decuplicato, oppure un letterale solo per
+  (famiglia, risorsa) al posto del tag. Nessun test passa per caso, nessuno è
+  ridondante con un altro.
+
+  ⚠ **I due difetti sono nella documentazione, e sono la forma di sempre.** La
+  tabella delle unità di `RelaxationQuota` **non nominava `ARRIVAL_DEPARTURE`**,
+  che è una famiglia a margine con un suo test dal giorno in cui è nata; e dava
+  `FREE_GUARANTEED` in *mezze giornate* mentre lo stesso numero si sottrae 1:1
+  anche dalla soglia dei **giorni** — misurato: con `free_days = 2` un margine
+  di 1 lascia la soglia a 1, non a 0.
+
+  ⚠ E quella divergenza **resta, dichiarata invece che corretta**. Non è il
+  gemello dell'errore di `MAX_PRESENCE`: là un margine in minuti finiva su un
+  tetto in giorni e lo **spegneva**; qui le due soglie contano cose disgiunte
+  (un giorno del tutto libero contribuisce zero mezze giornate libere, perché
+  il checker le conta solo sui giorni che lavorano), quindi non esiste una
+  conversione da applicare, e una riga che non alleggerisse `free_days`
+  resterebbe inerte proprio sul vincolo che le scuole scrivono più spesso. La
+  tabella porta ora anche la **granularità** accanto all'unità, che è la metà
+  che non era scritta da nessuna parte.
+
+  ⚠ **E una sonda ha misurato sé stessa invece del codice**, che vale
+  registrare: tre attività su sedi A/B/A dovevano costare due cambi, e il
+  modello rispondeva `OPTIMAL` con margine 1. Non era il builder — il solver
+  **riordina**, e A/A/B costa un cambio solo. Con tre sedi distinte l'ordine
+  non aiuta più e la misura torna quella voluta. Un caso di prova che il solver
+  può aggirare non misura il vincolo: misura l'istanza.
+
+  Nessun builder toccato, quindi il Fermi è invariato per costruzione (8426
+  variabili, 1086 constraint, tenuti fermi dalla suite). **582 test verdi**, 16
+  skip.
 
 - **2026-08-27 (review)** — **La review del pezzo 3, applicata: un errore di
   unità che spegneva un vincolo, e un'attribuzione decisa dall'ordine dei pk.**

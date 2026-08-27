@@ -13,7 +13,7 @@ import pytest
 from domain.analysis.conformity import check_schedule
 from domain.models import (ClassPart, ClassPartition, Group,
                            InstituteSettings, RelaxationQuota,
-                           ResourceTimeConstraint, SubjectConstraint)
+                           ResourceTimeConstraint, Site, SubjectConstraint)
 from domain.solver.model import apply, build_model, solve
 from tests.analysis_helpers import make_activity, mini_school
 
@@ -384,8 +384,6 @@ def test_quota_sui_giorni_liberi_garantiti():
 
 
 def test_quota_sui_cambi_di_sede():
-    from domain.models import Site
-
     env = mini_school(days=1, slots=2)
     a_site = Site.objects.create(name="A")
     b_site = Site.objects.create(name="B")
@@ -476,3 +474,242 @@ def test_l_indisponibilita_non_si_alleggerisce_a_quota_ed_e_voluto():
         "anche la gialla si rispetta: la quota non la tocca")
     assert solve(env["schedule"], allow_unplaced=False, workers=1,
                  ignora_opzionali=[Resource.Kind.TEACHER]).status == "OPTIMAL"
+
+
+# --- l'unità di misura e la granularità, famiglia per famiglia -------------
+#     I test qui sopra provano che la quota è **collegata**: senza, il modello
+#     non ci sta; con, ci sta. Non provano né *quanto* concede né *quante
+#     volte* — un margine moltiplicato per mille e un letterale issato fuori
+#     dal ciclo li passano entrambi indisturbati. È la forma di vacuità che ha
+#     lasciato passare l'errore di unità di `MAX_PRESENCE` fino alla review del
+#     2026-08-27, e questi test la chiudono per le famiglie restanti.
+#
+#     La fonte delle unità è `docs/edt/estratti/motore-punti-aperti.md` §1.2,
+#     dove ogni riga alleggeribile porta la propria grandezza in colonna.
+
+def _stato(env):
+    return solve(env["schedule"], allow_unplaced=False, workers=1).status
+
+
+def test_il_margine_di_half_days_e_in_mezze_giornate():
+    """«Autorizza una volta per settimana N mattinate / pomeriggi di lavoro
+    supplementari» — unità: **conteggio di mezze giornate**. Con tetto 1 e
+    margine 1 se ne concedono due, non tre: cinque attività stanno in due
+    mattine da quattro fasce, nove no."""
+    env = mini_school(days=3, slots=6)   # mattina 0-3, pomeriggio 4-5
+    _n_attivita(env, 5)
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_HALF_DAYS,
+        params={"max_half_days": 1})
+    quota = RelaxationQuota.objects.create(
+        family=F.HALF_DAYS, resource=env["klass"], max_violations=1,
+        params={"margine": 1})
+    assert _stato(env) == "OPTIMAL", "due mezze giornate bastano per cinque ore"
+    _n_attivita(env, 4)                  # nove ore: ne servono tre
+    assert _stato(env) == "INFEASIBLE", "il margine di 1 non ne concede 2"
+    quota.params = {"margine": 2}
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
+
+
+def test_la_deroga_di_half_days_si_consuma_una_volta_per_giorno():
+    """«Lavorare solo mezza giornata al giorno» si deroga **per giorno**: due
+    giornate intere costano due quote. Un letterale solo per riga direbbe «una
+    volta, ovunque», che è la stessa svista corretta su `MAX_PRESENCE`."""
+    env = mini_school(days=2, slots=6)
+    _n_attivita(env, 12)   # la griglia piena: entrambi i giorni lavorano due
+    ResourceTimeConstraint.objects.create(   # mezze giornate
+        resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_HALF_DAYS,
+        params={"only_half_day_per_day": True})
+    quota = RelaxationQuota.objects.create(
+        family=F.HALF_DAYS, resource=env["klass"], max_violations=1)
+    assert _stato(env) == "INFEASIBLE"
+    quota.max_violations = 2
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
+
+
+def test_il_margine_di_free_guaranteed_si_sottrae_anche_in_giorni():
+    """⚠ **Divergenza di unità, dichiarata.** La riga di EDT è «Togli se
+    necessario N mezze giornate libere per settimana» e la tabella la dà in
+    *mezze giornate*; ma la riga copre entrambe le soglie (si chiama «Giorni e
+    1/2 giornate libere») e qui lo stesso numero si sottrae **1:1 anche dalla
+    soglia dei giorni**. Misurato: con `free_days = 2` un margine di 1 lascia
+    la soglia a 1, non a 0.
+
+    Non è l'errore di `MAX_PRESENCE`, dove un margine in minuti finiva su un
+    tetto in giorni e lo spegneva. Qui le due soglie contano cose **disgiunte**
+    — un giorno del tutto libero contribuisce zero mezze giornate libere,
+    perché il checker le conta solo sui giorni che lavorano — quindi non esiste
+    una conversione da applicare, e una riga che non alleggerisse `free_days`
+    resterebbe inerte proprio sul vincolo che le scuole scrivono più spesso.
+    Resta una scelta: questo test la tiene ferma perché cambiarla sia una
+    decisione e non una deriva."""
+    env = mini_school(days=3, slots=2)
+    _n_attivita(env, 6)   # tutte le celle occupate: nessun giorno resta libero
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.FREE_GUARANTEED,
+        params={"free_days": 2})
+    quota = RelaxationQuota.objects.create(
+        family=F.FREE_GUARANTEED, resource=env["klass"], max_violations=1,
+        params={"margine": 1})
+    assert _stato(env) == "INFEASIBLE", "la soglia scende a 1, non a 0"
+    quota.params = {"margine": 2}
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
+
+
+def test_free_guaranteed_consuma_una_quota_sola_per_le_due_soglie():
+    """Le due soglie sono due metà dello **stesso** alleggerimento e devono
+    consumare una quota, non due — ed è anche la ragione per cui stanno sotto
+    lo stesso booleano nel ramo disgiuntivo di ADR-018."""
+    env = mini_school(days=2, slots=6)
+    _n_attivita(env, 12)   # né giorni né mezze giornate libere
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.FREE_GUARANTEED,
+        params={"free_days": 1, "free_half_days": 1})
+    assert _stato(env) == "INFEASIBLE"
+    RelaxationQuota.objects.create(
+        family=F.FREE_GUARANTEED, resource=env["klass"], max_violations=1,
+        params={"margine": 1})
+    assert _stato(env) == "OPTIMAL", "una quota sola copre entrambe le soglie"
+
+
+def test_il_margine_di_entrate_e_uscite_si_sottrae_in_giornate():
+    """«Togli se necessario N gestione mezza giornata per classe»: la soglia
+    conta le **giornate conformi** e il margine la abbassa di N. Con due
+    giornate costrette a sforare, un margine di 1 non basta."""
+    env = mini_school(days=4, slots=5)
+    _n_attivita(env, 18)   # 20 celle, 16 fuori dalla prima fascia: due giorni
+    ResourceTimeConstraint.objects.create(   # devono per forza usarla
+        resource=env["klass"],
+        type=ResourceTimeConstraint.Type.ARRIVAL_DEPARTURE,
+        params={"days": 4, "not_before_slot": 1})
+    quota = RelaxationQuota.objects.create(
+        family=F.ARRIVAL_DEPARTURE, resource=env["klass"], max_violations=1,
+        params={"margine": 1})
+    assert _stato(env) == "INFEASIBLE"
+    quota.params = {"margine": 2}
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
+
+
+def test_il_margine_del_peso_didattico_e_in_pesi():
+    """L'unica riga di EDT misurata in **punti** («Autorizza un supplemento di
+    N punti, un giorno per settimana»), e «punti» è la traduzione italiana di
+    `points`, cioè unità di peso didattico — non un punteggio, perché in EDT
+    non esiste alcuna funzione di costo numerica. Tre attività da peso 1 contro
+    un tetto giornaliero di 1: serve un margine di 2, uno non basta."""
+    env = mini_school(days=1, slots=3)
+    _n_attivita(env, 3)
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"max_weight_day": 1})
+    quota = RelaxationQuota.objects.create(
+        family=F.DIDACTIC_WEIGHT, resource=env["klass"], max_violations=1,
+        params={"margine": 1})
+    assert _stato(env) == "INFEASIBLE"
+    quota.params = {"margine": 2}
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
+
+
+def test_il_peso_didattico_consuma_una_quota_per_secchio():
+    """Il tetto della giornata e quello della mattina sono due **secchi**
+    distinti: sforarli entrambi costa due quote. Un letterale per risorsa
+    invece che per secchio ne farebbe pagare una sola."""
+    env = mini_school(days=1, slots=3)   # tre fasce, tutte di mattina
+    _n_attivita(env, 3)
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"max_weight_day": 2, "max_weight_morning": 2})
+    quota = RelaxationQuota.objects.create(
+        family=F.DIDACTIC_WEIGHT, resource=env["klass"], max_violations=1,
+        params={"margine": 1})
+    assert _stato(env) == "INFEASIBLE"
+    quota.max_violations = 2
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
+
+
+def _tre_sedi(env):
+    """Tre sedi distinte in tre fasce: qualunque ordine costa **due** cambi, e
+    il solver non può riordinare per pagarne uno solo. Con due sole sedi
+    potrebbe (A/B/A diventa A/A/B), e il test misurerebbe l'ordine invece del
+    margine."""
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"site_transition_slots": 0})
+    for nome in ("A", "B", "C"):
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]],
+                      site=Site.objects.create(name=nome))
+
+
+def test_il_margine_delle_sedi_e_in_cambi_di_sede():
+    env = mini_school(days=1, slots=3)
+    _tre_sedi(env)
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"],
+        type=ResourceTimeConstraint.Type.MAX_SITE_CHANGES,
+        params={"per_day": 0})
+    quota = RelaxationQuota.objects.create(
+        family=F.SITES, resource=env["klass"], max_violations=1,
+        params={"margine": 1})
+    assert _stato(env) == "INFEASIBLE", "un cambio concesso, due necessari"
+    quota.params = {"margine": 2}
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
+
+
+def test_le_sedi_consumano_una_quota_sola_per_i_due_tetti():
+    """⚠ Divergenza **dichiarata** rispetto a `MAX_HOURS` e `MAX_PRESENCE`: là
+    il letterale è per giorno perché la riga conta le *volte*, qui è per riga
+    perché in francese dice *par semaine* e conta i *cambi*. Il tetto
+    giornaliero e quello settimanale condividono quindi una sola allowance."""
+    env = mini_school(days=1, slots=3)
+    _tre_sedi(env)
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"],
+        type=ResourceTimeConstraint.Type.MAX_SITE_CHANGES,
+        params={"per_day": 0, "per_week": 0})
+    assert _stato(env) == "INFEASIBLE"
+    RelaxationQuota.objects.create(
+        family=F.SITES, resource=env["klass"], max_violations=1,
+        params={"margine": 2})
+    assert _stato(env) == "OPTIMAL", "una quota sola copre entrambi i tetti"
+
+
+def _un_ora_al_giorno(env):
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=env["subject"],
+        school_class=env["klass"],
+        type=SubjectConstraint.Type.MAX_HOURS_DAY, param=60)
+
+
+def test_il_margine_di_subject_max_hours_e_in_minuti():
+    """«Massimo di ore delle materie» è in **ore**, e nel nostro schema in
+    minuti: mezz'ora di supplemento non fa entrare un'ora."""
+    env = mini_school(days=2, slots=2)
+    _n_attivita(env, 3)
+    _un_ora_al_giorno(env)
+    quota = RelaxationQuota.objects.create(
+        family=F.SUBJECT_MAX_HOURS, resource=env["klass"], max_violations=1,
+        params={"margine": 30})
+    assert _stato(env) == "INFEASIBLE"
+    quota.params = {"margine": 60}
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
+
+
+def test_il_margine_di_subject_max_hours_si_consuma_una_volta_per_giorno():
+    """Stessa frase di `MAX_HOURS` — «una volta per settimana e per classe»,
+    cioè conta le *volte* — quindi stessa granularità: due giornate sforate
+    costano due quote."""
+    env = mini_school(days=2, slots=2)
+    _n_attivita(env, 4)   # due ore al giorno contro un tetto di una
+    _un_ora_al_giorno(env)
+    quota = RelaxationQuota.objects.create(
+        family=F.SUBJECT_MAX_HOURS, resource=env["klass"], max_violations=1,
+        params={"margine": 60})
+    assert _stato(env) == "INFEASIBLE"
+    quota.max_violations = 2
+    quota.save()
+    assert _stato(env) == "OPTIMAL"
