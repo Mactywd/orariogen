@@ -3,6 +3,7 @@ import datetime as dt
 
 import pytest
 
+from domain import weeks
 from domain.models import Activity, Resource, ResourceUnavailability, Room, Site
 from domain.solver.rooms import RoomContext
 from tests.analysis_helpers import make_activity, mini_school, place
@@ -141,3 +142,44 @@ def test_l_aula_di_prima_e_registrata_per_la_stabilita():
     place(env["schedule"], a, 0, 0, room=p2)
     ctx = RoomContext.build(env["schedule"])
     assert ctx.previous == {a.id: p2.pk}
+
+
+def test_il_carico_congelato_viene_dalle_immobili_e_non_dalle_decisioni():
+    """frozen_load() e' l'input del residuo ADR-018 che il Task 3 consumera':
+    deve nominare esattamente chi tiene l'aula senza sceglierla, non chi la
+    sta ancora decidendo."""
+    env = mini_school()
+    lab = Room.objects.create(name="LAB")
+    altra = Room.objects.create(name="ALTRA")
+    immobile = make_activity(env["subject"], rooms=[lab],
+                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
+    place(env["schedule"], immobile, 0, 2, room=lab)
+    decisione = make_activity(env["subject"], rooms=[altra])
+    place(env["schedule"], decisione, 0, 2, room=altra)
+    ctx = RoomContext.build(env["schedule"])
+    rep = ctx.signatures[0][0]
+    assert ctx.frozen_load() == {(rep, lab.pk, 0, 2): 1}
+
+
+def test_l_indisponibilita_datata_filtra_solo_chi_incontra_quella_settimana():
+    """Le firme di settimana sono una dimensione, non un dettaglio (bug del
+    D.T.B., 2026-08-24): un'indisponibilita' **datata** vive su una sola
+    firma, e deve mordere solo le attivita' che vi si incontrano davvero —
+    non tutte, per unione, e non nessuna, per essersi fermati alla prima."""
+    env = mini_school()
+    lab = Room.objects.create(name="LAB")
+    # Cade nella settimana 3 (2026-10-05 e' il lunedi' di quella settimana:
+    # (2026-10-05 - 2026-09-14).giorni // 7 == 3, resto 0 -> day 0).
+    ResourceUnavailability.objects.create(
+        resource=lab, day=0, slot=0,
+        level=ResourceUnavailability.Level.HARD,
+        date=dt.date(2026, 10, 5))
+    parziale = make_activity(env["subject"], rooms=[lab],
+                             mask=weeks.single_week(0))  # solo settimana 0
+    place(env["schedule"], parziale, 0, 0)
+    annuale = make_activity(env["subject"], rooms=[lab])  # tutte le settimane
+    place(env["schedule"], annuale, 0, 0)
+    ctx = RoomContext.build(env["schedule"])
+    assert len(ctx.signatures) > 1, "il fixture deve produrre piu' di una firma"
+    assert ctx.candidates[parziale.id] == {lab.pk}
+    assert ctx.candidates[annuale.id] == set()
