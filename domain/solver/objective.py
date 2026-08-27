@@ -22,6 +22,8 @@ from dataclasses import dataclass
 
 from ortools.sat.python import cp_model
 
+from domain.solver.quality import livelli_di_qualita
+
 
 @dataclass(frozen=True)
 class Level:
@@ -67,8 +69,11 @@ def livelli(ctx, model):
         # violazioni ammissibili. Chi lo usa (i test dei builder, e la
         # direzione 1 dell'oracolo di Hall) misura l'ammissibilità, mai la
         # preferenza. Conseguenza da conoscere: in quella modalità le quote
-        # non sono minimizzate, e il ramo status quo di ADR-018 torna a essere
-        # alla pari con la riparazione.
+        # non sono minimizzate, il ramo status quo di ADR-018 torna a essere
+        # alla pari con la riparazione, e **nessun criterio di qualità** viene
+        # posto — per la stessa ragione, non per dimenticanza: chi chiede
+        # «questo vincolo morde?» non vuole un modello che sceglie anche fra
+        # gli orari legali.
         return []
 
     minuti_totali = sum(ctx.activities[aid].duration_minutes for aid in ctx.placed_var)
@@ -127,6 +132,13 @@ def livelli(ctx, model):
         spostate = model.NewIntVar(0, len(mosse) + fisse, "spostamenti")
         model.Add(spostate == len(mosse) + fisse - sum(mosse))
         catena.append(Level("spostamenti", spostate))
+
+    # I criteri di qualità, in coda: la qualità cede a tutto il resto, come già
+    # la stabilità. Un orario più bello che scarta un'ora in più è peggiore.
+    # Tabella vuota ⇒ nessun livello e nessuna variabile: è la catena di prima
+    # di questo pezzo, byte per byte.
+    for nome, var in livelli_di_qualita(ctx, model):
+        catena.append(Level(nome, var))
     return catena
 
 

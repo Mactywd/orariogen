@@ -32,3 +32,71 @@ class InstituteSettings(models.Model):
     def load(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class QualityCriterion(models.Model):
+    """Un criterio di qualità, e la sua posizione nella gerarchia.
+
+    ⚠ In EDT i meccanismi sono **due**, e questa tabella ne rappresenta uno
+    solo. `Ordinamento dei criteri` è la lista degli undici criteri di
+    *piazzamento*, riordinabile fra «considerati» e «ignorati»;
+    `Ottimizzazione degli orari` è una fase **separata**, con tre slot ordinati
+    **per popolazione** su cinque valori. Qui stanno i quattro valori
+    dell'ottimizzazione più `PREFERENCES`, che in EDT è l'undicesimo — e
+    ultimo — criterio di piazzamento.
+
+    🔑 L'ordine è un **dato** e non codice, perché è il punto dichiarato del
+    meccanismo: *«"Criteri considerati / ignorati" è una UI onesta: dichiara
+    che l'ottimizzazione è una scelta editoriale della scuola, non una
+    verità»*. Un criterio che non compare qui è un criterio *ignorato*, e la
+    tabella vuota dà la catena senza qualità — cioè quella di prima di questo
+    pezzo, che è un test e non un corollario.
+
+    ⚠ Nessuna di queste righe cambia ciò che il modello **ammette**: un
+    criterio posta variabili di definizione e un `Minimize`, mai un vincolo che
+    escluda una soluzione. È anche la ragione per cui ADR-018 non ha niente da
+    dire su questa famiglia: le congelate contribuiscono costanti a una somma,
+    e non esiste il «pretendere una riparazione» perché non esiste pretesa."""
+
+    class Kind(models.TextChoices):
+        # I quattro valori di `Ottimizzazione degli orari`, con l'enum RTTI di
+        # EDT accanto: le etichette UI e le enum coincidono esattamente.
+        GAPS = "gaps"                        # Durata totale dei buchi, tcoTrous
+        FREE_HALF_DAYS = "free_half_days"    # 1/2 giornate libere, tcoDJLibres
+        ISOLATED = "isolated"                # Attività isolate, tcoIsoles
+        REGULARITY = "regularity"            # Equilibrio didattico,
+                                             # tcoMemesHoraires — ⚠ la
+                                             # traduzione italiana è
+                                             # fuorviante: il senso è
+                                             # «stessi orari», cioè la materia
+                                             # ricade sempre nella stessa
+                                             # fascia, non l'equilibrio del
+                                             # carico.
+        PREFERENCES = "preferences"          # Rispetta le preferenze (verde)
+
+    class Population(models.TextChoices):
+        """Su quali risorse il criterio conta. Non è speculativa in vista della
+        separazione docenti/classi: la tabella dei criteri di calcolo di EDT dà
+        `Gestione dei buchi` come dichiarata «separatamente per i docenti e per
+        le classi», quindi è un filtro sulle chiavi che ha significato oggi."""
+        ALL = "all"
+        TEACHERS = "teachers"
+        CLASSES = "classes"
+
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    population = models.CharField(max_length=10, choices=Population.choices,
+                                  default=Population.ALL)
+    # Crescente: 1 è il criterio più importante. Non è una posizione in una
+    # lista di cinque — la gerarchia non va riempita, e nella base di esempio
+    # di EDT due slot su tre restano a `Nessuno`.
+    rank = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ["rank", "kind"]
+        constraints = [
+            models.UniqueConstraint(fields=["kind", "population"],
+                                    name="quality_criterion_unico"),
+        ]
+
+    def __str__(self):
+        return f"{self.rank}. {self.kind} ({self.population})"

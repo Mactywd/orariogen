@@ -8,6 +8,15 @@ lavoro di qualcun altro premendo invio. Senza il flag il comando dice cosa
 farebbe; con il flag scrive i piazzamenti e **cancella** quelli delle attività
 che ha deciso di scartare.
 
+⚠ **Con i criteri di qualità accesi, `--limite` non è opzionale.** Misurato sul
+Fermi (284 attività, cinque criteri): senza limite il calcolo non è tornato in
+**nove minuti**; con `--limite 15` finisce in ~40 s, e due livelli su sei
+chiudono con l'ottimo **non dimostrato** — `regularity` e `free_half_days`, che
+sono i due che aprono più simmetrie. La catena resta corretta: un livello che
+scade fissa l'ultimo valore trovato invece dell'ottimo, quindi diventa meno
+ambizioso, mai sbagliato. Il comando lo dichiara riga per riga, e chi legge
+«ottimo non dimostrato» sa che alzare il limite può migliorare quel numero.
+
 Exit code ≠ 0 se qualcosa resta scartato: usabile in CI come `analyze`."""
 
 from django.core.management.base import BaseCommand, CommandError

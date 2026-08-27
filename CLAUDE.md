@@ -65,9 +65,10 @@ domain/                l'app Django del modello di dominio v1
                         stato nominato (checkers/placement.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette,
-                        la catena lessicografica (objective.py) e le quote
-                        di alleggerimento (relaxation.py)
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, il comando solve)
+                        la catena lessicografica (objective.py), le quote
+                        di alleggerimento (relaxation.py) e i criteri di
+                        qualità (quality.py + criteria.py)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, il comando solve)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -144,7 +145,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > vincolo da postare). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **582 test verdi**, 16 skip tutti misurati e attribuiti
+> minimo. **599 test verdi**, 16 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -179,9 +180,20 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > Fermi: `OPTIMAL`, zero scarti, 8426 variabili e 1086 constraint, 1,2 s dal
 > comando.
 >
+> Dal 2026-08-27 i **criteri di qualità** sono anch'essi implementati
+> (`domain/solver/quality.py`, `criteria.py`,
+> [spec](docs/superpowers/specs/2026-08-27-criteri-di-qualita-design.md)): i
+> quattro valori di `Ottimizzazione degli orari` — buchi, attività isolate,
+> mezze giornate libere, equilibrio didattico — più il pennello **verde**, come
+> livelli in coda alla catena, con l'**ordine dichiarato dai dati**
+> (`QualityCriterion`) e non dal codice. ⚠ E costano: sul Fermi cinque criteri
+> senza limite di tempo non tornano in nove minuti, con `--limite 15` chiudono
+> in 39,5 s lasciando due livelli su sei con l'ottimo non dimostrato.
+>
 > Resta **un solo pezzo dichiarato fuori** — l'assegnazione delle aule — più i
-> punti aperti elencati sotto e i criteri di qualità di EDT (i buchi, la
-> distribuzione, le preferenze verdi), che sono il livello sopra questa catena.
+> punti aperti elencati sotto e, sopra i criteri, la **separazione per
+> popolazione** con la perdita di qualità tollerata: EDT ottimizza docenti
+> *oppure* classi, mai insieme.
 
 ### Prototipo solver — parcheggiato
 
@@ -431,6 +443,89 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-27 (criteri di qualità)** — **La catena impara a distinguere due
+  orari legali.** Sei ondate
+  ([spec](docs/superpowers/specs/2026-08-27-criteri-di-qualita-design.md)). I
+  quattro livelli esistenti misurano tutti un **fallimento** — ore scartate,
+  attività scartate, violazioni nuove, spostamenti — quindi un orario che
+  piazza tutto senza violare nulla era indistinguibile da un altro che fa lo
+  stesso lasciando a un docente quattro buchi al giorno. Ora ci sono i livelli
+  che li separano: `domain/solver/quality.py` (il registro) e `criteria.py` (le
+  cinque traduzioni).
+
+  ⚠ **In EDT i meccanismi sono due, e confonderli era l'errore di partenza.**
+  `Ordinamento dei criteri` è la lista degli **undici** criteri di
+  *piazzamento*, riordinabile fra «considerati» e «ignorati»; `Ottimizzazione
+  degli orari` è una fase **separata**, con **tre** slot ordinati **per
+  popolazione** su cinque valori. Implementati i quattro valori
+  dell'ottimizzazione — buchi, attività isolate, mezze giornate libere,
+  equilibrio didattico — più `Rispetta le preferenze`, che in EDT è
+  l'undicesimo e **ultimo** criterio di piazzamento, ed è il pennello verde che
+  il pre-filtro lasciava passare rimandando qui per nome.
+
+  🔑 **Il pezzo è economico perché le quantità esistono già.** Quasi tutte sono
+  calcolate da un checker di `domain/analysis`, dove servono a essere
+  confrontate con un tetto: qui la stessa quantità si **minimizza**. I buchi
+  sono la formula di `MaxGapChecker` senza il D.T.B., e un test lo tiene fermo
+  facendo guardare **lo stesso orario** al livello e al checker — devono dire
+  lo stesso numero, o il criterio misura qualcos'altro.
+
+  🔑 **E una definizione di EDT collassa.** *«Attività isolata in una mezza
+  giornata **e** di durata inferiore a due fasce orarie»* sono due condizioni
+  che diventano una: **la mezza giornata ha esattamente una fascia occupata**.
+  Sola e lunga due dà 2; due ore singole danno 2 e nessuna è isolata. Non serve
+  guardare né la durata né l'identità dell'attività.
+
+  ⚠ **La traduzione italiana di un criterio dice un'altra cosa**, ed era già
+  scritto nei documenti: `Equilibrio didattico` traduce `Régularité des cours`,
+  ma l'enum è `tcoMemesHoraires` — *stessi orari*. Il senso è che la materia
+  ricada sempre nella stessa fascia, non l'equilibrio del carico. Tradurre
+  l'etichetta alla lettera avrebbe prodotto un criterio diverso da quello del
+  prodotto.
+
+  **L'ordine è un dato, non codice** (`QualityCriterion`, migrazione `0010`),
+  perché è il punto dichiarato del meccanismo: *«"Criteri considerati /
+  ignorati" è una UI onesta»*. Tabella vuota ⇒ la catena di prima, e un
+  criterio dell'enum che nessuna traduzione legge è un criterio **ignorato**,
+  non un errore.
+
+  ⚠ **Il costo cambia una raccomandazione operativa.** Fermi, cinque criteri:
+  **senza limite di tempo il calcolo non è tornato in nove minuti**; con
+  `--limite 15` finisce in **39,5 s**, e due livelli su sei chiudono con
+  l'ottimo **non dimostrato** — `regularity` e `free_half_days`, i due che
+  aprono più simmetrie. La catena resta corretta (un livello che scade fissa
+  l'ultimo valore trovato), ma il limite per livello smette di essere una
+  precauzione. Dichiarato nel docstring di `manage.py solve`.
+
+  ⚠ **Due difetti trovati nei test, non nel codice, e sono la stessa forma —
+  il primo l'ha trovato la misura sul Fermi, non una rilettura.** Le dimensioni
+  del modello non si muovevano di un bit con cinque criteri accesi, perché
+  `_dimensioni` costruiva la sola `build_model` mentre i livelli di qualità
+  nascono dentro `livelli()`: un'asserzione **incapace di fallire**. E
+  correggendola è emerso il secondo: il test misurava **due volte lo stesso
+  stato**, perché per la proprietà «tabella vuota» non esiste una riga da
+  aggiungere in mezzo. Ora il confronto è contro il modello **nudo** con una
+  differenza attesa esatta, ed è l'unica forma in cui la mutazione «una
+  variabile di troppo» diventa rossa.
+
+  ⚠ **Una previsione sbagliata, corretta dai numeri e non dal ragionamento**:
+  un'ora isolata con `population=ALL` vale **due**, non una — è isolata per il
+  docente e per la classe. Non è un doppio conteggio per distrazione: il
+  contatore `A.iso.` di EDT è dichiarato «per docente/classe/**gruppo**». Due
+  test attendevano 1 e sono stati corretti, non il codice.
+
+  **Nove mutazioni, nove esiti distinti**: ciascun criterio spento rende rossi
+  i suoi test e nessun altro; «nessun livello di qualità» ne rende rossi
+  quindici su diciassette e lascia verdi esattamente i due conservativi, che
+  devono sopravvivergli. Suite: **599 test verdi**, 16 skip.
+
+  Resta fuori, dichiarato: la **separazione per popolazione** e la **perdita di
+  qualità tollerata** — EDT ottimizza docenti *oppure* classi e dichiara quanto
+  è disposto a peggiorare l'altra. Il fissaggio della catena è già metà del
+  lavoro (`<= valore` diventa `<= valore + tolleranza`), ma *quale* popolazione
+  ottimizzare è un parametro di lancio: va progettato col comando, non con
+  l'obiettivo.
 
 - **2026-08-27 (audit delle quote)** — **Dodici call site di alleggerimento,
   misurati uno per uno: nessun difetto di comportamento, due di
