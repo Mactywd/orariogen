@@ -50,7 +50,16 @@ def test_l_indisponibilita_vale_su_tutta_la_durata():
     assert (0, 1) in ctx.cells[a.id]
 
 
-def test_giallo_e_verde_non_restringono():
+def test_il_giallo_restringe_come_il_rosso_il_verde_no():
+    """⚠ Correzione del 2026-08-26, e il test si chiamava «giallo e verde non
+    restringono». La documentazione dice il contrario: *«Indisponibilità
+    opzionali (giallo): rispettata come una rossa, ma l'utente può autorizzare
+    il motore a ignorarle»* (inventario-vincoli.md, A2). Il solver era più
+    permissivo di EDT su una famiglia intera, e nessun test lo diceva perché il
+    test affermava il comportamento sbagliato.
+
+    Il verde resta fuori: è una preferenza, e il suo posto è un livello di
+    qualità della catena lessicografica, non un pre-filtro."""
     env = mini_school()
     ResourceUnavailability.objects.create(
         resource=env["teacher"], day=0, slot=3, level="optional")
@@ -58,7 +67,31 @@ def test_giallo_e_verde_non_restringono():
         resource=env["teacher"], day=1, slot=3, level="preference")
     a = make_activity(env["subject"], teachers=[env["teacher"]])
     _, ctx = build_model(env["schedule"])
-    assert (0, 3) in ctx.cells[a.id] and (1, 3) in ctx.cells[a.id]
+    assert (0, 3) not in ctx.cells[a.id], "il giallo si rispetta"
+    assert (1, 3) in ctx.cells[a.id], "il verde no"
+
+
+def test_l_override_delle_gialle_e_per_tipo_di_risorsa():
+    """L'opzione di calcolo di EDT: «Piazza le attività anche sulle fasce con
+    indisponibilità opzionali», dichiarata **per categoria** di risorsa e non
+    per la singola (A4: l'override non è selettivo).
+
+    Qui il docente è ignorato e la classe no: la cella gialla del docente torna
+    disponibile, quella della classe resta vietata."""
+    from domain.models import Resource
+
+    env = mini_school()
+    ResourceUnavailability.objects.create(
+        resource=env["teacher"], day=0, slot=3, level="optional")
+    ResourceUnavailability.objects.create(
+        resource=env["klass"], day=1, slot=3, level="optional")
+    a = make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]])
+
+    _, ctx = build_model(env["schedule"],
+                         ignora_opzionali=[Resource.Kind.TEACHER])
+    assert (0, 3) in ctx.cells[a.id], "la gialla del docente è ignorata"
+    assert (1, 3) not in ctx.cells[a.id], "quella della classe no"
 
 
 def test_l_attivita_congelata_non_viene_ripulita():

@@ -161,8 +161,9 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > scartate, L2 il loro numero, il fissaggio fra un livello e l'altro, il
 > limite di tempo per livello. E le **quote** (`domain/solver/relaxation.py`):
 > margine e deroga, tetti per (famiglia, risorsa) e per risorsa, agganciate a
-> **tutte** le famiglie che EDT dichiara alleggeribili. **481 test verdi**,
-> 16 skip.
+> **tutte** le famiglie che EDT dichiara alleggeribili. Le indisponibilità
+> **gialle** si rispettano come le rosse, con l'override per categoria di
+> risorsa che EDT espone come opzione di calcolo. **483 test verdi**, 16 skip.
 >
 > Restano i **due pezzi dichiarati fuori** — l'assegnazione delle aule e il
 > violatore di Hall (che non usa il solver: è un conteggio di capienza) — più
@@ -430,6 +431,35 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, pezzo 3 — ondata 4)** — **I pre-filtri, e il task che
+  aveva la premessa sbagliata.** L'ondata era scritta come «le quote nei
+  pre-filtri». Controllando i documenti **prima** di scrivere il codice, la
+  premessa è caduta: in EDT l'indisponibilità **rossa non si alleggerisce
+  mai**, e la **gialla si rispetta come la rossa** — l'utente può autorizzare
+  il motore a ignorarla, ma con un'**opzione di calcolo per categoria di
+  risorsa** («Piazza le attività anche sulle fasce con indisponibilità
+  opzionali», declinata sulle cinque risorse), mai selettiva sulla singola.
+  Non è una quota. È §9.8 di nuovo, stavolta su un piano scritto poche ore
+  prima.
+
+  ⚠ **E la verifica ha trovato un difetto vero: il solver era più permissivo
+  di EDT su una famiglia intera.** Il pre-filtro ignorava il giallo del tutto —
+  si comportava come se l'override fosse sempre acceso — e **il test che
+  c'era affermava il comportamento sbagliato**, chiamandosi
+  `test_giallo_e_verde_non_restringono`. Ora il giallo restringe come il
+  rosso, l'override è il parametro `ignora_opzionali` per `Resource.Kind`, e
+  il verde resta fuori: è una preferenza, e il suo posto è un livello di
+  qualità della catena, non un pre-filtro.
+
+  ⚠ **Due famiglie dell'enum non sono quote**, e ora è dichiarato invece che
+  implicito: `UNAVAILABILITY` e `OPTIONAL_UNAVAILABILITY` restano nello schema
+  approvato ma nessun builder le consulta. Un test lo tiene fermo — con una
+  quota da cinque violazioni sull'indisponibilità rossa, il modello resta
+  `INFEASIBLE` — così che chi volesse renderle quote debba prima cancellarlo e
+  leggerne il perché.
+
+  Suite: **483 test verdi**, 16 skip.
 
 - **2026-08-26 (notte, pezzo 3 — ondata 3b)** — **Tutte le famiglie
   alleggeribili.** Agganciate le restanti: presenza massima, massimo di mezze

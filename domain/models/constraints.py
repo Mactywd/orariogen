@@ -116,6 +116,17 @@ class RelaxationQuota(models.Model):
     scelta di EDT, non una dimenticanza: nessuna riga della finestra nomina
     l'occupazione, la griglia, la distribuzione minima o il D.T.B.
 
+    ⚠ E due famiglie di questo enum **non sono una quota**, nonostante il nome:
+    `UNAVAILABILITY` e `OPTIONAL_UNAVAILABILITY`. Il rosso in EDT non si
+    alleggerisce mai; il giallo si rispetta come il rosso e si può ignorare con
+    un'**opzione di calcolo per categoria di risorsa** — «Piazza le attività
+    anche sulle fasce con indisponibilità opzionali», mai selettiva sulla
+    singola risorsa. Nel solver è il parametro `ignora_opzionali` di
+    `build_model`, non una riga di questa tabella. Le due voci restano perché
+    lo schema approvato le porta, e perché cancellarle sarebbe una migrazione
+    su un enum per nessun guadagno; ma nessun builder le consulta, ed è
+    dichiarato da un test.
+
     `resource` a NULL vale per **tutte** le risorse di quella famiglia; una riga
     con la risorsa valorizzata ha la precedenza su quella generica."""
 

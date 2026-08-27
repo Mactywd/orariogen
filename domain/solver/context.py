@@ -32,9 +32,10 @@ class SolverContext:
     by_cell: dict = field(default_factory=dict)  # (chiave, giorno, fascia) → [(id, letterale)]
     vocab: object = None      # Vocabulary, assegnato da build_model
     relax: object = None      # Relaxation: le quote di alleggerimento
+    ignora_opzionali: frozenset = frozenset()   # Resource.Kind con le gialle ignorate
 
     @classmethod
-    def build(cls, schedule, extraction=None):
+    def build(cls, schedule, extraction=None, ignora_opzionali=()):
         signatures = week_signatures(schedule)
         states = {rep: ScheduleState.build(schedule, week=rep) for rep, _ in signatures}
         base = states[signatures[0][0]]
@@ -81,6 +82,7 @@ class SolverContext:
             capacity=base.capacity, material_quantity=material_quantity,
             time_rows=base.time_rows, subject_rows=base.subject_rows,
             relax=Relaxation.build(),
+            ignora_opzionali=frozenset(ignora_opzionali),
         )
 
     def index_cells(self):

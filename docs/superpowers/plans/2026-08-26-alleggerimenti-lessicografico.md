@@ -138,15 +138,33 @@ task. Senza, «scarta tutto» è ammissibile e CP-SAT la restituisce.
       liberi, sedi): due quote consumate per una sola concessione sarebbero
       state un errore invisibile.
 
-## Task 4 — Le quote nei pre-filtri
+## Task 4 — I pre-filtri ✅ (2026-08-26) — ⚠ **e non erano quote**
 
-⚠ Il caso storto, e l'unico in cui si sbaglia in silenzio: se il builder pota
-**e** riammette, la quota è inerte e nessun test se ne accorge da solo.
+Il task era scritto come «le quote nei pre-filtri». Controllando i documenti
+prima di scrivere il codice, la premessa si è rivelata **falsa**:
 
-- [ ] `UNAVAILABILITY` / `OPTIONAL_UNAVAILABILITY`: con quota > 0 il builder
-      non pota, riammette le celle e posta un `v` per cella.
-- [ ] Un test che dimostra che la cella riammessa è **usabile** e che il suo
-      uso consuma quota.
+> *«Indisponibilità opzionali (giallo): rispettata come una rossa, ma l'utente
+> può autorizzare il motore a ignorarle»* — `inventario-vincoli.md`, A2
+> *«L'override delle opzionali non è selettivo: si attivano/disattivano tutte
+> insieme»* — A4
+> *«Piazza le attività anche sulle fasce con indisponibilità opzionali»,
+> declinato sulle cinque risorse* — `inventario-risorse-motore.md`, L7
+
+Il rosso in EDT non si alleggerisce mai; il giallo si ignora con un'**opzione
+di calcolo per categoria di risorsa**. Non è una quota, ed è la stessa forma
+di §9.8: un documento che dichiara vera una proprietà falsificata dai dati.
+
+- [x] ⚠ **Il giallo si rispetta come il rosso** — correzione di un difetto
+      trovato qui: il pre-filtro lo ignorava del tutto, cioè il solver era
+      **più permissivo di EDT** su una famiglia intera, e il test che c'era
+      affermava il comportamento sbagliato (`test_giallo_e_verde_non_restringono`).
+- [x] L'override come parametro di calcolo `ignora_opzionali`, per
+      `Resource.Kind`, mai per la singola risorsa.
+- [x] Il verde resta fuori dal pre-filtro: è una preferenza, e il suo posto è
+      un livello di qualità della catena.
+- [x] Dichiarato — nel docstring del modello e in un test — che
+      `UNAVAILABILITY` e `OPTIONAL_UNAVAILABILITY` **non** sono quote,
+      nonostante siano nell'enum.
 
 ## Task 5 — L3, e il ramo pigro
 

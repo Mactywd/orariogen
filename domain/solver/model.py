@@ -31,12 +31,19 @@ class Solution:
                            # structural:placement una volta scritte
 
 
-def build_model(schedule, extraction=None, allow_unplaced=True):
+def build_model(schedule, extraction=None, allow_unplaced=True,
+                ignora_opzionali=()):
     """`allow_unplaced=False` pretende il piazzamento di ogni attività libera:
     è il modello di prima dello scarto, e resta il modo di chiedere «questo
     vincolo morde?». Con lo scarto ammesso la risposta a una violazione forzata
-    non è più l'infattibilità ma la **rinuncia**, che è un'altra domanda."""
-    ctx = SolverContext.build(schedule, extraction=extraction)
+    non è più l'infattibilità ma la **rinuncia**, che è un'altra domanda.
+
+    `ignora_opzionali` porta i `Resource.Kind` per cui le indisponibilità
+    **gialle** non si rispettano: è l'opzione di calcolo di EDT «Piazza le
+    attività anche sulle fasce con indisponibilità opzionali», che si dichiara
+    per categoria di risorsa e non per la singola."""
+    ctx = SolverContext.build(schedule, extraction=extraction,
+                              ignora_opzionali=ignora_opzionali)
     builders = all_builders()
     for builder in builders:
         builder.restrict(ctx)
@@ -83,7 +90,7 @@ def build_model(schedule, extraction=None, allow_unplaced=True):
 
 
 def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
-          workers=None):
+          workers=None, ignora_opzionali=()):
     """`workers=1` rende la ricerca **riproducibile**. Serve ai test che
     osservano *quale* ottimo torna e non solo che ne torni uno: con più
     lavoratori CP-SAT restituisce l'ottimo che il primo thread trova, e due
@@ -94,7 +101,8 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
     chiamata: vedi `solve_chain`."""
     started = time.monotonic()
     model, ctx = build_model(schedule, extraction=extraction,
-                             allow_unplaced=allow_unplaced)
+                             allow_unplaced=allow_unplaced,
+                             ignora_opzionali=ignora_opzionali)
     livelli = livelli_di_scarto(ctx, model)
 
     def estrai(solver):

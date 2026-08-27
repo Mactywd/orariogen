@@ -355,3 +355,38 @@ def test_quota_sulle_sequenze_indesiderate():
                                    resource=env["klass"], max_violations=1)
     soluzione = solve(env["schedule"], allow_unplaced=False, workers=1)
     assert soluzione.status == "OPTIMAL", soluzione.stats
+
+
+def test_l_indisponibilita_non_si_alleggerisce_a_quota_ed_e_voluto():
+    """Le due famiglie dell'enum che **non** sono una quota, dichiarate qui
+    perché l'assenza non sembri una dimenticanza.
+
+    In EDT l'indisponibilità rossa non si alleggerisce mai, e la gialla si
+    ignora con un'opzione di calcolo **per categoria di risorsa** — «Piazza le
+    attività anche sulle fasce con indisponibilità opzionali» — che non è
+    selettiva sulla singola risorsa (A4). Il meccanismo è `ignora_opzionali`,
+    e una riga `RelaxationQuota` su queste famiglie non fa nulla.
+
+    Chi volesse renderle quote deve prima cancellare questo test, e leggerne
+    il perché."""
+    from domain.models import Resource, ResourceUnavailability
+
+    env = mini_school(days=1, slots=2)
+    _n_attivita(env, 2)
+    ResourceUnavailability.objects.create(
+        resource=env["teacher"], day=0, slot=1, level="hard")
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
+
+    RelaxationQuota.objects.create(family=F.UNAVAILABILITY,
+                                   resource=env["teacher"], max_violations=5,
+                                   params={"margine": 5})
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE", (
+        "una quota ha alleggerito l'indisponibilità rossa: in EDT non accade, "
+        "e il meccanismo del giallo è un'altra cosa")
+
+    ResourceUnavailability.objects.filter(resource=env["teacher"]).update(
+        level="optional")
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE", (
+        "anche la gialla si rispetta: la quota non la tocca")
+    assert solve(env["schedule"], allow_unplaced=False, workers=1,
+                 ignora_opzionali=[Resource.Kind.TEACHER]).status == "OPTIMAL"
