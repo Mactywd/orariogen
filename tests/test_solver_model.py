@@ -2,6 +2,7 @@
 in questo task: qui si verifica solo l'ossatura."""
 import pytest
 
+from domain.analysis.conformity import check_schedule
 from domain.models import Placement
 from domain.solver.model import apply, build_model, solve
 from tests.analysis_helpers import make_activity, mini_school, place
@@ -55,11 +56,33 @@ def test_attivita_congelata_resta_dove_sta():
     assert soluzione.placements[a.id] == (3, 2)
 
 
-def test_dominio_vuoto_rende_il_modello_infattibile():
+def test_dominio_vuoto_da_uno_scarto_nominato():
+    """Un'attivita' piu' lunga della giornata non ha una sola collocazione
+    ammissibile. Prima dello scarto rendeva infattibile l'intero modello; ora
+    resta **scartata**, che e' lo stato in cui EDT crea le attivita' («Non
+    piazzata») e una diagnosi invece di un silenzio.
+
+    ⚠ Il test dimostra le due meta' insieme: il solver risponde, e
+    `check_schedule` **nomina** l'attivita' rimasta fuori. Senza la seconda,
+    «scarta tutto» sarebbe un orario pulito."""
     env = mini_school()
-    make_activity(env["subject"], slots=7)   # la griglia ne ha 6
+    a = make_activity(env["subject"], slots=7)   # la griglia ne ha 6
     soluzione = solve(env["schedule"])
-    assert soluzione.status == "INFEASIBLE"
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE")
+    assert soluzione.unplaced == (a.id,)
+    assert soluzione.stats["scartate"] == 1
+    apply(soluzione, env["schedule"])
+    findings = check_schedule(env["schedule"])
+    assert [(f.code, f.activities) for f in findings] == [("activity_unplaced", (a.id,))]
+
+
+def test_dominio_vuoto_e_infattibile_se_si_pretende_il_piazzamento():
+    """La stessa istanza con `allow_unplaced=False`: e' il modello di prima,
+    e la risposta torna a essere l'infattibilita'. I due test insieme dicono
+    che lo scarto e' una **scelta di modello**, non un difetto sopravvenuto."""
+    env = mini_school()
+    make_activity(env["subject"], slots=7)
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
 
 
 def test_le_statistiche_ci_sono():

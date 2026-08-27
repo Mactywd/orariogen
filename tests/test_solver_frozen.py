@@ -58,8 +58,8 @@ pytestmark = pytest.mark.django_db
 #   6   fa scattare l'esenzione «deriva d'identita'»
 #   9   free_guaranteed e max_gap insieme
 #  16   arrival_departure, e deriva d'identita'
-#  20   ⚠ l'unico che fa scattare **entrambe** le esenzioni: senza di lui il
-#       ramo `pigro` di `_classifica_nuove` non verrebbe mai eseguito
+#  20   deriva d'identita' su subject_imposed_succession (fino all'ondata 5
+#       faceva scattare anche l'esenzione del ramo pigro, che non esiste piu')
 #  27   la dirt piu' larga misurata: undici causali su un solo testimone
 #  30   il rapporto piu' estremo, 29 congelate contro 3 libere
 #  36   min_distribution e site_transition insieme
@@ -85,23 +85,66 @@ def test_modello_sporco(seed):
         f"costruzione si sta svuotando")
     print(f"\nsporco, seed {seed}: {len(congelate)} congelate in violazione / "
           f"{len(libere)} libere, dirt={esiti['dirt']}, "
-          f"deriva={esiti['deriva']}, pigro={esiti['pigro']}, "
+          f"deriva={esiti['deriva']}, "
           f"{esiti['soluzione'].status}")
 
 
-def test_le_due_esenzioni_sono_esercitate():
-    """Un'esenzione che non scatta mai non e' un'esenzione: e' codice che
-    nessun test afferma. Qui si pretende che entrambe scattino su un seme
-    dichiarato, cosi' che toglierle faccia diventare rosso qualcosa.
+class _Rollback(Exception):
+    """Uscita da `transaction.atomic` che annulla la fixture: serve a provare
+    piu' semi dentro un test solo, perche' ricostruire la scuola due volte
+    nella stessa transazione violerebbe l'unicita' delle anagrafiche."""
 
-    ⚠ Il seme 20 e' l'unico dei dieci a esercitarle entrambe. Se cambia, va
-    rimisurato — non rimosso."""
-    esito = run_modello_sporco(20)
-    assert esito is not None
-    _w, _congelate, _libere, esiti = esito
-    assert esiti["deriva"], (
-        "nessuna deriva d'identita' al seme 20: l'esenzione `_grossa` non e' "
-        "piu' esercitata da nessun test")
-    assert esiti["pigro"], (
-        "nessun ramo pigro al seme 20: l'esenzione sul debito di §9.7 non e' "
-        "piu' esercitata da nessun test")
+
+def _cerca(fenomeno, semi):
+    """Il primo seme di `semi` che esercita `fenomeno`, o None.
+
+    ⚠ Perche' una **ricerca** e non un seme appuntato: i due fenomeni sono
+    proprieta' della **soluzione restituita**, non dell'istanza. Cambia
+    l'obiettivo — e questo pezzo ne aggiunge uno per ondata — e il solver
+    sceglie un altro ottimo, altrettanto valido, in cui il fenomeno non
+    compare. Appuntando un seme il test va rimisurato a ogni ondata (misurato:
+    tre volte in una sessione, spostandosi fra 7, 11, 16, 20 e 24); cercando
+    su una lista dichiarata, il test afferma la cosa che conta davvero —
+    **l'esenzione e' esercitata da qualcosa**.
+
+    Resta un test che puo' fallire, ed e' voluto: se nessuno dei semi esercita
+    piu' l'esenzione, quell'esenzione non e' piu' affermata da niente e va
+    rimisurata o rimossa."""
+    from django.db import transaction
+    for seme in semi:
+        esito = None
+        try:
+            with transaction.atomic():
+                esito = run_modello_sporco(seme)
+                raise _Rollback
+        except _Rollback:
+            pass
+        if esito is not None and esito[3][fenomeno]:
+            return seme, esito[3]
+    return None
+
+
+# I semi su cui cercare. Ristretti apposta: la ricerca costa un solve per seme,
+# e questi sono quelli che hanno esercitato l'uno o l'altro fenomeno in almeno
+# una delle configurazioni provate.
+SEMI_FENOMENI = [12, 16, 20, 24, 35, 7, 11]
+
+
+# ⚠ **L'esenzione del ramo pigro non esiste piu'** (ondata 5): L3 minimizza le
+# riparazioni mancate, e su 60 semi il fenomeno non compare piu' — prima era ai
+# semi 20, 35, 41, 45 e 52. Il test che la esercitava e' stato tolto insieme a
+# lei: un'esenzione che non scatta mai non e' un'esenzione.
+
+
+def test_l_esenzione_della_deriva_d_identita_e_esercitata():
+    """L'altra esenzione: stessa causale, stessa risorsa, stesse quantita',
+    **altra** coppia nominata in `activities`. Il finding cambia identita'
+    senza che la violazione cambi, perche' piazzare una libera accanto a una
+    congelata cambia *quale* coppia e' l'argmin."""
+    trovato = _cerca("deriva", SEMI_FENOMENI)
+    assert trovato is not None, (
+        f"nessuna deriva d'identita' su {SEMI_FENOMENI}: l'esenzione "
+        f"`_grossa` non e' piu' esercitata da nessun test — rimisurare i "
+        f"semi, non togliere il test")
+    seme, esiti = trovato
+    print(f"\nderiva d'identita' al seme {seme}: {len(esiti['deriva'])} occorrenze")

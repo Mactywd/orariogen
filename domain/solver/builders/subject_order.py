@@ -120,14 +120,22 @@ class WeeklyOrderBuilder(SubjectBuilder):
         if not a or not b:
             return
 
-        prima_a = model.NewIntVar(
-            0, ctx.grid.days_per_cycle * ctx.grid.slots_per_day - 1,
-            f"weekorder_a_{row.pk}_{rep}")
+        # ⚠ Il limite superiore comprende la sentinella di `vocab.pos`: se
+        # tutte le occorrenze di un lato sono scartate, il loro minimo *è* la
+        # sentinella, e un limite più stretto renderebbe infattibile lo scarto.
+        fuori = ctx.grid.days_per_cycle * ctx.grid.slots_per_day
+        prima_a = model.NewIntVar(0, fuori, f"weekorder_a_{row.pk}_{rep}")
         model.AddMinEquality(prima_a, [v.pos(aid) for aid in a])
-        prima_b = model.NewIntVar(
-            0, ctx.grid.days_per_cycle * ctx.grid.slots_per_day - 1,
-            f"weekorder_b_{row.pk}_{rep}")
+        prima_b = model.NewIntVar(0, fuori, f"weekorder_b_{row.pk}_{rep}")
         model.AddMinEquality(prima_b, [v.pos(bid) for bid in b])
+
+        # `WeeklyOrderChecker` legge le sole occorrenze **piazzate** e non dice
+        # nulla quando un lato non ne ha (`if not a or not b: return`). Il
+        # vincolo va quindi condizionato: senza, un lato interamente scartato
+        # varrebbe la sentinella e `prima_a <= prima_b` costringerebbe a
+        # scartare anche l'altro lato.
+        guardie = [g for g in (v.qualcuna_piazzata(a), v.qualcuna_piazzata(b))
+                   if g is not None]
 
         width = ctx.grid.slots_per_day
 
@@ -143,11 +151,12 @@ class WeeklyOrderBuilder(SubjectBuilder):
         FB = min(fb_vals) if fb_vals else None
 
         if FA is None or FB is None or FB >= FA:
-            model.Add(prima_a <= prima_b)
+            model.Add(prima_a <= prima_b).OnlyEnforceIf(guardie)
             return
 
         riparato = model.NewBoolVar(f"weekorder_fix_{row.pk}_{rep}")
-        model.Add(prima_a <= prima_b).OnlyEnforceIf(riparato)
+        ctx.riparazioni.append(riparato)
+        model.Add(prima_a <= prima_b).OnlyEnforceIf(guardie + [riparato])
         # status quo: divieto per attivita', non sul solo minimo aggregato
         # (vedi il docstring) -- esclude anche il pareggio con la congelata.
         for aid in a:

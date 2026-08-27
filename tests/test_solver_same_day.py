@@ -31,7 +31,7 @@ def test_sei_ore_della_stessa_materia_in_cinque_giorni_e_infattibile():
     for _ in range(6):
         make_activity(env["subject"], classes=[env["klass"]])
     _riga(env["subject"], env["subject"], school_class=env["klass"])
-    assert solve(env["schedule"]).status == "INFEASIBLE"
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
 
 
 def test_due_materie_diverse_non_coesistono_nella_giornata():

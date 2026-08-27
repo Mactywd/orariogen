@@ -94,25 +94,68 @@ class SubjectConstraint(models.Model):
 
 class RelaxationQuota(models.Model):
     """Alleggerimento a quota, mai a penalità: numero massimo di violazioni,
-    per famiglia e opzionalmente per risorsa. Modello lessicografico."""
+    per famiglia e opzionalmente per risorsa. Modello lessicografico.
+
+    ⚠ Ogni riga della finestra `Alleggerimenti` di EDT ha **due** parametri, non
+    uno: il *quanto* e il *quante volte*. «Autorizza un supplemento di … una
+    volta per settimana e per docente» — il supplemento è il margine,
+    `max_violations` è la seconda metà. Alcune famiglie hanno solo la seconda
+    («Non considerare le incompatibilità … una sola volta al giorno»), e lì il
+    vincolo si deroga invece di allargarsi.
+
+    Chiavi attese in `params`, per famiglia:
+      MAX_HOURS, MAX_PRESENCE:  {"margine": minuti}
+      HALF_DAYS, FREE_GUARANTEED: {"margine": mezze giornate}
+      DIDACTIC_WEIGHT:          {"margine": pesi}
+      SITES:                    {"margine": cambi di sede}
+      SUBJECT_MAX_HOURS:        {"margine": minuti}
+      SUBJECT_CONSTRAINT, SUBJECT_SEQUENCE:
+                                nessuna — il vincolo si deroga, non si allarga
+
+    ⚠ Le famiglie che non compaiono qui **non sono alleggeribili**, ed è la
+    scelta di EDT, non una dimenticanza: nessuna riga della finestra nomina
+    l'occupazione, la griglia, la distribuzione minima o il D.T.B.
+
+    ⚠ E due famiglie di questo enum **non sono una quota**, nonostante il nome:
+    `UNAVAILABILITY` e `OPTIONAL_UNAVAILABILITY`. Il rosso in EDT non si
+    alleggerisce mai; il giallo si rispetta come il rosso e si può ignorare con
+    un'**opzione di calcolo per categoria di risorsa** — «Piazza le attività
+    anche sulle fasce con indisponibilità opzionali», mai selettiva sulla
+    singola risorsa. Nel solver è il parametro `ignora_opzionali` di
+    `build_model`, non una riga di questa tabella. Le due voci restano perché
+    lo schema approvato le porta, e perché cancellarle sarebbe una migrazione
+    su un enum per nessun guadagno; ma nessun builder le consulta, ed è
+    dichiarato da un test.
+
+    `resource` a NULL vale per **tutte** le risorse di quella famiglia; una riga
+    con la risorsa valorizzata ha la precedenza su quella generica."""
 
     class Family(models.TextChoices):
         MAX_PRESENCE = "max_presence"
         FREE_GUARANTEED = "free_guaranteed"
         HALF_DAYS = "half_days"
-        SUBJECT_CONSTRAINT = "subject_constraint"
+        # Le tre righe di materia della finestra `Alleggerimenti` sono
+        # distinte, e con quote distinte: «Incompatibilità materie»,
+        # «Massimo di ore delle materie», «Sequenze indesiderate di materie».
+        SUBJECT_CONSTRAINT = "subject_constraint"       # le incompatibilità
+        SUBJECT_MAX_HOURS = "subject_max_hours"
+        SUBJECT_SEQUENCE = "subject_sequence"
         SITES = "sites"
         BREAKS = "breaks"
         OPTIONAL_UNAVAILABILITY = "optional_unavailability"
         UNAVAILABILITY = "unavailability"
         MAX_HOURS = "max_hours"
         DIDACTIC_WEIGHT = "didactic_weight"
+        # In EDT `Gestione Entrate / Uscite` è alleggeribile («Togli se
+        # necessario … giornata ridotta per docente»): mancava.
+        ARRIVAL_DEPARTURE = "arrival_departure"
 
     family = models.CharField(max_length=30, choices=Family.choices)
     resource = models.ForeignKey(
         Resource, null=True, blank=True, on_delete=models.CASCADE, related_name="relaxation_quotas"
     )
     max_violations = models.PositiveSmallIntegerField()
+    params = models.JSONField(default=dict, blank=True)
 
 
 class Extraction(models.Model):

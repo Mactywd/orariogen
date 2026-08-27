@@ -354,6 +354,15 @@ def run_family(key, seed):
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), (
         f"{key} INFEASIBLE con un testimone disponibile (seed {seed}): "
         f"{soluzione.stats}")
+    # ⚠ Da quando il modello ammette lo scarto, «lo status non e' INFEASIBLE»
+    # non basta piu': una soluzione che **scarta** e' pulita per qualunque
+    # famiglia, perche' un'attivita' non piazzata non viola niente. Il
+    # testimone esiste, quindi l'ottimo e' zero scarti: se il solver ne
+    # produce, e' un builder piu' stretto del testimone travestito da
+    # successo — o un limite di tempo che morde.
+    assert soluzione.stats["scartate"] == 0, (
+        f"{key} lascia {soluzione.stats['scartate']} attivita' scartate con un "
+        f"testimone disponibile (seed {seed}): {soluzione.stats}")
 
     # 3. e qualunque soluzione restituisca dev'essere pulita
     apply(soluzione, w.schedule)
@@ -437,6 +446,16 @@ def run_tutte_le_famiglie(seed, time_limit=120):
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), (
         f"modello completo INFEASIBLE con un testimone disponibile "
         f"(seed {seed}): {soluzione.stats}")
+    # ⚠ Da quando il modello ammette lo scarto, «lo status non e' INFEASIBLE»
+    # non basta piu': una soluzione che **scarta** e' pulita per qualunque
+    # famiglia, perche' un'attivita' non piazzata non viola niente. Il
+    # testimone esiste, quindi l'ottimo e' zero scarti: se il solver ne
+    # produce, e' un builder piu' stretto del testimone travestito da
+    # successo — o un limite di tempo che morde.
+    assert soluzione.stats["scartate"] == 0, (
+        f"il modello completo lascia {soluzione.stats['scartate']} attivita' "
+        f"scartate con un testimone disponibile (seed {seed}): "
+        f"{soluzione.stats}")
 
     apply(soluzione, w.schedule)
     dopo = _hard(w.schedule, codici)
@@ -2507,7 +2526,6 @@ def sporca(w, seed, quota=6):
 # `FreeGuaranteedBuilder` (time_counting.py) — cercare `riparato` per
 # trovarli. Se un quarto adottasse la stessa forma, la sua causale va aggiunta
 # qui, altrimenti il banco lo dara' per rotto.
-DISGIUNTIVI = {"min_distribution", "free_guaranteed", "subject_weekly_order"}
 
 
 def _per_settimana(findings):
@@ -2541,36 +2559,33 @@ def _causale_risorsa(chiave_settimana):
 
 
 def _classifica_nuove(nuove, base):
-    """Divide le violazioni comparse dopo il solve in tre mucchi, e solo il
-    terzo e' un fallimento.
+    """Divide le violazioni comparse dopo il solve in due mucchi, e solo il
+    secondo e' un fallimento.
 
     - **deriva d'identita'**: stessa causale, risorsa e quantita' gia' nella
       baseline, altre attivita' nominate. Vedi `_grossa`.
-    - **ramo pigro**: un peggioramento su una famiglia a ramo disgiuntivo
-      dove la stessa (causale, risorsa) era **gia'** violata. E' il debito di
-      §9.7, dichiarato e non risolto: senza funzione di costo CP-SAT non
-      preferisce riparare, e con le libere non piazzate lo status quo non e'
-      rappresentabile, quindi il ramo scende a `>= 0` ed e' vacuo. Misurato al
-      seme 20, ed e' uno **scambio**, non un peggioramento secco:
-      `free_guaranteed` sulla risorsa 3 passa da `free_days 4 / free_half_days
-      1` a `free_days 1 / free_half_days 4` — ripara la soglia delle mezze
-      (min 3) e rompe quella dei giorni (min 2), che era soddisfatta. Le due
-      soglie stanno sotto **lo stesso** booleano proprio per impedirlo, ma il
-      ramo vacuo scavalca il booleano.
-      ⚠ L'esenzione e' stretta apposta: una violazione su una risorsa
-      **pulita** resta un fallimento anche per queste tre famiglie.
-    - **vere**: tutto il resto."""
+    - **vere**: tutto il resto.
+
+    ⚠ **C'era un terzo mucchio, il «ramo pigro», ed e' stato tolto il
+    2026-08-26 (ondata 5).** Perdonava un peggioramento su una famiglia a ramo
+    disgiuntivo dove la stessa (causale, risorsa) era gia' violata: il debito
+    di §9.7 della spec del modello hard, dove senza funzione di costo CP-SAT
+    non aveva motivo di preferire la riparazione. **L3 gliene ha dato uno**, e
+    la misura lo dice: su **60 semi** il fenomeno non compare piu' — prima
+    c'era ai semi 20, 35, 41, 45 e 52. Un'esenzione che non scatta mai non e'
+    un'esenzione: e' codice che nessun test afferma (Ruling 127).
+
+    Se il fenomeno tornasse, questo banco diventerebbe **rosso** invece di
+    perdonarlo in silenzio. E' il comportamento giusto: rimettere l'esenzione
+    e' una decisione da prendere guardando la misura, non un default."""
     grosse = {_grossa(k) for k in base}
-    coppie = {_causale_risorsa(k) for k in base}
-    deriva, pigro, vere = [], [], []
+    deriva, vere = [], []
     for k in sorted(nuove, key=str):
         if _grossa(k) in grosse:
             deriva.append(k)
-        elif k[0][0] in DISGIUNTIVI and _causale_risorsa(k) in coppie:
-            pigro.append(k)
         else:
             vere.append(k)
-    return deriva, pigro, vere
+    return deriva, vere
 
 
 def run_modello_sporco(seed, time_limit=120):
@@ -2648,7 +2663,13 @@ def run_modello_sporco(seed, time_limit=120):
         f"il passato, che ADR-018 vieta")
 
     # Prova B
-    soluzione = solve(w.schedule, time_limit=time_limit)
+    # ⚠ `workers=1`: questo banco osserva *quale* ottimo torna — la deriva
+    # d'identita' e il ramo pigro sono proprieta' della soluzione, non
+    # dell'istanza. Con la ricerca in parallelo due esecuzioni della stessa
+    # istanza danno due orari entrambi ottimi, e i test che pretendono di
+    # vedere quei fenomeni diventano rossi a intermittenza. Misurato: verdi
+    # da soli, rossi nella suite intera.
+    soluzione = solve(w.schedule, time_limit=time_limit, workers=1)
     # ⚠ Stessa ragione della prova A, e qui la vacuita' e' anche piu' insidiosa:
     # con `UNKNOWN` i piazzamenti sono vuoti, `apply()` e' un no-op dichiarato
     # (domain/solver/model.py), e l'oracolo differenziale confronta la baseline
@@ -2657,15 +2678,22 @@ def run_modello_sporco(seed, time_limit=120):
         f"solve {soluzione.status} (seed {seed}) mentre la prova A ha trovato "
         f"lo status quo: il modello libero non puo' essere piu' stretto di uno "
         f"dei suoi punti ammissibili — {soluzione.stats}")
+    # La prova A ha appena dimostrato che lo status quo — tutte le libere
+    # dov'erano — e' ammissibile: l'ottimo di L1 e' quindi zero scarti, e una
+    # soluzione che rinuncia sarebbe il modello che si sottrae invece di
+    # rispondere.
+    assert soluzione.stats["scartate"] == 0, (
+        f"il solve libero scarta {soluzione.stats['scartate']} attivita' "
+        f"(seed {seed}) mentre lo status quo le piazza tutte: "
+        f"{soluzione.stats}")
     apply(soluzione, w.schedule)
     nuove = _per_settimana(_findings(w.schedule, codici)) - prima
-    deriva, pigro, vere = _classifica_nuove(nuove, prima)
+    deriva, vere = _classifica_nuove(nuove, prima)
     assert vere == [], (
         f"il solver ha introdotto violazioni nuove (seed {seed}): "
         f"{[k[0][0] for k in vere]}\n" + "\n".join(str(k) for k in vere))
     return w, congelate, libere, {
         "dirt": sorted({f.code for f in prima_completa}),
         "deriva": [k[0][0] for k in deriva],
-        "pigro": [k[0][0] for k in pigro],
         "soluzione": soluzione,
     }

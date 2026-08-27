@@ -62,7 +62,7 @@ le libere abbiano ancora voce in capitolo — l'analogo esatto di
 `max(cap, consumo)` perche' il tetto e il consumo vivono sulla stessa scala
 (entrambi minuti di buco), non sottratti l'uno dall'altro."""
 
-from domain.models import ResourceTimeConstraint
+from domain.models import RelaxationQuota, ResourceTimeConstraint
 from domain.solver.builders.base import ResourceBuilder
 from domain.solver.registry import register
 from domain.solver.residual import frozen_occupies
@@ -173,6 +173,12 @@ class MaxPresenceBuilder(ResourceBuilder):
         grid, v = ctx.grid, ctx.vocab
         key = row.resource_id
         giornata = range(grid.slots_per_day)
+        # «Presenza massima dei docenti: autorizza un supplemento di … una
+        # volta per settimana e per docente». Un solo letterale per riga: i due
+        # parametri (minuti e giorni) sono due metà dello stesso
+        # alleggerimento, e devono consumare una quota sola.
+        margine = ctx.relax.margine(
+            model, RelaxationQuota.Family.MAX_PRESENCE, key, f"{rep}")
         cap = row.params.get("max_minutes")
         if cap is not None:
             for day in range(grid.days_per_cycle):
@@ -181,7 +187,7 @@ class MaxPresenceBuilder(ResourceBuilder):
                 cap_effettivo = max(cap, _frozen_presence_minutes(ctx, key, day, rep))
                 cov = v.covered(key, day, giornata, signature=rep)
                 model.Add(grid.slot_minutes * sum(cov[s] for s in giornata)
-                          <= cap_effettivo)
+                          <= cap_effettivo + margine)
         max_days = row.params.get("days")
         if max_days is not None:
             terms, consumo = [], 0
@@ -191,4 +197,4 @@ class MaxPresenceBuilder(ResourceBuilder):
                 else:
                     terms.append(v.day_active(key, day, signature=rep))
             if terms:
-                model.Add(sum(terms) <= max(0, max_days - consumo))
+                model.Add(sum(terms) <= max(0, max_days - consumo) + margine)
