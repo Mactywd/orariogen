@@ -224,3 +224,134 @@ def test_la_deroga_vale_anche_fra_materie_diverse():
                                    resource=env["klass"], max_violations=1)
     assert solve(env["schedule"], allow_unplaced=False,
                  workers=1).status == "OPTIMAL"
+
+
+# --- una famiglia per volta, nella forma «senza quota INFEASIBLE, con quota
+#     OPTIMAL». ⚠ Ciascuna è verificata anche nel verso opposto: la quota da
+#     sola non basta se il builder non la usa, e infatti spegnendo il margine
+#     nel builder corrispondente il secondo assert torna INFEASIBLE.
+
+def _n_attivita(env, n, **kw):
+    return [make_activity(env["subject"], teachers=[env["teacher"]],
+                          classes=[env["klass"]], **kw) for _ in range(n)]
+
+
+def _senza_poi_con(env, famiglia, params=None, **quota):
+    """Il ritornello: prima si prova che il vincolo non ci sta, poi che la
+    quota lo concede. Fallire il primo assert vorrebbe dire un'istanza che non
+    esercitava niente."""
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
+    RelaxationQuota.objects.create(family=famiglia, resource=env["klass"],
+                                   max_violations=1, params=params or {},
+                                   **quota)
+    soluzione = solve(env["schedule"], allow_unplaced=False, workers=1)
+    assert soluzione.status == "OPTIMAL", soluzione.stats
+
+
+def test_quota_su_max_presence():
+    env = mini_school(days=1, slots=4)
+    _n_attivita(env, 2)
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_PRESENCE,
+        params={"days": 5, "max_minutes": 60})
+    _senza_poi_con(env, F.MAX_PRESENCE, {"margine": 60})
+
+
+def test_quota_sul_massimo_di_mezze_giornate():
+    env = mini_school(days=1, slots=6)   # mattina 0-3, pomeriggio 4-5
+    _n_attivita(env, 5)                  # non stanno in una mezza giornata sola
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_HALF_DAYS,
+        params={"max_half_days": 1})
+    _senza_poi_con(env, F.HALF_DAYS, {"margine": 1})
+
+
+def test_quota_sul_lavorare_una_sola_mezza_giornata():
+    """L'altra metà della stessa famiglia, che è una **deroga** e non un
+    margine: «lavorare solo mezza giornata al giorno» o si considera o no."""
+    env = mini_school(days=1, slots=6)
+    _n_attivita(env, 5)
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_HALF_DAYS,
+        params={"only_half_day_per_day": True})
+    _senza_poi_con(env, F.HALF_DAYS)
+
+
+def test_quota_su_entrate_e_uscite():
+    env = mini_school(days=2, slots=4)
+    _n_attivita(env, 7)   # sei celle senza la prima fascia: una deve sforare
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"],
+        type=ResourceTimeConstraint.Type.ARRIVAL_DEPARTURE,
+        params={"days": 2, "not_before_slot": 1})
+    _senza_poi_con(env, F.ARRIVAL_DEPARTURE, {"margine": 1})
+
+
+def test_quota_sui_giorni_liberi_garantiti():
+    env = mini_school(days=2, slots=2)
+    _n_attivita(env, 4)   # tutte le celle: nessun giorno resta libero
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"],
+        type=ResourceTimeConstraint.Type.FREE_GUARANTEED,
+        params={"free_days": 1})
+    _senza_poi_con(env, F.FREE_GUARANTEED, {"margine": 1})
+
+
+def test_quota_sui_cambi_di_sede():
+    from domain.models import Site
+
+    env = mini_school(days=1, slots=2)
+    a_site = Site.objects.create(name="A")
+    b_site = Site.objects.create(name="B")
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"site_transition_slots": 0})
+    make_activity(env["subject"], teachers=[env["teacher"]],
+                  classes=[env["klass"]], site=a_site)
+    make_activity(env["subject"], teachers=[env["teacher"]],
+                  classes=[env["klass"]], site=b_site)
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"],
+        type=ResourceTimeConstraint.Type.MAX_SITE_CHANGES,
+        params={"per_day": 0})
+    _senza_poi_con(env, F.SITES, {"margine": 1})
+
+
+def test_quota_sul_peso_didattico():
+    env = mini_school(days=1, slots=2)
+    _n_attivita(env, 2)
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"max_weight_day": 1})
+    _senza_poi_con(env, F.DIDACTIC_WEIGHT, {"margine": 1})
+
+
+def test_quota_sul_massimo_di_ore_di_una_materia():
+    env = mini_school(days=1, slots=2)
+    _n_attivita(env, 2)
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=env["subject"],
+        school_class=env["klass"],
+        type=SubjectConstraint.Type.MAX_HOURS_DAY, param=60)
+    _senza_poi_con(env, F.SUBJECT_MAX_HOURS, {"margine": 60})
+
+
+def test_quota_sulle_sequenze_indesiderate():
+    from domain.models import Subject
+
+    env = mini_school(days=1, slots=2)
+    matematica = Subject.objects.create(
+        code="MAT", name="Matematica", discipline=env["discipline"])
+    make_activity(env["subject"], teachers=[env["teacher"]],
+                  classes=[env["klass"]])
+    make_activity(matematica, teachers=[env["teacher"]], classes=[env["klass"]])
+    for a, b in ((env["subject"], matematica), (matematica, env["subject"])):
+        SubjectConstraint.objects.create(
+            subject_a=a, subject_b=b, school_class=env["klass"],
+            type=SubjectConstraint.Type.FORBIDDEN_SEQUENCE)
+    # entrambi gli ordini vietati: due ore in due fasce non hanno scampo.
+    # ⚠ Due deroghe, non una: il divieto è postato per **coppia di celle**, e
+    # in due fasce le coppie possibili sono due (A→B e B→A).
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
+    RelaxationQuota.objects.create(family=F.SUBJECT_SEQUENCE,
+                                   resource=env["klass"], max_violations=1)
+    soluzione = solve(env["schedule"], allow_unplaced=False, workers=1)
+    assert soluzione.status == "OPTIMAL", soluzione.stats

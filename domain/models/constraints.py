@@ -108,7 +108,13 @@ class RelaxationQuota(models.Model):
       HALF_DAYS, FREE_GUARANTEED: {"margine": mezze giornate}
       DIDACTIC_WEIGHT:          {"margine": pesi}
       SITES:                    {"margine": cambi di sede}
-      SUBJECT_CONSTRAINT:       nessuna — il vincolo si deroga, non si allarga
+      SUBJECT_MAX_HOURS:        {"margine": minuti}
+      SUBJECT_CONSTRAINT, SUBJECT_SEQUENCE:
+                                nessuna — il vincolo si deroga, non si allarga
+
+    ⚠ Le famiglie che non compaiono qui **non sono alleggeribili**, ed è la
+    scelta di EDT, non una dimenticanza: nessuna riga della finestra nomina
+    l'occupazione, la griglia, la distribuzione minima o il D.T.B.
 
     `resource` a NULL vale per **tutte** le risorse di quella famiglia; una riga
     con la risorsa valorizzata ha la precedenza su quella generica."""
@@ -117,7 +123,12 @@ class RelaxationQuota(models.Model):
         MAX_PRESENCE = "max_presence"
         FREE_GUARANTEED = "free_guaranteed"
         HALF_DAYS = "half_days"
-        SUBJECT_CONSTRAINT = "subject_constraint"
+        # Le tre righe di materia della finestra `Alleggerimenti` sono
+        # distinte, e con quote distinte: «Incompatibilità materie»,
+        # «Massimo di ore delle materie», «Sequenze indesiderate di materie».
+        SUBJECT_CONSTRAINT = "subject_constraint"       # le incompatibilità
+        SUBJECT_MAX_HOURS = "subject_max_hours"
+        SUBJECT_SEQUENCE = "subject_sequence"
         SITES = "sites"
         BREAKS = "breaks"
         OPTIONAL_UNAVAILABILITY = "optional_unavailability"

@@ -173,7 +173,9 @@ class MaxHalfDaysBuilder(ResourceBuilder):
                     else:
                         terms.append(v.half_active(key, day, half, signature=rep))
             if terms:
-                model.Add(sum(terms) <= max(0, cap - consumo))
+                margine = ctx.relax.margine(
+                    model, RelaxationQuota.Family.HALF_DAYS, key, f"cap_{rep}")
+                model.Add(sum(terms) <= max(0, cap - consumo) + margine)
         if row.params.get("only_half_day_per_day"):
             mattina, pomeriggio = v.halves()
             if len(mattina) and len(pomeriggio):
@@ -187,9 +189,18 @@ class MaxHalfDaysBuilder(ResourceBuilder):
                     if (frozen_occupies(ctx, key, day, mattina, rep)
                             and frozen_occupies(ctx, key, day, pomeriggio, rep)):
                         continue
-                    model.AddAtMostOne([
-                        v.half_active(key, day, 0, signature=rep),
-                        v.half_active(key, day, 1, signature=rep)])
+                    # ⚠ Forma lineare, non `AddAtMostOne`: una deroga si
+                    # aggancia con `OnlyEnforceIf`, che sui vincoli booleani
+                    # dedicati non e' disponibile. Con quota assente le due
+                    # forme sono lo stesso vincolo.
+                    deroga = ctx.relax.deroga(
+                        model, RelaxationQuota.Family.HALF_DAYS, key,
+                        f"solo_meta_{day}_{rep}")
+                    vincolo = model.Add(
+                        v.half_active(key, day, 0, signature=rep)
+                        + v.half_active(key, day, 1, signature=rep) <= 1)
+                    if deroga is not None:
+                        vincolo.OnlyEnforceIf(deroga.Not())
 
 
 @register(T.MIN_DISTRIBUTION)
@@ -323,7 +334,11 @@ class ArrivalDepartureBuilder(ResourceBuilder):
             model.Add(conforme + viola == 1)
             conformi.append(conforme)
         soglia = min(row.params["days"], grid.days_per_cycle - persi)
-        model.Add(sum(conformi) >= soglia)
+        # «Togli se necessario … giornata ridotta per docente»: su una soglia
+        # il margine si **sottrae**. Senza quota il termine e' l'intero 0.
+        margine = ctx.relax.margine(
+            model, RelaxationQuota.Family.ARRIVAL_DEPARTURE, key, f"{rep}")
+        model.Add(sum(conformi) >= soglia - margine)
 
 
 @register(T.FREE_GUARANTEED)
@@ -431,11 +446,18 @@ class FreeGuaranteedBuilder(ResourceBuilder):
         stato = ctx.states[rep]
         quantita = _quantita_baseline(FreeGuaranteedChecker(), stato, row,
                                       stato.resource_days(key))
+        # «Togli se necessario … mezze giornate libere per settimana»: un solo
+        # letterale per riga, condiviso dalle due soglie. Sono due metà dello
+        # stesso alleggerimento e devono consumare **una** quota, non due —
+        # ed e' anche la ragione per cui stanno sotto lo stesso booleano nel
+        # ramo disgiuntivo (correzione del 2026-08-26 mattina).
+        margine = ctx.relax.margine(
+            model, RelaxationQuota.Family.FREE_GUARANTEED, key, f"{rep}")
         if quantita is None or not _congelate_sulla_risorsa(ctx, key, rep):
             if minimo_giorni:
-                model.Add(sum(giorni_liberi) >= minimo_giorni)
+                model.Add(sum(giorni_liberi) >= minimo_giorni - margine)
             if minimo_mezze:
-                model.Add(sum(mezze_libere) >= minimo_mezze)
+                model.Add(sum(mezze_libere) >= minimo_mezze - margine)
             return
 
         if _status_quo_rappresentabile(ctx, key, rep):
@@ -444,9 +466,14 @@ class FreeGuaranteedBuilder(ResourceBuilder):
         else:
             b_giorni = b_mezze = 0
         riparato = model.NewBoolVar(f"freeguar_fix_{row.pk}_{key}_{rep}")
+        # ⚠ Il margine si applica al ramo della **riparazione**, non allo
+        # status quo: quello non e' una soglia da alleggerire, e' il divieto di
+        # peggiorare rispetto alla baseline (ADR-018). Alleggerirlo
+        # significherebbe autorizzare un peggioramento del passato, che e'
+        # un'altra cosa da quella che la finestra di EDT concede.
         if minimo_giorni:
-            model.Add(sum(giorni_liberi) >= minimo_giorni).OnlyEnforceIf(riparato)
+            model.Add(sum(giorni_liberi) >= minimo_giorni - margine).OnlyEnforceIf(riparato)
             model.Add(sum(giorni_liberi) >= b_giorni).OnlyEnforceIf(riparato.Not())
         if minimo_mezze:
-            model.Add(sum(mezze_libere) >= minimo_mezze).OnlyEnforceIf(riparato)
+            model.Add(sum(mezze_libere) >= minimo_mezze - margine).OnlyEnforceIf(riparato)
             model.Add(sum(mezze_libere) >= b_mezze).OnlyEnforceIf(riparato.Not())

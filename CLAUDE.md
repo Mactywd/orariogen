@@ -160,8 +160,8 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **catena lessicografica** (`domain/solver/objective.py`): L1 le ore
 > scartate, L2 il loro numero, il fissaggio fra un livello e l'altro, il
 > limite di tempo per livello. E le **quote** (`domain/solver/relaxation.py`):
-> margine e deroga, tetti per (famiglia, risorsa) e per risorsa, agganciate
-> per ora a `MAX_HOURS` e alle incompatibilità di materia. **472 test verdi**,
+> margine e deroga, tetti per (famiglia, risorsa) e per risorsa, agganciate a
+> **tutte** le famiglie che EDT dichiara alleggeribili. **481 test verdi**,
 > 16 skip.
 >
 > Restano i **due pezzi dichiarati fuori** — l'assegnazione delle aule e il
@@ -430,6 +430,47 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, pezzo 3 — ondata 3b)** — **Tutte le famiglie
+  alleggeribili.** Agganciate le restanti: presenza massima, massimo di mezze
+  giornate (tetto **e** «solo mezza giornata al giorno», che è una deroga),
+  entrate/uscite, giorni e mezze giornate libere, cambi di sede, peso
+  didattico, massimo di ore di una materia e sequenze indesiderate.
+
+  ⚠ **Sulle soglie il margine si sottrae, e va al ramo giusto.** «Togli se
+  necessario … mezze giornate libere per settimana» abbassa la soglia; ma nel
+  ramo disgiuntivo di ADR-018 si applica **solo** alla riparazione, mai allo
+  status quo — quello non è una soglia da alleggerire, è il divieto di
+  peggiorare rispetto alla baseline, e alleggerirlo autorizzerebbe un
+  peggioramento del passato, che è un'altra cosa da quella che la finestra di
+  EDT concede.
+
+  ⚠ **Un letterale per riga, non per parametro.** Presenza (minuti + giorni),
+  giorni liberi (giorni + mezze), sedi (per giorno + per settimana): sono due
+  parametri dello stesso alleggerimento, e due quote consumate per una sola
+  concessione sarebbero state un errore che nessun test avrebbe visto.
+
+  ⚠ **Le righe di materia sono tre famiglie, non una.** La finestra di EDT le
+  tiene distinte — `Incompatibilità materie`, `Massimo di ore delle materie`,
+  `Sequenze indesiderate di materie` — con quote separate, e il nostro enum ne
+  aveva una sola: aggiunte `SUBJECT_MAX_HOURS` e `SUBJECT_SEQUENCE`
+  (migrazione `0009`). Condividere una quota fra un margine e una deroga
+  sarebbe stata una deviazione silenziosa dal prodotto.
+
+  🔑 **E l'ondata 1 ha reso falso un argomento scritto in `weight.py`.** Il
+  salto sul secchio settimanale inevadibile era giustificato dal fatto che «la
+  somma dei letterali liberi è una costante» — vero solo con `AddExactlyOne`.
+  Ora non lo è più: il clamp non sarebbe *contraddittorio*, sarebbe la pretesa
+  che il presente **scarti** per espiare il peso del passato. La conclusione
+  regge, l'argomento no, e il commento è stato riscritto invece di lasciarlo
+  invecchiare. Stessa sorte per il commento di `post_separable` e per quello
+  del peso, che citavano `AddExactlyOne` per una proprietà che oggi discende
+  da `piazzata`.
+
+  **Quindici test su diciassette cadono** con una sola mutazione — il
+  meccanismo che non concede niente — e i due che restano verdi sono quelli
+  che devono restarlo: «senza righe il modello è quello di prima» e «una quota
+  a zero è come non averla». Suite: **481 test verdi**, 16 skip.
 
 - **2026-08-26 (notte, pezzo 3 — ondata 3a)** — **Le quote: un vincolo
   rilassabile non diventa soft.** `domain/solver/relaxation.py`, il meccanismo

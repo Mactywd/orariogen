@@ -261,7 +261,13 @@ class _MaxHoursSubject(_Bucketed):
                      for aid, lit in lits]
             liberi, residuo = residual_cap(ctx, terms, row.param)
             if liberi:
-                model.Add(sum(w * lit for w, lit in liberi) <= residuo)
+                # «Massimo di ore delle materie: autorizza un supplemento di …
+                # una volta per settimana e per classe». Famiglia a sé in EDT,
+                # distinta dalle incompatibilità: qui è un **margine**.
+                margine = ctx.relax.margine(
+                    model, RelaxationQuota.Family.SUBJECT_MAX_HOURS,
+                    _risorsa_di(keys), f"{row.pk}_{bucket}_{rep}")
+                model.Add(sum(w * lit for w, lit in liberi) <= residuo + margine)
 
 
 @register(T.MAX_HOURS_DAY)
@@ -314,5 +320,13 @@ class ForbiddenSequenceBuilder(SubjectBuilder):
                     fine = slot + durata
                     if (day, fine) not in ctx.cells[pb]:
                         continue
-                    model.AddBoolOr([ctx.x[(pa, day, slot)].Not(),
-                                     ctx.x[(pb, day, fine)].Not()])
+                    # «Autorizza una sequenza indesiderata … per settimana e
+                    # per classe, una sola volta al giorno»: deroga, non
+                    # margine — la sequenza o si considera o no.
+                    deroga = ctx.relax.deroga(
+                        model, RelaxationQuota.Family.SUBJECT_SEQUENCE,
+                        _risorsa_di(keys), f"{pa}_{pb}_{day}_{slot}_{rep}")
+                    vincolo = model.AddBoolOr([ctx.x[(pa, day, slot)].Not(),
+                                               ctx.x[(pb, day, fine)].Not()])
+                    if deroga is not None:
+                        vincolo.OnlyEnforceIf(deroga.Not())

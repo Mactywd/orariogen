@@ -116,17 +116,27 @@ task. Senza, «scarta tutto» è ammissibile e CP-SAT la restituisce.
 - [x] «Un vincolo alleggerito resta una violazione **nominata**»: la quota non
       nasconde il finding, autorizza il solver a produrlo.
 
-## Task 3b — Le famiglie restanti
+## Task 3b — Le famiglie restanti ✅ (2026-08-26)
 
-Da agganciare, una per una, con la stessa coppia margine/deroga:
-
-- [ ] `MAX_PRESENCE`, `HALF_DAYS`, `ARRIVAL_DEPARTURE`, `FREE_GUARANTEED`
-      (⚠ sono **soglie**: il margine si sottrae, non si somma).
-- [ ] `SITES` (cambi di sede) e `DIDACTIC_WEIGHT`.
-- [ ] Le altre righe di materia: massimo di ore per secchio e sequenze
-      indesiderate.
-- [ ] Un test per famiglia, nella forma «senza quota `INFEASIBLE`, con quota
-      `OPTIMAL`, con quota `k` la `k+1` è vietata».
+- [x] `MAX_PRESENCE`, `HALF_DAYS` (tetto **e** «solo mezza giornata», che è
+      una deroga), `ARRIVAL_DEPARTURE`, `FREE_GUARANTEED` — ⚠ sono **soglie**:
+      il margine si sottrae. E si applica al ramo della **riparazione**, mai
+      allo status quo, che non è una soglia da alleggerire ma il divieto di
+      peggiorare (ADR-018).
+- [x] `SITES` (cambi di sede) e `DIDACTIC_WEIGHT`.
+- [x] Le altre righe di materia — ⚠ e sono **famiglie distinte**, come in EDT:
+      `SUBJECT_MAX_HOURS` (margine) e `SUBJECT_SEQUENCE` (deroga) accanto a
+      `SUBJECT_CONSTRAINT` (le incompatibilità). Migrazione `0009`.
+- [x] Un test per famiglia, nella forma «senza quota `INFEASIBLE`, con quota
+      `OPTIMAL`». Una sola mutazione — il meccanismo che non concede nulla —
+      li fa cadere tutti e quindici.
+- [x] ⚠ Dichiarato nel docstring del modello: le famiglie che **non**
+      compaiono non sono alleggeribili, ed è la scelta di EDT, non una
+      dimenticanza.
+- [x] *(non previsto)* Un letterale **per riga**, non per parametro, dove i
+      parametri sono due metà dello stesso alleggerimento (presenza, giorni
+      liberi, sedi): due quote consumate per una sola concessione sarebbero
+      state un errore invisibile.
 
 ## Task 4 — Le quote nei pre-filtri
 

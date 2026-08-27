@@ -68,6 +68,7 @@ punti aperti in `CLAUDE.md`.
 from collections import defaultdict
 
 from domain.analysis.state import resource_sort_key
+from domain.models import RelaxationQuota
 from domain.models.resources import Resource
 from domain.solver.registry import Builder, register
 from domain.solver.residual import split
@@ -112,10 +113,10 @@ class DidacticWeightBuilder(Builder):
                     for key in keys:
                         # La stessa attivita' mette **piu' letterali** nello
                         # stesso secchio, uno per cella candidata li' dentro.
-                        # E' corretto: `AddExactlyOne` sul suo dominio limita
-                        # a 1 la somma dei suoi letterali, quindi il peso
-                        # entra nella somma una volta sola (stessa
-                        # osservazione di `post_separable`).
+                        # E' corretto: `somma(celle) == piazzata` limita a 1 la
+                        # somma dei suoi letterali, quindi il peso entra nella
+                        # somma **al piu'** una volta — zero se l'attivita' e'
+                        # scartata (stessa osservazione di `post_separable`).
                         per_day[(key, day)].append((peso, aid, lit))
                         per_half[(key, day, meta)].append((peso, aid, lit))
                         per_week[key].append((peso, aid, lit))
@@ -131,16 +132,24 @@ class DidacticWeightBuilder(Builder):
                 if not liberi:
                     return
                 if not evadibile and consumo > cap:
-                    # ⚠ ADR-018 sul secchio **inevadibile**: qui la somma dei
-                    # letterali liberi e' una costante (ogni libera contribuisce
-                    # il proprio peso ovunque vada), quindi il clamp a zero non
-                    # renderebbe il secchio «inagibile» — lo renderebbe
-                    # **contraddittorio**. Sarebbe pretendere una riparazione
-                    # che nessun piazzamento puo' fare, non vietare un
-                    # peggioramento: il caso che ADR-018 esclude. Si salta.
+                    # ⚠ ADR-018 sul secchio settimanale sforato **dalle sole
+                    # congelate**. L'argomento originale era che la somma dei
+                    # letterali liberi fosse una costante — ogni libera pesa
+                    # ovunque vada — e che il clamp a zero rendesse quindi il
+                    # secchio contraddittorio invece che inagibile. ⚠ Quella
+                    # costante era `AddExactlyOne`: dal 2026-08-26 il
+                    # piazzamento non e' piu' obbligatorio e la somma torna a
+                    # dipendere dalle decisioni. Il clamp non e' piu'
+                    # contraddittorio, ma preteso ora significa **scartare** le
+                    # libere per espiare il peso del passato — un peggioramento
+                    # imposto al presente da uno stato che non ha scelto, che
+                    # e' la stessa cosa che ADR-018 esclude. Si salta.
                     return
+                margine = ctx.relax.margine(
+                    model, RelaxationQuota.Family.DIDACTIC_WEIGHT,
+                    bucket[1], f"{bucket}")
                 model.Add(sum(p * lit for p, lit in liberi)
-                          <= max(0, cap - consumo))
+                          <= max(0, cap - consumo) + margine)
 
             def ordina(secchi):
                 # ordine deterministico su chiavi miste int/str (ADR-017: gli
