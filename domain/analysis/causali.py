@@ -50,6 +50,8 @@ CAUSALI: dict[str, str] = {
     "coverage_mismatch": "{unit}, {subject}: monte ore delle attività diverso dal servizio",
     # lo scarto (pezzo 3, ondata 1)
     "activity_unplaced": "{subject}, l'attività non è piazzata",
+    # assegnazione delle aule (seconda fase)
+    "room_unassigned": "{subject}, nessuna aula assegnata",
 }
 
 

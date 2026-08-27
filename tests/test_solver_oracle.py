@@ -59,7 +59,7 @@ CODICI = {
 # qualcosa che era piazzato e non lo e' piu' — deve vedersi.
 LEGALITA = CODICI - {"activity_unplaced"}
 
-# Le tre causali del catalogo che restano **deliberatamente** fuori.
+# Le causali del catalogo che restano **deliberatamente** fuori.
 FUORI = {
     # nessun builder: PLACEMENT_INDEPENDENT, il solver non crea ne' distrugge
     # attivita' (vedi tests/test_solver_registry_completo.py)
@@ -67,6 +67,11 @@ FUORI = {
     # non sono HARD: violazioni() le filtrerebbe comunque per severita', ma
     # elencarle qui rende la scelta leggibile invece che implicita
     "unavailability_optional", "preference",
+    # l'assegnazione delle aule e' una **seconda fase**, un modello separato
+    # che gira sui piazzamenti gia' scritti (domain/solver/rooms.py, non
+    # ancora costruito — Task 1 di 6). `solve()` qui e' il primo modello, che
+    # non tocca mai `assigned_room`: non e' questo oracolo a doverlo vedere.
+    "room_unassigned",
 }
 
 
