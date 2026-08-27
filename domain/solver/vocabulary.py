@@ -247,7 +247,11 @@ class Vocabulary:
                 return None
             if not lits:
                 return None
-            var = self.model.NewBoolVar(f"qualcuna_{hash(aids) & 0xffff}")
+            # ⚠ Il nome porta gli id, non un `hash(aids) & 0xffff`: troncato a
+            # sedici bit collide, e due guardie diverse finivano con lo stesso
+            # nome nel proto — innocuo per CP-SAT, illeggibile per chi lo apre.
+            var = self.model.NewBoolVar(
+                "qualcuna_" + "_".join(str(a) for a in aids))
             return self._max_or_zero(var, lits)
         return self._memo("qualcuna", aids, make)
 

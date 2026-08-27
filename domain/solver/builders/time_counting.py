@@ -196,11 +196,9 @@ class MaxHalfDaysBuilder(ResourceBuilder):
                     deroga = ctx.relax.deroga(
                         model, RelaxationQuota.Family.HALF_DAYS, key,
                         f"solo_meta_{day}_{rep}")
-                    vincolo = model.Add(
+                    deroga.applica(model.Add(
                         v.half_active(key, day, 0, signature=rep)
-                        + v.half_active(key, day, 1, signature=rep) <= 1)
-                    if deroga is not None:
-                        vincolo.OnlyEnforceIf(deroga.Not())
+                        + v.half_active(key, day, 1, signature=rep) <= 1))
 
 
 @register(T.MIN_DISTRIBUTION)

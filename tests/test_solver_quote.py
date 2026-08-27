@@ -11,7 +11,8 @@ a un vincolo che non ci sta non è l'infattibilità ma la rinuncia, e la domanda
 import pytest
 
 from domain.analysis.conformity import check_schedule
-from domain.models import (InstituteSettings, RelaxationQuota,
+from domain.models import (ClassPart, ClassPartition, Group,
+                           InstituteSettings, RelaxationQuota,
                            ResourceTimeConstraint, SubjectConstraint)
 from domain.solver.model import apply, build_model, solve
 from tests.analysis_helpers import make_activity, mini_school
@@ -248,6 +249,48 @@ def _senza_poi_con(env, famiglia, params=None, **quota):
     assert soluzione.status == "OPTIMAL", soluzione.stats
 
 
+def test_la_quota_di_una_riga_su_raggruppamento_non_va_a_una_parte_a_caso():
+    """A quale **risorsa** si attribuisce la quota di una riga di materia?
+
+    Alla risorsa che la riga nomina — e una riga su un **raggruppamento** non
+    ne nomina nessuna: il raggruppamento è trasversale, le sue parti stanno in
+    classi diverse (ADR-013). L'unica risposta onesta è «nessuna in
+    particolare», cioè la quota generica.
+
+    ⚠ Prima questa risorsa si **deduceva** prendendo la chiave intera più
+    piccola dell'unità. Su un raggruppamento quel minimo è la parte con il pk
+    più basso: una quota messa lì avrebbe alleggerito il vincolo di tutto il
+    raggruppamento, e una quota generica non l'avrebbe alleggerito affatto.
+    Attribuzione decisa dall'ordine di creazione delle righe, che non è una
+    semantica."""
+    env = mini_school(days=1, slots=2)
+    partizione = ClassPartition.objects.create(school_class=env["klass"],
+                                               name="LINGUA")
+    ing = ClassPart.objects.create(name="1A_ING", partition=partizione)
+    ted = ClassPart.objects.create(name="1A_TED", partition=partizione)
+    gruppo = Group.objects.create(name="TRASVERSALE")
+    gruppo.parts.add(ing, ted)
+    for _ in range(2):
+        make_activity(env["subject"], teachers=[env["teacher"]], groups=[gruppo])
+    SubjectConstraint.objects.create(
+        subject_a=env["subject"], subject_b=env["subject"], group=gruppo,
+        type=SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE)
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
+
+    # la parte col pk più basso: era il minimo che l'attribuzione pescava
+    piu_bassa = min(ing.pk, ted.pk)
+    quota = RelaxationQuota.objects.create(
+        family=F.SUBJECT_CONSTRAINT, resource_id=piu_bassa, max_violations=1)
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
+
+    # la quota generica, invece, è quella che copre una riga senza risorsa
+    quota.delete()
+    RelaxationQuota.objects.create(family=F.SUBJECT_CONSTRAINT,
+                                   resource=None, max_violations=1)
+    soluzione = solve(env["schedule"], allow_unplaced=False, workers=1)
+    assert soluzione.status == "OPTIMAL", soluzione.stats
+
+
 def test_quota_su_max_presence():
     env = mini_school(days=1, slots=4)
     _n_attivita(env, 2)
@@ -255,6 +298,49 @@ def test_quota_su_max_presence():
         resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_PRESENCE,
         params={"days": 5, "max_minutes": 60})
     _senza_poi_con(env, F.MAX_PRESENCE, {"margine": 60})
+
+
+def test_il_margine_di_max_presence_non_allarga_il_tetto_dei_giorni():
+    """⚠ Il margine di `Presenza massima` è in **ore**, non in giorni
+    (`docs/edt/estratti/motore-punti-aperti.md`: «MaxPresentielProf … | ore»).
+    Sommarlo al tetto dei *giorni* è un errore di unità, e non è teorico: con
+    «margine 60» il tetto «al massimo 1 giorno» diventerebbe 61, cioè spento.
+
+    Qui la riga porta il solo `days`, quindi non c'è nessun tetto in minuti da
+    alleggerire: la quota non deve concedere niente."""
+    env = mini_school(days=4, slots=2)
+    _n_attivita(env, 3)          # 2 fasce al giorno: servono almeno 2 giorni
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_PRESENCE,
+        params={"days": 1})
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
+    RelaxationQuota.objects.create(family=F.MAX_PRESENCE, resource=env["klass"],
+                                   max_violations=1, params={"margine": 60})
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
+
+
+def test_il_margine_di_max_presence_si_consuma_una_volta_per_giorno():
+    """«Autorizza un supplemento di … **una volta per settimana** e per
+    docente»: con quota 1 il supplemento vale su **un** giorno, non su tutti.
+
+    Un letterale solo per riga lo renderebbe «una volta, ovunque»: due giorni
+    sforati al prezzo di una quota. Con tetto 60' al giorno su due giorni
+    stanno due attività; il supplemento ne aggiunge una **sul giorno che lo
+    consuma**, quindi tre stanno e quattro no."""
+    env = mini_school(days=2, slots=4)
+    _n_attivita(env, 4)
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_PRESENCE,
+        params={"max_minutes": 60})
+    quota = RelaxationQuota.objects.create(
+        family=F.MAX_PRESENCE, resource=env["klass"],
+        max_violations=1, params={"margine": 60})
+    # quattro attività chiedono il supplemento su **entrambi** i giorni
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
+    quota.max_violations = 2
+    quota.save()
+    assert solve(env["schedule"], allow_unplaced=False,
+                 workers=1).status == "OPTIMAL"
 
 
 def test_quota_sul_massimo_di_mezze_giornate():

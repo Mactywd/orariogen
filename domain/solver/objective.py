@@ -14,8 +14,8 @@ attività scartate, potete alleggerire» è esattamente «L3 dopo L1»: il model
 consuma un alleggerimento solo quando quell'alleggerimento riduce gli scarti,
 perché a scarti pari il livello successivo preferisce zero violazioni.
 
-Oggi la catena ha due livelli — gli scarti in ore e in numero (D1) — e i
-prossimi (le quote consumate, la stabilità fra periodi) si aggiungono qui."""
+La catena ha quattro livelli: gli scarti in ore e in numero (D1), le
+violazioni nuove che il modello si concede, e la stabilità fra periodi."""
 
 import time
 from dataclasses import dataclass
@@ -42,7 +42,8 @@ class Esito:
 
 
 def livelli(ctx, model):
-    """La catena: L1, L2, L3. ⚠ **L'ordine è la decisione D1 della spec**: prima le ore, poi
+    """La catena, da L1 a L4. ⚠ **L'ordine è la decisione D1 della spec**:
+    prima le ore, poi
     il numero di attività come spareggio. Uno scarto da 3h fa più danno al
     monte ore di una classe di tre da 1h; EDT conta le attività nella propria
     finestra ma riporta entrambi («284 attività / 288h00»), quindi la scelta
@@ -54,8 +55,20 @@ def livelli(ctx, model):
     presolve — quella la spegne `presolve_substitution_level = 0` in
     `solve_chain`, con la misura scritta lì."""
     if not ctx.placed_var:
-        # senza scarto non c'è L1/L2; L3 da solo non ha senso, perché
-        # alleggerire serve a ridurre gli scarti e qui non ce ne sono.
+        # `placed_var` è vuoto in **due** casi distinti, e la catena si spegne
+        # in entrambi: nessuna attività libera (niente da decidere), oppure
+        # `allow_unplaced=False`, il modello che pretende il piazzamento.
+        #
+        # ⚠ Nel secondo caso la rinuncia non esiste, quindi L1/L2 non hanno
+        # oggetto — ma L3 e L4 sì, e restano spenti lo stesso. È una scelta,
+        # non una dimenticanza: `allow_unplaced=False` serve a chiedere
+        # «questo vincolo morde?», e la risposta dev'essere quella del modello
+        # hard nudo, non quella di un modello che sceglie *anche* fra le
+        # violazioni ammissibili. Chi lo usa (i test dei builder, e la
+        # direzione 1 dell'oracolo di Hall) misura l'ammissibilità, mai la
+        # preferenza. Conseguenza da conoscere: in quella modalità le quote
+        # non sono minimizzate, e il ramo status quo di ADR-018 torna a essere
+        # alla pari con la riparazione.
         return []
 
     minuti_totali = sum(ctx.activities[aid].duration_minutes for aid in ctx.placed_var)
@@ -66,7 +79,7 @@ def livelli(ctx, model):
     numero = model.NewIntVar(0, len(ctx.placed_var), "attivita_scartate")
     model.Add(numero == sum(1 - piazzata for piazzata in ctx.placed_var.values()))
 
-    livelli = [Level("minuti_scartati", minuti), Level("attivita_scartate", numero)]
+    catena = [Level("minuti_scartati", minuti), Level("attivita_scartate", numero)]
 
     # L3 — le violazioni **nuove** che il modello si concede: le quote
     # consumate e le riparazioni mancate. Due conteggi distinti sommati in un
@@ -88,7 +101,7 @@ def livelli(ctx, model):
     if quote or mancate:
         nuove = model.NewIntVar(0, len(quote) + len(mancate), "violazioni_nuove")
         model.Add(nuove == sum(quote) + sum(mancate))
-        livelli.append(Level("violazioni_nuove", nuove))
+        catena.append(Level("violazioni_nuove", nuove))
     # L4 — la stabilità. Rigenerando l'orario a ogni periodo (ADR-010) serve un
     # criterio «mantieni il più possibile le collocazioni precedenti», o il
     # secondo quadrimestre viene stravolto per tutti: è la conseguenza che il
@@ -113,8 +126,8 @@ def livelli(ctx, model):
     if mosse or fisse:
         spostate = model.NewIntVar(0, len(mosse) + fisse, "spostamenti")
         model.Add(spostate == len(mosse) + fisse - sum(mosse))
-        livelli.append(Level("spostamenti", spostate))
-    return livelli
+        catena.append(Level("spostamenti", spostate))
+    return catena
 
 
 def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
@@ -149,22 +162,21 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
         solver.parameters.num_workers = int(workers)
     if time_limit is not None:
         solver.parameters.max_time_in_seconds = float(time_limit)
-    if levels:
-        # ⚠ Misurato, e non è un dettaglio di prestazioni: senza questo, la
-        # presolve **espande l'obiettivo** («objective: expanded via tight
-        # equality», 36 volte su un testimone da 32 attività). I booleani
-        # `piazzata` spariscono, al loro posto entrano nell'obiettivo 723
-        # letterali di cella, e il dominio iniziale passa da [0, 660] a
-        # [-35460, 2040]. Il solver trova `best:0` in un decimo di secondo e
-        # poi spende **sessanta secondi** a dimostrare che non esiste un ottimo
-        # negativo — vero per costruzione, ma non più per lui. Con la
-        # sostituzione spenta: `OPTIMAL` in 0,09 s.
-        solver.parameters.presolve_substitution_level = 0
-
     if not levels:
         stato = solver.Solve(model)
         ammesso = stato in (cp_model.OPTIMAL, cp_model.FEASIBLE)
         return stato, (estrai(solver) if ammesso else None), ()
+
+    # ⚠ Misurato, e non è un dettaglio di prestazioni: senza questo, la
+    # presolve **espande l'obiettivo** («objective: expanded via tight
+    # equality», 36 volte su un testimone da 32 attività). I booleani
+    # `piazzata` spariscono, al loro posto entrano nell'obiettivo 723
+    # letterali di cella, e il dominio iniziale passa da [0, 660] a
+    # [-35460, 2040]. Il solver trova `best:0` in un decimo di secondo e poi
+    # spende **sessanta secondi** a dimostrare che non esiste un ottimo
+    # negativo — vero per costruzione, ma non più per lui. Con la sostituzione
+    # spenta: `OPTIMAL` in 0,09 s.
+    solver.parameters.presolve_substitution_level = 0
 
     esiti, soluzione, stato_buono = [], None, None
     for level in levels:

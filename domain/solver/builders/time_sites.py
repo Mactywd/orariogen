@@ -207,9 +207,17 @@ class MaxSiteChangesBuilder(ResourceBuilder):
         per_settimana = row.params.get("per_week")
         tutti = []
         consumo_settimana = 0
-        # «Cambi di sede: autorizza N cambi …». Un letterale per riga,
-        # condiviso dal tetto giornaliero e da quello settimanale: sono due
-        # parametri dello stesso alleggerimento.
+        # «Cambi di sede: autorizza N cambi …» — e in francese la riga dice
+        # *par semaine*. E' quindi un'allowance **settimanale**, non un
+        # supplemento da consumare a ogni occorrenza: un letterale per riga,
+        # condiviso dal tetto giornaliero e da quello settimanale.
+        #
+        # ⚠ Divergenza **dichiarata** rispetto a `MAX_HOURS` e `MAX_PRESENCE`,
+        # dove il letterale e' per giorno perche' la riga dice «una volta per
+        # settimana» — cioe' conta le *volte*. Qui la riga conta i *cambi*, e
+        # la quota vale una volta per la settimana intera. La differenza sta
+        # nel prodotto, non nel builder: se si volesse contare anche qui le
+        # volte, sarebbe un cambio di semantica da decidere, non un refuso.
         margine = ctx.relax.margine(
             model, RelaxationQuota.Family.SITES, key, f"{rep}")
         for day in range(ctx.grid.days_per_cycle):

@@ -13,7 +13,9 @@ uno dei quattro casi che quella tabella gia' risolve."""
 
 from domain.models import SubjectConstraint
 from domain.solver.builders.base import SubjectBuilder
-from domain.solver.builders.subject_buckets import post_cross, post_separable
+from domain.solver.builders.subject_buckets import (post_cross,
+                                                    post_separable,
+                                                    risorsa_di)
 from domain.solver.registry import register
 
 T = SubjectConstraint.Type
@@ -403,16 +405,19 @@ class HalfDayGapBuilder(SubjectBuilder):
         same = row.subject_a_id == row.subject_b_id
         for u in range(n):
             for w in range(u, min(u + minimo, n)):
+                risorsa = risorsa_di(row)
                 if same:
                     if w == u:
                         post_separable(ctx, model, v, row.subject_a_id,
-                                       "half", u, keys, rep)
+                                       "half", u, keys, rep, risorsa)
                     else:
                         post_cross(ctx, model, v, row.subject_a_id, "half", u,
-                                   row.subject_a_id, "half", w, keys, rep)
+                                   row.subject_a_id, "half", w, keys, rep,
+                                   risorsa)
                 else:
                     post_cross(ctx, model, v, row.subject_a_id, "half", u,
-                               row.subject_b_id, "half", w, keys, rep)
+                               row.subject_b_id, "half", w, keys, rep, risorsa)
                     if w != u:
                         post_cross(ctx, model, v, row.subject_b_id, "half", u,
-                                   row.subject_a_id, "half", w, keys, rep)
+                                   row.subject_a_id, "half", w, keys, rep,
+                                   risorsa)

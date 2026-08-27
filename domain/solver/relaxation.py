@@ -35,6 +35,41 @@ from collections import defaultdict
 from domain.models import InstituteSettings, RelaxationQuota
 
 
+class _Deroga:
+    """La deroga concessa: applicarla condiziona il vincolo al letterale di
+    violazione. Chi la riceve non sa se la quota esiste — chiama `applica` e
+    basta."""
+
+    __slots__ = ("_lit",)
+
+    def __init__(self, lit):
+        self._lit = lit
+
+    def applica(self, vincolo):
+        vincolo.OnlyEnforceIf(self._lit.Not())
+        return vincolo
+
+
+class _NessunaDeroga:
+    """L'oggetto nullo: senza quota il vincolo si posta secco.
+
+    ⚠ Esiste per la stessa ragione per cui `margine` restituisce l'intero `0`
+    invece di `None` — il chiamante scrive una riga sola, senza rami. Prima di
+    questo, `deroga()` restituiva `letterale | None` e **quattro** call site
+    ripetevano `if deroga is not None: vincolo.OnlyEnforceIf(deroga.Not())`;
+    il quinto (`post_cross`) si era scritto una chiusura locale per non
+    ripeterlo altre cinque volte. Quando un call site cresce un involucro
+    attorno a un helper, l'involucro appartiene all'helper."""
+
+    __slots__ = ()
+
+    def applica(self, vincolo):
+        return vincolo
+
+
+_NESSUNA_DEROGA = _NessunaDeroga()
+
+
 class Relaxation:
     def __init__(self, quote, tetto_globale):
         self._quote = quote                  # (famiglia, risorsa|None) → riga
@@ -60,14 +95,19 @@ class Relaxation:
         return riga
 
     def deroga(self, model, famiglia, risorsa, tag):
-        """Il letterale di violazione di **una** occorrenza del vincolo, o
-        `None` se quella famiglia non è alleggerita su quella risorsa. Il
-        chiamante posta il proprio vincolo sotto `OnlyEnforceIf(v.Not())`."""
+        """La deroga di **una** occorrenza del vincolo. Restituisce sempre un
+        oggetto con `.applica(vincolo)`: se quella famiglia non è alleggerita
+        su quella risorsa è l'oggetto nullo, e `applica` lascia il vincolo
+        secco. Un letterale di violazione nasce solo quando la quota c'è.
+
+        Una deroga sola può coprire **più** vincoli, ed è voluto: «non
+        considerare l'incompatibilità» vale per l'occorrenza, non per il
+        singolo `model.Add` che un ramo capita a postare."""
         if self._riga(famiglia, risorsa) is None:
-            return None
+            return _NESSUNA_DEROGA
         var = model.NewBoolVar(f"deroga_{famiglia}_{risorsa}_{tag}")
         self._letterali[(famiglia, risorsa)].append(var)
-        return var
+        return _Deroga(var)
 
     def margine(self, model, famiglia, risorsa, tag):
         """Il termine da **sommare** al tetto (o da sottrarre alla soglia) per

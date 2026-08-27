@@ -66,14 +66,11 @@ def build_model(schedule, extraction=None, allow_unplaced=True,
         # vuoto (nessuna cella sopravvive ai pre-filtri) vale zero, cioè
         # l'attività è scartata invece di rendere infattibile tutto il modello.
         if not allow_unplaced:
-            if lits:
-                model.AddExactlyOne(lits)
-            else:
-                # dominio vuoto e piazzamento preteso: il modello è infattibile,
-                # e va detto in modo esplicito.
-                vuoto = model.NewBoolVar(f"dominio_vuoto_{aid}")
-                model.Add(vuoto == 1)
-                model.Add(vuoto == 0)
+            # ⚠ Anche con `lits` vuoto: `AddExactlyOne([])` è già INFEASIBLE
+            # (verificato), che è precisamente ciò che «dominio vuoto e
+            # piazzamento preteso» deve significare. Qui c'erano un ramo e un
+            # booleano contraddittorio a riprodurlo a mano.
+            model.AddExactlyOne(lits)
             continue
         piazzata = model.NewBoolVar(f"piazzata_{aid}")
         ctx.placed_var[aid] = piazzata

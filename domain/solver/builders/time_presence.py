@@ -173,12 +173,6 @@ class MaxPresenceBuilder(ResourceBuilder):
         grid, v = ctx.grid, ctx.vocab
         key = row.resource_id
         giornata = range(grid.slots_per_day)
-        # «Presenza massima dei docenti: autorizza un supplemento di … una
-        # volta per settimana e per docente». Un solo letterale per riga: i due
-        # parametri (minuti e giorni) sono due metà dello stesso
-        # alleggerimento, e devono consumare una quota sola.
-        margine = ctx.relax.margine(
-            model, RelaxationQuota.Family.MAX_PRESENCE, key, f"{rep}")
         cap = row.params.get("max_minutes")
         if cap is not None:
             for day in range(grid.days_per_cycle):
@@ -186,6 +180,14 @@ class MaxPresenceBuilder(ResourceBuilder):
                 # di classe per l'argomento sulle quantities.
                 cap_effettivo = max(cap, _frozen_presence_minutes(ctx, key, day, rep))
                 cov = v.covered(key, day, giornata, signature=rep)
+                # «Autorizza un supplemento di … **una volta per settimana** e
+                # per docente»: un letterale **per giorno**, così la quota conta
+                # le volte che il supplemento si usa. Un solo letterale per riga
+                # direbbe «una volta, ovunque» — due giorni sforati al prezzo di
+                # una quota — che è un'altra cosa da quella che EDT concede.
+                margine = ctx.relax.margine(
+                    model, RelaxationQuota.Family.MAX_PRESENCE, key,
+                    f"minuti_{day}_{rep}")
                 model.Add(grid.slot_minutes * sum(cov[s] for s in giornata)
                           <= cap_effettivo + margine)
         max_days = row.params.get("days")
@@ -197,4 +199,11 @@ class MaxPresenceBuilder(ResourceBuilder):
                 else:
                     terms.append(v.day_active(key, day, signature=rep))
             if terms:
-                model.Add(sum(terms) <= max(0, max_days - consumo) + margine)
+                # ⚠ **Nessun margine qui**: il supplemento di questa famiglia è
+                # in **ore** (`docs/edt/estratti/motore-punti-aperti.md`:
+                # «MaxPresentielProf … | ore»), e questo tetto conta *giorni*.
+                # Sommarglielo era un errore di unità, non una scelta: con
+                # «margine 60» un tetto di 1 giorno diventava 61, cioè spento.
+                # Se un giorno servisse alleggerire anche i giorni, vuole una
+                # sua chiave in `params`, non il riuso di questa.
+                model.Add(sum(terms) <= max(0, max_days - consumo))

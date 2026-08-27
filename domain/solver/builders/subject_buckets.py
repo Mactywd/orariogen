@@ -23,18 +23,29 @@ from domain.solver.residual import any_free, residual_cap
 T = SubjectConstraint.Type
 
 
-def _risorsa_di(keys):
-    """La risorsa a cui attribuire la quota di una riga di materia. EDT conta
-    gli alleggerimenti di questa famiglia **per classe** («… per settimana e
-    per classe»), e l'unita' della riga e' proprio quella: si prende la chiave
-    intera piu' piccola, cioe' la risorsa vera e non un atomo di partizione
-    (ADR-017), cosi' due secchi della stessa classe consumano la stessa quota.
+def risorsa_di(row):
+    """La risorsa a cui attribuire la quota di una riga di materia: quella che
+    la riga **nomina**. EDT conta gli alleggerimenti di questa famiglia «per
+    settimana e per classe», e l'unita' della riga e' esattamente il campo che
+    il `CheckConstraint` le impone di valorizzare, uno dei tre.
+
+    Il raggruppamento non nomina nessuna risorsa singola — e' trasversale, le
+    sue parti stanno in classi diverse (ADR-013) — quindi da' `None`, cioe' la
+    quota **generica**. E' l'unica risposta onesta: non esiste «la» classe di
+    un raggruppamento.
+
+    ⚠ Questa risorsa si **deduceva**, prendendo la chiave intera piu' piccola
+    dell'unita' espansa. Reggeva sulla classe solo per un accidente di chiavi
+    esterne (una `ClassPartition` punta alla `SchoolClass`, quindi la classe
+    esiste prima delle sue parti e prende il `Resource.pk` piu' basso), dava la
+    **parte** su una riga di parte e una parte **qualunque** su una riga di
+    raggruppamento. Tre risposte diverse per un dato che la riga possiede gia'.
     """
-    intere = sorted(k for k in keys if isinstance(k, int))
-    return intere[0] if intere else None
+    return row.school_class_id or row.class_part_id or None
 
 
-def post_separable(ctx, model, v, subject_id, kind, bucket, keys, rep):
+def post_separable(ctx, model, v, subject_id, kind, bucket, keys, rep,
+                   risorsa):
     """A = B: «al piu' un'occorrenza per secchio». Separabile, quindi
     `residual_cap` e' esatto: il tetto residuo e' `1 - (occorrenze congelate
     in questo secchio)`, clampato a zero quando le congelate lo hanno gia'
@@ -65,18 +76,16 @@ def post_separable(ctx, model, v, subject_id, kind, bucket, keys, rep):
         return
     # «Non considerare le incompatibilita' … una sola volta al giorno»: qui
     # l'alleggerimento e' una **deroga**, non un margine — il vincolo non si
-    # allarga, non si considera. Senza quota il letterale e' None e la
-    # clausola si posta secca, com'e' sempre stato.
+    # allarga, non si considera. Senza quota `deroga` e' l'oggetto nullo e
+    # `applica` lascia la clausola secca, com'e' sempre stato.
     deroga = ctx.relax.deroga(
-        model, RelaxationQuota.Family.SUBJECT_CONSTRAINT, _risorsa_di(keys),
+        model, RelaxationQuota.Family.SUBJECT_CONSTRAINT, risorsa,
         f"{subject_id}_{kind}_{bucket}_{rep}")
-    vincolo = model.Add(sum(lit for _, lit in free) <= cap)
-    if deroga is not None:
-        vincolo.OnlyEnforceIf(deroga.Not())
+    deroga.applica(model.Add(sum(lit for _, lit in free) <= cap))
 
 
 def post_cross(ctx, model, v, subject_a_id, kind_a, bucket_a,
-                subject_b_id, kind_b, bucket_b, keys, rep):
+                subject_b_id, kind_b, bucket_b, keys, rep, risorsa):
     """A != B (e TWO_DAYS, sempre — anche con A = B, perche' li' i due secchi
     sono distinti: giorno d per A, giorno d+1 per B). Il residuo qui non e'
     separabile — `ha`/`hb` sono `AddMaxEquality`, non somme — quindi la regola
@@ -126,34 +135,29 @@ def post_cross(ctx, model, v, subject_a_id, kind_a, bucket_a,
     fb = any(aid not in ctx.free for aid, _ in lb)
     # Una **sola** deroga per secchio, qualunque ramo si imbocchi: «non
     # considerare l'incompatibilita'» vale per l'occorrenza, non per il
-    # singolo letterale che il ramo capita a postare. Senza quota e' None e
-    # tutti i vincoli restano secchi.
+    # singolo letterale che il ramo capita a postare. Senza quota e' l'oggetto
+    # nullo e tutti i vincoli restano secchi.
     deroga = ctx.relax.deroga(
-        model, RelaxationQuota.Family.SUBJECT_CONSTRAINT, _risorsa_di(keys),
+        model, RelaxationQuota.Family.SUBJECT_CONSTRAINT, risorsa,
         f"{subject_a_id}_{kind_a}_{bucket_a}_{subject_b_id}_{kind_b}_{bucket_b}_{rep}")
-
-    def _posta(vincolo):
-        if deroga is not None:
-            vincolo.OnlyEnforceIf(deroga.Not())
-        return vincolo
 
     if not fa and not fb:
         ha = v.subject_bucket(keys, subject_a_id, kind_a, bucket_a, signature=rep)
         hb = v.subject_bucket(keys, subject_b_id, kind_b, bucket_b, signature=rep)
-        _posta(model.Add(ha + hb <= 1))
+        deroga.applica(model.Add(ha + hb <= 1))
     elif fa and not fb:
         hb = v.subject_bucket(keys, subject_b_id, kind_b, bucket_b, signature=rep)
-        _posta(model.Add(hb == 0))
+        deroga.applica(model.Add(hb == 0))
     elif fb and not fa:
         ha = v.subject_bucket(keys, subject_a_id, kind_a, bucket_a, signature=rep)
-        _posta(model.Add(ha == 0))
+        deroga.applica(model.Add(ha == 0))
     else:
         for aid, lit in la:
             if aid in ctx.free:
-                _posta(model.Add(lit == 0))
+                deroga.applica(model.Add(lit == 0))
         for aid, lit in lb:
             if aid in ctx.free:
-                _posta(model.Add(lit == 0))
+                deroga.applica(model.Add(lit == 0))
 
 
 class _Bucketed(SubjectBuilder):
@@ -190,10 +194,11 @@ class _BucketIncompatible(_Bucketed):
         for bucket in self.buckets(ctx):
             if row.subject_a_id == row.subject_b_id:
                 post_separable(ctx, model, v, row.subject_a_id, self.KIND,
-                                bucket, keys, rep)
+                                bucket, keys, rep, risorsa_di(row))
             else:
                 post_cross(ctx, model, v, row.subject_a_id, self.KIND, bucket,
-                           row.subject_b_id, self.KIND, bucket, keys, rep)
+                           row.subject_b_id, self.KIND, bucket, keys, rep,
+                           risorsa_di(row))
 
 
 @register(T.SAME_DAY_INCOMPATIBLE)
@@ -224,7 +229,8 @@ class TwoDaysBuilder(SubjectBuilder):
         v = ctx.vocab
         for day in range(ctx.grid.days_per_cycle - 1):
             post_cross(ctx, model, v, row.subject_a_id, "day", day,
-                       row.subject_b_id, "day", day + 1, keys, rep)
+                       row.subject_b_id, "day", day + 1, keys, rep,
+                       risorsa_di(row))
 
 
 class _MaxHoursSubject(_Bucketed):
@@ -266,7 +272,7 @@ class _MaxHoursSubject(_Bucketed):
                 # distinta dalle incompatibilità: qui è un **margine**.
                 margine = ctx.relax.margine(
                     model, RelaxationQuota.Family.SUBJECT_MAX_HOURS,
-                    _risorsa_di(keys), f"{row.pk}_{bucket}_{rep}")
+                    risorsa_di(row), f"{row.pk}_{bucket}_{rep}")
                 model.Add(sum(w * lit for w, lit in liberi) <= residuo + margine)
 
 
@@ -325,8 +331,7 @@ class ForbiddenSequenceBuilder(SubjectBuilder):
                     # margine — la sequenza o si considera o no.
                     deroga = ctx.relax.deroga(
                         model, RelaxationQuota.Family.SUBJECT_SEQUENCE,
-                        _risorsa_di(keys), f"{pa}_{pb}_{day}_{slot}_{rep}")
-                    vincolo = model.AddBoolOr([ctx.x[(pa, day, slot)].Not(),
-                                               ctx.x[(pb, day, fine)].Not()])
-                    if deroga is not None:
-                        vincolo.OnlyEnforceIf(deroga.Not())
+                        risorsa_di(row), f"{pa}_{pb}_{day}_{slot}_{rep}")
+                    deroga.applica(
+                        model.AddBoolOr([ctx.x[(pa, day, slot)].Not(),
+                                         ctx.x[(pb, day, fine)].Not()]))
