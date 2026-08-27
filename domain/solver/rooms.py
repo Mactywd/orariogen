@@ -117,7 +117,16 @@ def build_room_model(schedule, *, allow_unassigned=True, ignora_opzionali=()):
     di chiedere «questo vincolo morde?». Con la rinuncia ammessa la risposta a
     un vincolo violato non e' l'infattibilita' ma la **rinuncia**, che e'
     un'altra domanda — la stessa cucitura che `build_model(allow_unplaced=...)`
-    ha per lo scarto."""
+    ha per lo scarto.
+
+    ⚠ Il modello restituito **non porta obiettivo**: e' lo stesso contratto di
+    `build_model` in `domain/solver/model.py`. Chi lo risolve con un
+    `CpSolver()` nudo ottiene una soluzione feasible qualunque — «rinuncia a
+    tutti» compresa, perche' e' feasible quanto «assegna il possibile» e
+    CP-SAT senza obiettivo non preferisce l'una all'altra. La preferenza (e la
+    catena a due livelli) e' compito di chi risolve — `solve_rooms` (Task 4)
+    per la fase vera, un `model.Maximize(...)` locale per chi vuole solo
+    osservare il modello grezzo in un test."""
     ctx = RoomContext.build(schedule, ignora_opzionali=ignora_opzionali)
     model = cp_model.CpModel()
     for aid in sorted(ctx.requests):
@@ -136,15 +145,6 @@ def build_room_model(schedule, *, allow_unassigned=True, ignora_opzionali=()):
         ctx.assigned[aid] = assegnata
         model.Add(sum(lits) == assegnata)
     _post_capacity(ctx, model)
-    if ctx.assigned:
-        # Senza una preferenza il modello grezzo e' solo capienza: «rinuncia a
-        # tutti» e' feasible quanto «assegna il possibile», e CP-SAT senza
-        # obiettivo restituisce il primo — la rinuncia, non l'assegnazione.
-        # Non e' la catena lessicografica di Task 4 (L1/L2, sui minuti e sulla
-        # stabilita'): e' il minimo che rende questo modello grezzo osservabile
-        # da solo. La catena la sovrascrive al primo livello (`model.Minimize`
-        # sostituisce l'obiettivo precedente), quindi non la contraddice.
-        model.Maximize(sum(ctx.assigned.values()))
     return model, ctx
 
 
