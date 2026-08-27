@@ -76,6 +76,9 @@ def build_model(schedule, extraction=None, allow_unplaced=True):
     ctx.vocab = Vocabulary(ctx, model)
     for builder in builders:
         builder.build(ctx, model)
+    # Le quote si postano dopo: nessun builder le conosce, ognuno ha solo
+    # chiesto il proprio letterale di violazione (domain/solver/relaxation.py).
+    ctx.relax.post_caps(model)
     return model, ctx
 
 

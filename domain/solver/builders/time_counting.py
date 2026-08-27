@@ -7,7 +7,7 @@ from collections import defaultdict
 from domain.analysis.checkers.time_constraints import (
     FreeGuaranteedChecker, MinDistributionChecker,
 )
-from domain.models import ResourceTimeConstraint
+from domain.models import RelaxationQuota, ResourceTimeConstraint
 from domain.solver.builders.base import ResourceBuilder
 from domain.solver.registry import register
 from domain.solver.residual import frozen_occupies, residual_cap
@@ -137,7 +137,16 @@ class MaxHoursBuilder(ResourceBuilder):
                          if aid in active]
                 liberi, residuo = residual_cap(ctx, terms, cap)
                 if liberi:
-                    model.Add(sum(w * lit for w, lit in liberi) <= residuo)
+                    # L'alleggerimento di EDT: «Autorizza un supplemento di …
+                    # una volta per settimana e per docente». Il margine si
+                    # somma al **residuo**, non al tetto grezzo: alleggerire
+                    # concede spazio sopra lo stato corrente, mai la pretesa
+                    # che il passato venga riparato (ADR-018). Senza quota il
+                    # termine e' l'intero 0 e il vincolo e' quello di prima.
+                    margine = ctx.relax.margine(
+                        model, RelaxationQuota.Family.MAX_HOURS,
+                        row.resource_id, f"{param}_{day}_{rep}")
+                    model.Add(sum(w * lit for w, lit in liberi) <= residuo + margine)
 
 
 @register(T.MAX_HALF_DAYS)

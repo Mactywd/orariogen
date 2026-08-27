@@ -94,18 +94,39 @@ task. Senza, «scarta tutto» è ammissibile e CP-SAT la restituisce.
       fenomeni si erano spostati per la terza volta in una sessione, perché
       sono proprietà della soluzione restituita e ogni ondata ne cambia una.
 
-## Task 3 — Le quote, sulle famiglie a clausola
+## Task 3a — Il meccanismo delle quote, e due famiglie ✅ (2026-08-26)
 
-- [ ] `RelaxationQuota.params` e `InstituteSettings.max_relaxed_constraints_per_resource`
-      (+ migrazioni additive). `ARRIVAL_DEPARTURE` aggiunto a `Family`, o
-      escluso con una ragione scritta.
-- [ ] `relaxation.py`: lettura delle righe, creazione dei `v`, tetti per
-      (famiglia, risorsa) e tetto globale per risorsa.
-- [ ] Le famiglie della tabella §3.3 che sono clausole, una per una, agganciate
-      al residuo.
-- [ ] Il test «quote a zero = modello di oggi» (Global Constraint 3).
-- [ ] Il test «la quota morde»: con quota `k`, forzare `k+1` violazioni dà
-      `INFEASIBLE`.
+- [x] `RelaxationQuota.params` e
+      `InstituteSettings.max_relaxed_constraints_per_resource` (migrazione
+      additiva `0008`). `ARRIVAL_DEPARTURE` aggiunto a `Family`: in EDT
+      `Gestione Entrate / Uscite` è alleggeribile, e mancava.
+- [x] `relaxation.py`: lettura delle righe, i due modi (**margine** additivo e
+      **deroga** per enforcement), tetti per (famiglia, risorsa) e tetto
+      globale per risorsa. Le quote si postano una volta sola in fondo a
+      `build_model`: nessun builder le conosce.
+- [x] `MAX_HOURS` (margine) e le tre incompatibilità di materia (deroga), in
+      **entrambi** i rami `post_separable` e `post_cross` — alleggerirne uno
+      solo avrebbe lasciato metà famiglia scoperta.
+- [x] «Senza righe, il modello è quello di prima», e «una quota a zero è come
+      non averla».
+- [x] «La quota morde»: con quota `k`, la violazione `k+1` dà `INFEASIBLE`.
+- [x] «Il margine è quello dichiarato»: alleggerire non è un interruttore.
+- [x] «Il margine si somma al **residuo**, non al tetto grezzo»: l'incrocio con
+      ADR-018, che è il punto in cui questo pezzo poteva sbagliare in silenzio.
+- [x] «Un vincolo alleggerito resta una violazione **nominata**»: la quota non
+      nasconde il finding, autorizza il solver a produrlo.
+
+## Task 3b — Le famiglie restanti
+
+Da agganciare, una per una, con la stessa coppia margine/deroga:
+
+- [ ] `MAX_PRESENCE`, `HALF_DAYS`, `ARRIVAL_DEPARTURE`, `FREE_GUARANTEED`
+      (⚠ sono **soglie**: il margine si sottrae, non si somma).
+- [ ] `SITES` (cambi di sede) e `DIDACTIC_WEIGHT`.
+- [ ] Le altre righe di materia: massimo di ore per secchio e sequenze
+      indesiderate.
+- [ ] Un test per famiglia, nella forma «senza quota `INFEASIBLE`, con quota
+      `OPTIMAL`, con quota `k` la `k+1` è vietata».
 
 ## Task 4 — Le quote nei pre-filtri
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from domain.analysis.conformity import week_signatures
 from domain.analysis.state import ScheduleState
 from domain.models import Activity
+from domain.solver.relaxation import Relaxation
 
 _IMMOBILE = (Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE)
 
@@ -30,6 +31,7 @@ class SolverContext:
     placed_var: dict = field(default_factory=dict)  # id → BoolVar «piazzata», solo le libere
     by_cell: dict = field(default_factory=dict)  # (chiave, giorno, fascia) → [(id, letterale)]
     vocab: object = None      # Vocabulary, assegnato da build_model
+    relax: object = None      # Relaxation: le quote di alleggerimento
 
     @classmethod
     def build(cls, schedule, extraction=None):
@@ -78,6 +80,7 @@ class SolverContext:
             activities=activities, free=free, cells=cells, tokens=tokens,
             capacity=base.capacity, material_quantity=material_quantity,
             time_rows=base.time_rows, subject_rows=base.subject_rows,
+            relax=Relaxation.build(),
         )
 
     def index_cells(self):

@@ -94,7 +94,24 @@ class SubjectConstraint(models.Model):
 
 class RelaxationQuota(models.Model):
     """Alleggerimento a quota, mai a penalità: numero massimo di violazioni,
-    per famiglia e opzionalmente per risorsa. Modello lessicografico."""
+    per famiglia e opzionalmente per risorsa. Modello lessicografico.
+
+    ⚠ Ogni riga della finestra `Alleggerimenti` di EDT ha **due** parametri, non
+    uno: il *quanto* e il *quante volte*. «Autorizza un supplemento di … una
+    volta per settimana e per docente» — il supplemento è il margine,
+    `max_violations` è la seconda metà. Alcune famiglie hanno solo la seconda
+    («Non considerare le incompatibilità … una sola volta al giorno»), e lì il
+    vincolo si deroga invece di allargarsi.
+
+    Chiavi attese in `params`, per famiglia:
+      MAX_HOURS, MAX_PRESENCE:  {"margine": minuti}
+      HALF_DAYS, FREE_GUARANTEED: {"margine": mezze giornate}
+      DIDACTIC_WEIGHT:          {"margine": pesi}
+      SITES:                    {"margine": cambi di sede}
+      SUBJECT_CONSTRAINT:       nessuna — il vincolo si deroga, non si allarga
+
+    `resource` a NULL vale per **tutte** le risorse di quella famiglia; una riga
+    con la risorsa valorizzata ha la precedenza su quella generica."""
 
     class Family(models.TextChoices):
         MAX_PRESENCE = "max_presence"
@@ -107,12 +124,16 @@ class RelaxationQuota(models.Model):
         UNAVAILABILITY = "unavailability"
         MAX_HOURS = "max_hours"
         DIDACTIC_WEIGHT = "didactic_weight"
+        # In EDT `Gestione Entrate / Uscite` è alleggeribile («Togli se
+        # necessario … giornata ridotta per docente»): mancava.
+        ARRIVAL_DEPARTURE = "arrival_departure"
 
     family = models.CharField(max_length=30, choices=Family.choices)
     resource = models.ForeignKey(
         Resource, null=True, blank=True, on_delete=models.CASCADE, related_name="relaxation_quotas"
     )
     max_violations = models.PositiveSmallIntegerField()
+    params = models.JSONField(default=dict, blank=True)
 
 
 class Extraction(models.Model):

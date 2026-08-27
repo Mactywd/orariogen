@@ -159,7 +159,10 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > (`structural:placement`, ventottesimo del registro) — e sopra c'è la
 > **catena lessicografica** (`domain/solver/objective.py`): L1 le ore
 > scartate, L2 il loro numero, il fissaggio fra un livello e l'altro, il
-> limite di tempo per livello. **464 test verdi**, 16 skip.
+> limite di tempo per livello. E le **quote** (`domain/solver/relaxation.py`):
+> margine e deroga, tetti per (famiglia, risorsa) e per risorsa, agganciate
+> per ora a `MAX_HOURS` e alle incompatibilità di materia. **472 test verdi**,
+> 16 skip.
 >
 > Restano i **due pezzi dichiarati fuori** — l'assegnazione delle aule e il
 > violatore di Hall (che non usa il solver: è un conteggio di capienza) — più
@@ -427,6 +430,52 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, pezzo 3 — ondata 3a)** — **Le quote: un vincolo
+  rilassabile non diventa soft.** `domain/solver/relaxation.py`, il meccanismo
+  e due famiglie. Istruzione letterale del prodotto: *«Sbloccate i vincoli da
+  alleggerire e selezionateli per quantificare il margine di manovra concesso
+  al calcolo»* — non esiste «spegni il vincolo», resta hard con un numero
+  massimo di violazioni attribuito per famiglia e per risorsa.
+
+  **Due forme, perché le righe della finestra `Alleggerimenti` sono di due
+  tipi**: il **margine**, dove il vincolo si allarga di una quantità dichiarata
+  (`expr <= tetto + margine·v`), e la **deroga**, dove semplicemente non si
+  considera per quell'occorrenza (`OnlyEnforceIf(v.Not())`). Agganciate
+  `MAX_HOURS` (margine) e le tre incompatibilità di materia (deroga), queste
+  ultime in **entrambi** i rami `post_separable` e `post_cross`: alleggerirne
+  uno solo avrebbe lasciato metà famiglia scoperta senza che un test se ne
+  accorgesse.
+
+  ⚠ **Lo schema è cresciuto di due campi, ed era un buco di modellazione già
+  segnalato dalla spec**: `RelaxationQuota.params` (il *quanto*, che mancava
+  accanto al *quante volte*) e `InstituteSettings.max_relaxed_constraints_per_resource`
+  (il tetto globale «numero massimo di vincoli da alleggerire per risorsa»).
+  Più `ARRIVAL_DEPARTURE` fra le famiglie: in EDT `Gestione Entrate / Uscite`
+  è alleggeribile e non c'era. Migrazione additiva, nessun dato da riscrivere.
+
+  🔑 **Un vincolo alleggerito resta una violazione nominata.** `check_schedule`
+  continua a produrre il suo finding `HARD`, ed è il comportamento di EDT —
+  l'orario risolto della base di esempio conteneva 21 attività su 984 che non
+  rispettavano i vincoli, e il prodotto continuava a lavorare. La quota non
+  nasconde la violazione: autorizza il solver a produrla, in numero limitato.
+  Un test lo tiene fermo, contando i finding dopo il solve.
+
+  ⚠ **Il margine si somma al *residuo*, non al tetto grezzo**, ed è il punto in
+  cui questo pezzo poteva sbagliare in silenzio: alleggerire concede spazio
+  **sopra lo stato corrente**, mai la pretesa che il passato venga riparato
+  (ADR-018). Misurato per mutazione — con `cap + margine` al posto di
+  `residuo + margine` due libere entrano dove ne entra una sola, e il test
+  diventa rosso.
+
+  **Sette mutazioni, sette rossi**: quota non postata, tetto globale non
+  postato, margine decuplicato, quota a zero trattata come quota, deroga
+  sempre assente, deroga tolta da `post_cross`, margine sul tetto grezzo.
+  Suite: **472 test verdi**, 16 skip.
+
+  Restano le famiglie dell'ondata 3b — presenza, mezze giornate, giorni
+  liberi, entrate/uscite, sedi, peso didattico e le altre righe di materia —
+  e le quote nei pre-filtri (ondata 4), che è il caso storto.
 
 - **2026-08-26 (notte, pezzo 3 — ondata 2)** — **La catena lessicografica.**
   `domain/solver/objective.py`: risolvi per il criterio 1, **fissa** quel
