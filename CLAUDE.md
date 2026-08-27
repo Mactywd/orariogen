@@ -64,7 +64,8 @@ domain/                l'app Django del modello di dominio v1
                         e lo scarto come stato nominato (checkers/placement.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette,
-                        e la catena lessicografica (objective.py)
+                        la catena lessicografica (objective.py) e le quote
+                        di alleggerimento (relaxation.py)
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
 ```
 
@@ -149,28 +150,33 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > testimone: 22–23 famiglie con righe su 26, 48–73 righe, `OPTIMAL` su tutti e
 > cinque i seed, oracolo pulito.
 >
-> Dal 2026-08-26 è **in corso il pezzo 3** — alleggerimenti a quota e
+> Dal 2026-08-26 il **pezzo 3 è completo** — alleggerimenti a quota e
 > ottimizzazione lessicografica
 > ([spec](docs/superpowers/specs/2026-08-26-alleggerimenti-lessicografico-design.md),
-> [piano](docs/superpowers/plans/2026-08-26-alleggerimenti-lessicografico.md)):
-> le prime **due** ondate sono fatte. Il modello **ha smesso di pretendere il
-> piazzamento** — `AddExactlyOne` è diventato `somma(celle) == piazzata`,
-> l'attività che non ci sta resta **scartata** e un checker la nomina
-> (`structural:placement`, ventottesimo del registro) — e sopra c'è la
-> **catena lessicografica** (`domain/solver/objective.py`): L1 le ore
-> scartate, L2 il loro numero, il fissaggio fra un livello e l'altro, il
-> limite di tempo per livello. E le **quote** (`domain/solver/relaxation.py`):
-> margine e deroga, tetti per (famiglia, risorsa) e per risorsa, agganciate a
-> **tutte** le famiglie che EDT dichiara alleggeribili. Le indisponibilità
-> **gialle** si rispettano come le rosse, con l'override per categoria di
-> risorsa che EDT espone come opzione di calcolo. E **L3**, che conta le
-> violazioni nuove — quote consumate e riparazioni mancate — e con cui il
-> debito del «ramo pigro» di §9.7 si chiude, e **L4**, la stabilità fra periodi
-> che ADR-010 chiedeva da luglio. **486 test verdi**, 16 skip.
+> [piano](docs/superpowers/plans/2026-08-26-alleggerimenti-lessicografico.md)),
+> sette ondate su sette. Il modello **ha smesso di pretendere il piazzamento**:
+> `AddExactlyOne` è diventato `somma(celle) == piazzata`, l'attività che non ci
+> sta resta **scartata** e un checker la nomina (`structural:placement`,
+> ventottesimo del registro). Sopra c'è la **catena lessicografica**
+> (`domain/solver/objective.py`) a quattro livelli — ore scartate, numero di
+> attività, violazioni nuove, spostamenti rispetto all'orario precedente — con
+> fissaggio fra un livello e l'altro, limite di tempo **per livello** e il
+> suggerimento che passa la soluzione al livello successivo. Le **quote**
+> (`domain/solver/relaxation.py`) coprono tutte le famiglie che EDT dichiara
+> alleggeribili, nelle due forme *margine* e *deroga*, con i tetti per
+> (famiglia, risorsa) e per risorsa. E c'è **`manage.py solve`**.
+>
+> Con L3 si chiude anche il debito del «ramo pigro» di §9.7, e la prova è una
+> misura: su 60 semi del banco che congela il fenomeno non compare più, quindi
+> l'esenzione che lo perdonava è stata **rimossa**.
+>
+> **493 test verdi**, 16 skip. Fermi: `OPTIMAL`, zero scarti, 8426 variabili e
+> 1086 constraint, 1,2 s dal comando.
 >
 > Restano i **due pezzi dichiarati fuori** — l'assegnazione delle aule e il
-> violatore di Hall (che non usa il solver: è un conteggio di capienza) — più
-> le sei ondate restanti del pezzo 3 e i punti aperti elencati sotto.
+> violatore di Hall (che non usa il solver: è un conteggio di capienza) — più i
+> punti aperti elencati sotto e i criteri di qualità di EDT (i buchi, la
+> distribuzione, le preferenze verdi), che sono il livello sopra questa catena.
 
 ### Prototipo solver — parcheggiato
 
@@ -420,6 +426,27 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, pezzo 3 — ondata 7)** — **`manage.py solve`, e il pezzo
+  3 è chiuso.** Il comando nella forma di `analyze`: stato, dimensioni del
+  modello, i **criteri in ordine di priorità** con valore, se l'ottimo è
+  dimostrato e quanto è costato, e gli scarti **nominati** uno per uno con
+  materia, classe e docente — non «infeasible», ma *chi* è rimasto fuori.
+  ⚠ Non scrive niente senza `--applica`: un solve sovrascrive l'orario di una
+  scuola, e il default non può essere scrivere. Exit code ≠ 0 se resta qualcosa
+  di scartato, come `analyze`; e dopo `--applica` le **violazioni residue** si
+  dichiarano, perché un orario illegale è uno stato ammesso.
+
+  🔑 **E il comando ha trovato un difetto della catena.** Sul Fermi L2 costava
+  **4,07 s** contro gli 0,47 s di L1 — per riscoprire lo stesso orario da zero.
+  Ogni livello ripartiva senza sapere nulla del precedente. Con la soluzione
+  del livello concluso passata come **suggerimento**: 0,27 s, e il totale del
+  comando da 4,9 s a **1,2 s**. ⚠ `AddHint` accumula, quindi `ClearHints`
+  prima — senza, a quattro livelli il proto porta quattro copie dei
+  suggerimenti; un test lo tiene fermo contandoli.
+
+  **Il pezzo 3 è completo**: sette ondate su sette. Suite: **493 test verdi**,
+  16 skip.
 
 - **2026-08-26 (notte, pezzo 3 — ondata 6)** — **L4: la stabilità fra
   periodi.** L'ultimo livello minimizza le attività che cambiano cella rispetto

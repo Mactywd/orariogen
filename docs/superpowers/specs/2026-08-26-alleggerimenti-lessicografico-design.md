@@ -3,8 +3,9 @@
 **Data.** 2026-08-26
 **Stato.** Bozza. Le **quattro decisioni aperte sono state chiuse in sessione**
 il 2026-08-26 (D1–D4, marcate «deciso» dove comparivano); il resto del documento
-resta rivedibile. **L'ondata 1 è implementata** — vedi il piano e il changelog
-di `CLAUDE.md`; §2 è quindi consuntivo, non progetto.
+resta rivedibile. **Tutte e sette le ondate sono implementate** (vedi il piano
+e il changelog di `CLAUDE.md`): da §2 in poi il documento è consuntivo, non
+progetto, e §10 raccoglie ciò che il lavoro ha smentito.
 **Segue.** Il modello hard completo ([spec](2026-08-24-modello-hard-completo-design.md),
 merge `528cebe`): ventisei builder su ventisette, 450 test verdi.
 **Precede.** Il piano di implementazione (§7).
@@ -407,3 +408,53 @@ anche quando un livello scade in tempo.
 - **Il risolutore passo-passo** e `Piazza e sistema`: sono interfaccia
   interattiva sopra lo stesso motore, non motore.
 - **Le aule** (pezzo 2) e **il violatore di Hall** (pezzo 4), invariati.
+
+
+---
+
+## 10. Esito — a consuntivo
+
+**Cosa c'è.** Lo scarto come stato del modello e come causale nominata
+(`structural:placement`); la catena lessicografica a quattro livelli — ore
+scartate, numero di attività, violazioni nuove, spostamenti — con fissaggio,
+limite di tempo per livello, suggerimento fra livelli e `stats` che dicono
+quanto è costato ciascuno; le quote su **tutte** le famiglie che EDT dichiara
+alleggeribili, nelle due forme margine e deroga; e `manage.py solve`.
+
+**Le cinque cose che il lavoro ha smentito**, tutte scoperte misurando e non
+rileggendo:
+
+1. **§9.5 sbagliava la diagnosi del tetto inevadibile.** Non era una proprietà
+   del peso didattico: era `AddExactlyOne`. Caduto quello, il tetto torna
+   evadibile nel modo in cui lo evade EDT — scartando.
+2. **La regola della casa smette di funzionare così com'è.** «Forza la
+   violazione e attendi `INFEASIBLE`» dà ora una **rinuncia**. La domanda resta
+   ponibile, ma va posta al modello che pretende il piazzamento
+   (`allow_unplaced=False`).
+3. **Il banco a testimone si era indebolito in silenzio**: una soluzione che
+   scarta è pulita per qualunque famiglia. Il testimone esiste, quindi zero
+   scarti è l'ottimo, e ora è preteso.
+4. **L'ondata 4 aveva la premessa sbagliata.** Non esistono quote sui
+   pre-filtri: il rosso in EDT non si alleggerisce mai e il giallo si ignora
+   con un'opzione di calcolo per categoria. E la verifica ha trovato un difetto
+   vero — il pre-filtro ignorava il giallo, cioè il solver era **più permissivo
+   di EDT** su una famiglia intera, con un test che affermava il comportamento
+   sbagliato.
+5. **Il debito del ramo pigro non andava dichiarato, andava chiuso.** L3 gli ha
+   dato la funzione di costo che gli mancava, e su 60 semi il fenomeno non
+   compare più: l'esenzione che lo perdonava è stata rimossa insieme al suo
+   test.
+
+**Le mutazioni, a consuntivo.** Cinque test scritti in questo pezzo non
+affermavano ciò che dichiaravano, e la mutazione li ha bocciati uno per uno:
+il test di `apply()` (l'attività scartata non aveva una riga da cancellare), i
+due guardiani di `pos` coperti da un test solo, il test del fissaggio
+(l'istanza a pareggio dava la stessa risposta nei due ordini), il primo test di
+L3 (senza L3 il solver ripara **per caso**) e il primo test dell'ordine di L4.
+È la contromisura che ha funzionato più di ogni altra, e il suo costo è
+scrivere due volte lo stesso test.
+
+**Cosa resta fuori**, invariato: gli undici criteri di qualità di
+`Ordinamento dei criteri`, la perdita di qualità tollerata, il risolutore
+passo-passo, l'assegnazione delle aule (pezzo 2) e il violatore di Hall
+(pezzo 4).

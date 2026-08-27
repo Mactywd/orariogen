@@ -197,8 +197,19 @@ di §9.8: un documento che dichiara vera una proprietà falsificata dai dati.
       ore accatastate danno un movimento in entrambi gli ordini, perché anche
       scartare un'attività già piazzata conta come spostamento.
 
-## Task 7 — `manage.py solve`
+## Task 7 — `manage.py solve` ✅ (2026-08-26)
 
-- [ ] Comando in stile `analyze`: scarti nominati, alleggerimenti consumati,
-      livello per livello, e i tempi.
-- [ ] Un test del comando sul Fermi.
+- [x] Comando in stile `analyze`: stato, dimensioni del modello, **criteri in
+      ordine di priorità** con valore, se l'ottimo è dimostrato e quanto è
+      costato, e gli scarti **nominati** uno per uno con materia, classe e
+      docente.
+- [x] ⚠ Non scrive niente senza `--applica`: un solve sovrascrive l'orario di
+      una scuola, e il default non può essere scrivere.
+- [x] Exit code ≠ 0 se resta qualcosa di scartato, come `analyze`.
+- [x] Dopo `--applica`, le **violazioni residue** sono dichiarate: un orario
+      illegale è uno stato ammesso, ed è il comportamento di EDT.
+- [x] Un test del comando sul Fermi.
+- [x] *(non previsto)* Il **suggerimento fra livelli**: ogni livello riparte
+      dalla soluzione del precedente. Trovato misurando il comando sul Fermi —
+      L2 costava 4,07 s contro gli 0,47 s di L1 per riscoprire lo stesso
+      orario. Con il suggerimento: 0,27 s, e il totale passa da 4,9 s a 1,2 s.

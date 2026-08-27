@@ -350,3 +350,63 @@ def test_l4_cede_a_tutto_il_resto():
     assert soluzione.placements[vecchia.id] == (0, 1)
     livelli = {l["nome"]: l["valore"] for l in soluzione.stats["livelli"]}
     assert livelli["spostamenti"] == 1
+
+
+def test_il_suggerimento_passa_da_un_livello_al_successivo():
+    """Ogni livello riparte dalla soluzione del precedente. ⚠ Non è una
+    rifinitura: senza, il secondo livello ricalcola da zero un orario già
+    trovato — misurato sul Fermi, 4,07 s contro 0,27 s.
+
+    Qui si guarda il **meccanismo**, non il tempo: un test sul cronometro
+    sarebbe flaky su una macchina più lenta."""
+    from ortools.sat.python import cp_model
+
+    from domain.solver.objective import Level, solve_chain
+
+    model = cp_model.CpModel()
+    x = [model.NewBoolVar(f"x{i}") for i in range(4)]
+    model.Add(sum(x) <= 2)
+    primo = model.NewIntVar(0, 4, "primo")
+    model.Add(primo == sum(1 - v for v in x))
+    secondo = model.NewIntVar(0, 4, "secondo")
+    model.Add(secondo == x[0] + x[1])
+
+    chiamate = []
+    solve_chain(model, [Level("primo", primo), Level("secondo", secondo)],
+                estrai=lambda s: {i: s.Value(v) for i, v in enumerate(x)},
+                suggerisci=lambda m, s: chiamate.append(s.Value(primo)))
+    assert len(chiamate) == 2, (
+        "il suggerimento non viene passato a ogni livello concluso")
+
+
+def test_i_suggerimenti_si_sostituiscono_invece_di_accumularsi():
+    """⚠ `AddHint` accumula: senza `ClearHints` il proto cresce di una copia
+    dei letterali per ogni livello, e a quattro livelli sono quattro copie di
+    tutto il modello. Qui si risolve con la **stessa** funzione che usa
+    `solve()` e si conta quanti suggerimenti restano nel proto."""
+    from domain.solver.model import build_model, solve
+    from domain.solver.objective import livelli, solve_chain
+
+    env = mini_school(days=2, slots=2)
+    for _ in range(3):
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]])
+
+    model, ctx = build_model(env["schedule"])
+    catena = livelli(ctx, model)
+    assert len(catena) >= 2, "serve più di un livello perché la domanda esista"
+
+    def suggerisci(m, s):
+        m.ClearHints()
+        for var in ctx.x.values():
+            m.AddHint(var, s.Value(var))
+
+    solve_chain(
+        model, catena, suggerisci=suggerisci, workers=1,
+        estrai=lambda s: {aid: (d, f) for (aid, d, f), v in ctx.x.items()
+                          if s.Value(v)})
+    proto = model.proto if hasattr(model, "proto") else model.Proto()
+    assert len(proto.solution_hint.vars) == len(ctx.x), (
+        f"{len(proto.solution_hint.vars)} suggerimenti per {len(ctx.x)} "
+        f"variabili: si stanno accumulando")
+    assert solve(env["schedule"], workers=1).status == "OPTIMAL"

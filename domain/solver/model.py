@@ -109,8 +109,17 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
         return {aid: (day, slot) for (aid, day, slot), var in ctx.x.items()
                 if solver.Value(var)}
 
+    def suggerisci(model, solver):
+        """La soluzione appena trovata diventa il suggerimento del livello
+        successivo. ⚠ I suggerimenti si **sostituiscono**, non si accumulano:
+        `ClearHints` prima, o il proto cresce di una copia per livello."""
+        model.ClearHints()
+        for var in ctx.x.values():
+            model.AddHint(var, solver.Value(var))
+
     stato, placements, esiti = solve_chain(
-        model, catena, estrai=estrai, time_limit=time_limit, workers=workers)
+        model, catena, estrai=estrai, suggerisci=suggerisci,
+        time_limit=time_limit, workers=workers)
 
     # ⚠ La distinzione è fra «nessuna soluzione» e «una soluzione senza
     # piazzamenti»: un'istanza la cui unica attività è impiazzabile ha

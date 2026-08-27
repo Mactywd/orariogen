@@ -117,14 +117,22 @@ def livelli(ctx, model):
     return livelli
 
 
-def solve_chain(model, levels, *, estrai, time_limit=None, workers=None,
-                solver=None):
+def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
+                workers=None, solver=None):
     """Percorre la catena e restituisce `(stato, soluzione, esiti)`.
 
     `estrai(solver)` fotografa la soluzione corrente: serve perché un livello
     che non conclude **non annulla il lavoro dei precedenti**. La catena si
     ferma lì, e ciò che si restituisce è la fotografia dell'ultimo livello
     concluso — con il livello mancato dichiarato negli esiti, non nascosto.
+
+    `suggerisci(model, soluzione)` riporta la soluzione dell'ultimo livello
+    concluso come **suggerimento** per il successivo. ⚠ Non è un'ottimizzazione
+    opzionale quanto sembra: senza, ogni livello riparte da zero e rifà un
+    lavoro già fatto — misurato sul Fermi, il secondo livello costava 4,07 s
+    contro gli 0,47 s del primo, per riscoprire lo stesso orario. Il
+    suggerimento non cambia cosa il modello ammette: se è infattibile, CP-SAT
+    lo scarta.
 
     ⚠ Il limite di tempo è **per livello**, non per la catena: è la forma
     naturale (ogni livello è un `Solve`) e va detta, perché una catena di
@@ -172,6 +180,8 @@ def solve_chain(model, levels, *, estrai, time_limit=None, workers=None,
         valore = solver.Value(level.var)
         esiti.append(Esito(level.nome, valore, stato == cp_model.OPTIMAL, secondi))
         soluzione, stato_buono = estrai(solver), stato
+        if suggerisci is not None:
+            suggerisci(model, solver)
         # il fissaggio: `<=` e non `==`, perché è un tetto sul livello già
         # deciso e la soluzione appena trovata resta ammissibile per costruzione
         model.Add(level.var <= valore)
