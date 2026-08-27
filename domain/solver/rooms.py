@@ -10,6 +10,7 @@ I vincoli veri sono tre, piu' la capienza: la finestra `Aule disponibili`
 dichiara `Sedi distaccate`, `Indisponibilita' opzionali`, `Indisponibilita'` e
 nient'altro. **Capienza in alunni, categoria e tipologie non vincolano.**"""
 
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -17,7 +18,8 @@ from ortools.sat.python import cp_model
 
 from domain.analysis.conformity import week_signatures
 from domain.analysis.state import ScheduleState
-from domain.models import Activity, Resource, Room
+from domain.models import Activity, Placement, Resource, Room
+from domain.solver.objective import STATUS_NAME, Level, solve_chain
 
 _IMMOBILE = (Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE)
 
@@ -179,3 +181,101 @@ def _post_capacity(ctx, model):
                 continue          # due firme con lo stesso insieme: un vincolo solo
             posted.add(firma)
             model.Add(sum(lits) <= residuo)
+
+
+@dataclass(frozen=True)
+class RoomSolution:
+    status: str
+    assignments: dict     # id attività → id aula
+    unassigned: tuple     # le richieste rimaste senza aula, nominate dal
+                          # checker structural:room_assignment una volta scritte
+    stats: dict
+
+
+def livelli_aule(ctx, model):
+    """Due livelli, nell'ordine della spec §3.2.
+
+    L1 conta i **minuti**, non le attivita': un laboratorio da 3h che resta
+    senza spazio fa piu' danno di uno da 1h. L2 e' il criterio che EDT dichiara
+    alla lettera — *«se possibile mantenendo le assegnazioni della precedente
+    ripartizione»*."""
+    totale = sum(a.duration_minutes for a in ctx.requests.values())
+    minuti = model.NewIntVar(0, totale, "minuti_senza_aula")
+    model.Add(minuti == sum(
+        act.duration_minutes * (1 - ctx.assigned[aid])
+        for aid, act in ctx.requests.items() if aid in ctx.assigned))
+
+    termini, forzati = [], 0
+    for aid, room_id in ctx.previous.items():
+        var = ctx.y.get((aid, room_id))
+        if var is None:
+            # L'aula di prima non e' piu' candidata (sede cambiata,
+            # indisponibilita' nuova): il cambio e' un fatto, non una scelta.
+            forzati += 1
+        else:
+            termini.append(1 - var)
+    cambi = model.NewIntVar(0, len(ctx.previous), "cambi_aula")
+    model.Add(cambi == sum(termini) + forzati)
+    return [Level("minuti_senza_aula", minuti), Level("cambi_aula", cambi)]
+
+
+def solve_rooms(schedule, *, time_limit=None, workers=None,
+                allow_unassigned=True, ignora_opzionali=()):
+    """⚠ `time_limit` e' **per livello** della catena, non per la chiamata:
+    e' la forma di `solve_chain`, e va detta."""
+    started = time.monotonic()
+    model, ctx = build_room_model(schedule, allow_unassigned=allow_unassigned,
+                                  ignora_opzionali=ignora_opzionali)
+    catena = livelli_aule(ctx, model)
+
+    def estrai(solver):
+        return {aid: room_id for (aid, room_id), var in ctx.y.items()
+                if solver.Value(var)}
+
+    def suggerisci(model, solver):
+        model.ClearHints()
+        for var in ctx.y.values():
+            model.AddHint(var, solver.Value(var))
+
+    stato, assegnazioni, esiti = solve_chain(
+        model, catena, estrai=estrai, suggerisci=suggerisci,
+        time_limit=time_limit, workers=workers)
+
+    trovata = assegnazioni is not None
+    assegnazioni = assegnazioni or {}
+    unassigned = tuple(sorted(aid for aid in ctx.requests
+                              if aid not in assegnazioni)) if trovata else ()
+    proto = model.proto if hasattr(model, "proto") else model.Proto()
+    return RoomSolution(
+        status=STATUS_NAME.get(stato, str(stato)),
+        assignments=assegnazioni,
+        unassigned=unassigned,
+        stats={
+            "richieste": len(ctx.requests),
+            "assegnate": len(assegnazioni),
+            "minuti_senza_aula": sum(ctx.requests[aid].duration_minutes
+                                     for aid in unassigned),
+            "livelli": tuple(e.as_dict() for e in esiti),
+            "variabili": len(proto.variables),
+            "constraint": len(proto.constraints),
+            "secondi": round(time.monotonic() - started, 3),
+        },
+    )
+
+
+def apply_rooms(solution, schedule):
+    """Scrive `Placement.assigned_room`. Non tocca mai giorno e fascia: il
+    piazzamento e' l'input di questa fase.
+
+    ⚠ E **cancella** l'aula di chi resta senza: un'attivita' con l'aula di ieri
+    e la rinuncia di oggi lascerebbe nel database un orario che il solver non
+    ha deciso, e l'oracolo misurerebbe quello."""
+    if solution.status not in ("OPTIMAL", "FEASIBLE"):
+        return
+    for aid, room_id in solution.assignments.items():
+        Placement.objects.filter(schedule=schedule, activity_id=aid).update(
+            assigned_room_id=room_id)
+    if solution.unassigned:
+        Placement.objects.filter(
+            schedule=schedule,
+            activity_id__in=solution.unassigned).update(assigned_room=None)
