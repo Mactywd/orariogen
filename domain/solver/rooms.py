@@ -13,6 +13,8 @@ nient'altro. **Capienza in alunni, categoria e tipologie non vincolano.**"""
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+from ortools.sat.python import cp_model
+
 from domain.analysis.conformity import week_signatures
 from domain.analysis.state import ScheduleState
 from domain.models import Activity, Resource, Room
@@ -108,3 +110,72 @@ class RoomContext:
                 for slot in collocazione.slots:
                     load[(rep, room_id, collocazione.day, slot)] += 1
         return dict(load)
+
+
+def build_room_model(schedule, *, allow_unassigned=True, ignora_opzionali=()):
+    """`allow_unassigned=False` pretende un'aula per ogni richiesta: e' il modo
+    di chiedere «questo vincolo morde?». Con la rinuncia ammessa la risposta a
+    un vincolo violato non e' l'infattibilita' ma la **rinuncia**, che e'
+    un'altra domanda — la stessa cucitura che `build_model(allow_unplaced=...)`
+    ha per lo scarto."""
+    ctx = RoomContext.build(schedule, ignora_opzionali=ignora_opzionali)
+    model = cp_model.CpModel()
+    for aid in sorted(ctx.requests):
+        lits = []
+        for room_id in sorted(ctx.candidates[aid]):
+            var = model.NewBoolVar(f"y_{aid}_{room_id}")
+            ctx.y[(aid, room_id)] = var
+            lits.append(var)
+        if not allow_unassigned:
+            # ⚠ Anche con `lits` vuoto: `AddExactlyOne([])` e' gia' INFEASIBLE,
+            # che e' precisamente cio' che «nessuna candidata e assegnazione
+            # pretesa» deve significare.
+            model.AddExactlyOne(lits)
+            continue
+        assegnata = model.NewBoolVar(f"assegnata_{aid}")
+        ctx.assigned[aid] = assegnata
+        model.Add(sum(lits) == assegnata)
+    _post_capacity(ctx, model)
+    if ctx.assigned:
+        # Senza una preferenza il modello grezzo e' solo capienza: «rinuncia a
+        # tutti» e' feasible quanto «assegna il possibile», e CP-SAT senza
+        # obiettivo restituisce il primo — la rinuncia, non l'assegnazione.
+        # Non e' la catena lessicografica di Task 4 (L1/L2, sui minuti e sulla
+        # stabilita'): e' il minimo che rende questo modello grezzo osservabile
+        # da solo. La catena la sovrascrive al primo livello (`model.Minimize`
+        # sostituisce l'obiettivo precedente), quindi non la contraddice.
+        model.Maximize(sum(ctx.assigned.values()))
+    return model, ctx
+
+
+def _post_capacity(ctx, model):
+    """La capienza simultanea, per (aula, giorno, fascia, **firma**).
+
+    ⚠ Il tetto e' il **residuo**: `max(0, capienza - carico congelato)`. Le
+    immobili che tengono la loro aula consumano senza essere decisioni, e
+    pretendere che le libere riparino il loro sovraccarico e' la meta' vietata
+    di ADR-018."""
+    carico = ctx.frozen_load()
+    posted = set()
+    for rep, _ in ctx.signatures:
+        state = ctx.states[rep]
+        per_cella = defaultdict(list)
+        for aid in ctx.requests:
+            collocazione = state.placed.get(aid)
+            if collocazione is None:
+                continue          # non attiva in questa firma: non compete
+            for room_id in ctx.candidates[aid]:
+                for slot in collocazione.slots:
+                    per_cella[(room_id, collocazione.day, slot)].append(
+                        ctx.y[(aid, room_id)])
+        for (room_id, day, slot), lits in sorted(per_cella.items()):
+            residuo = max(0, state.capacity.get(room_id, 1)
+                          - carico.get((rep, room_id, day, slot), 0))
+            if len(lits) <= residuo:
+                continue          # non e' una decisione: e' un fatto
+            firma = (room_id, day, slot, residuo,
+                     tuple(sorted(lit.Index() for lit in lits)))
+            if firma in posted:
+                continue          # due firme con lo stesso insieme: un vincolo solo
+            posted.add(firma)
+            model.Add(sum(lits) <= residuo)
