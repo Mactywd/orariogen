@@ -184,12 +184,18 @@ di §9.8: un documento che dichiara vera una proprietà falsificata dai dati.
       riparazione mancata contata quando riparare è impossibile, e la quota
       non consumata quando non serve.
 
-## Task 6 — L4, la stabilità
+## Task 6 — L4, la stabilità ✅ (2026-08-26)
 
-- [ ] L4: minimizza le attività che cambiano cella rispetto ai `Placement`
-      esistenti.
-- [ ] Un test sulla rigenerazione per periodo: due solve di seguito sullo
-      stesso schedule non stravolgono l'orario.
+- [x] L4: minimizza le attività che cambiano cella rispetto ai `Placement`
+      esistenti. Un'attività la cui vecchia cella non è più ammissibile è
+      contata come spostata, perché il numero riportato sia vero.
+- [x] Un test sulla conservazione, con le collocazioni di partenza messe in una
+      disposizione **insolita**: senza, il test non discriminerebbe, perché la
+      disposizione naturale del solver coincide con quella di partenza.
+- [x] Un test sull'**ordine**: la stabilità è ultima, e conservare non vale uno
+      scarto. ⚠ Il primo scritto per questa proprietà non discriminava — due
+      ore accatastate danno un movimento in entrambi gli ordini, perché anche
+      scartare un'attività già piazzata conta come spostamento.
 
 ## Task 7 — `manage.py solve`
 

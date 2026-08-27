@@ -272,3 +272,81 @@ def test_l3_non_consuma_una_quota_se_non_serve():
     livelli = {l["nome"]: l["valore"] for l in soluzione.stats["livelli"]}
     assert livelli["violazioni_nuove"] == 0, (
         "il solver ha consumato una quota che non gli serviva")
+
+
+def test_l4_conserva_le_collocazioni_precedenti():
+    """La stabilità fra periodi, che è la conseguenza di ADR-010 rimasta
+    scoperta da luglio: rigenerando l'orario a ogni periodo serve un criterio
+    «mantieni il più possibile le collocazioni precedenti», o il secondo
+    quadrimestre viene stravolto per tutti.
+
+    ⚠ L'istanza è costruita perché il test **discrimini**: le tre ore sono
+    piazzate a mano in una disposizione **insolita** — le ultime fasce degli
+    ultimi giorni — che nessun solver sceglierebbe da sé. Con L4 restano dove
+    sono; senza, CP-SAT le raccoglie all'inizio della settimana, che è il suo
+    ordine naturale.
+
+    Verificato per mutazione: togliendo L4 dalla catena, le collocazioni
+    cambiano tutte e tre."""
+    from domain.models import Placement
+
+    env = mini_school(days=5, slots=2)
+    attivita = [make_activity(env["subject"], teachers=[env["teacher"]],
+                              classes=[env["klass"]]) for _ in range(3)]
+    insolite = {attivita[0].id: (4, 1), attivita[1].id: (3, 1),
+                attivita[2].id: (2, 1)}
+    for aid, (day, slot) in insolite.items():
+        Placement.objects.create(schedule=env["schedule"], activity_id=aid,
+                                 day=day, start_slot=slot)
+
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.status == "OPTIMAL", soluzione.stats
+    assert soluzione.placements == insolite, (
+        "le collocazioni precedenti non sono state conservate: L4 non sta "
+        "mordendo")
+    livelli = {l["nome"]: l["valore"] for l in soluzione.stats["livelli"]}
+    assert livelli["spostamenti"] == 0
+
+
+def test_l4_cede_a_tutto_il_resto():
+    """L'**ordine** della catena, provato dove l'ordine cambia la risposta: la
+    stabilità è ultima, quindi conservare una collocazione non vale uno scarto.
+
+    Un giorno di due fasce. `vecchia` è già piazzata in (0,0). `nuova` non è
+    mai stata piazzata e può stare **solo** in (0,0), perché il suo docente è
+    indisponibile nell'altra fascia; le due condividono la classe, quindi in
+    (0,0) non ci stanno insieme.
+
+    - Con L1 prima: si piazzano entrambe, e `vecchia` si sposta in (0,1) —
+      zero scarti, uno spostamento.
+    - Con L4 prima: `vecchia` resta dov'è e `nuova` viene scartata — zero
+      spostamenti (una mai piazzata non «si sposta»), un'ora persa.
+
+    ⚠ Il primo test scritto per questa proprietà **non discriminava**: due ore
+    accatastate nella stessa cella davano un movimento in entrambi gli ordini,
+    perché anche scartare un'attività già piazzata conta come spostamento.
+    Verificato per mutazione: mettendo `spostamenti` in testa alla catena,
+    questo test diventa rosso."""
+    from domain.models import ResourceUnavailability, Placement, Teacher
+
+    env = mini_school(days=1, slots=2)
+    vecchia = make_activity(env["subject"], teachers=[env["teacher"]],
+                            classes=[env["klass"]])
+    Placement.objects.create(schedule=env["schedule"], activity=vecchia,
+                             day=0, start_slot=0)
+    altro = Teacher.objects.create(name="Bianchi Ugo", last_name="Bianchi",
+                                   first_name="Ugo")
+    ResourceUnavailability.objects.create(resource=altro, day=0, slot=1,
+                                          level="hard")
+    nuova = make_activity(env["subject"], teachers=[altro],
+                          classes=[env["klass"]])
+
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.status == "OPTIMAL", soluzione.stats
+    assert soluzione.stats["scartate"] == 0, (
+        "ha preferito scartare invece di spostare: la stabilità è finita "
+        "davanti allo scarto nella catena")
+    assert soluzione.placements[nuova.id] == (0, 0)
+    assert soluzione.placements[vecchia.id] == (0, 1)
+    livelli = {l["nome"]: l["valore"] for l in soluzione.stats["livelli"]}
+    assert livelli["spostamenti"] == 1

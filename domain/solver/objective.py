@@ -89,6 +89,31 @@ def livelli(ctx, model):
         nuove = model.NewIntVar(0, len(quote) + len(mancate), "violazioni_nuove")
         model.Add(nuove == sum(quote) + sum(mancate))
         livelli.append(Level("violazioni_nuove", nuove))
+    # L4 — la stabilità. Rigenerando l'orario a ogni periodo (ADR-010) serve un
+    # criterio «mantieni il più possibile le collocazioni precedenti», o il
+    # secondo quadrimestre viene stravolto per tutti: è la conseguenza che il
+    # progetto si porta dietro da luglio, ed è un livello lessicografico, non
+    # un'architettura. È anche ciò che EDT minimizza nel risolutore passo-passo
+    # («il numero di variabili che cambiano valore rispetto alla soluzione
+    # corrente»).
+    #
+    # ⚠ Ultimo della catena, e non è un dettaglio d'ordine: la stabilità cede a
+    # tutto il resto. Un orario che conserva le collocazioni ma scarta un'ora
+    # in più è peggiore, non migliore.
+    mosse, fisse = [], 0
+    for aid, cella in sorted(ctx.placed_before.items()):
+        lit = ctx.x.get((aid, cella[0], cella[1]))
+        if lit is None:
+            # la vecchia cella non è più ammissibile (pre-filtri, o griglia
+            # cambiata): l'attività è spostata comunque, e va contata perché
+            # il numero riportato sia vero.
+            fisse += 1
+        else:
+            mosse.append(lit)
+    if mosse or fisse:
+        spostate = model.NewIntVar(0, len(mosse) + fisse, "spostamenti")
+        model.Add(spostate == len(mosse) + fisse - sum(mosse))
+        livelli.append(Level("spostamenti", spostate))
     return livelli
 
 

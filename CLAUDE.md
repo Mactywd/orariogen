@@ -165,7 +165,8 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **gialle** si rispettano come le rosse, con l'override per categoria di
 > risorsa che EDT espone come opzione di calcolo. E **L3**, che conta le
 > violazioni nuove — quote consumate e riparazioni mancate — e con cui il
-> debito del «ramo pigro» di §9.7 si chiude. **484 test verdi**, 16 skip.
+> debito del «ramo pigro» di §9.7 si chiude, e **L4**, la stabilità fra periodi
+> che ADR-010 chiedeva da luglio. **486 test verdi**, 16 skip.
 >
 > Restano i **due pezzi dichiarati fuori** — l'assegnazione delle aule e il
 > violatore di Hall (che non usa il solver: è un conteggio di capienza) — più
@@ -419,6 +420,25 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, pezzo 3 — ondata 6)** — **L4: la stabilità fra
+  periodi.** L'ultimo livello minimizza le attività che cambiano cella rispetto
+  ai `Placement` esistenti. È la conseguenza di [ADR-010](docs/decisioni.md)
+  rimasta scoperta da luglio — rigenerando l'orario a ogni periodo serve un
+  criterio «mantieni il più possibile le collocazioni precedenti», o il secondo
+  quadrimestre viene stravolto per tutti — ed è anche ciò che EDT minimizza nel
+  risolutore passo-passo. Come previsto da D4, è costato un `minimize`, non
+  un'architettura.
+
+  ⚠ **Ultimo, e l'ordine è provato da un test**: conservare una collocazione
+  non vale uno scarto. ⚠ E il primo test scritto per quella proprietà **non
+  discriminava** — due ore accatastate nella stessa cella danno un movimento in
+  entrambi gli ordini, perché anche scartare un'attività già piazzata conta
+  come spostamento. Riscritto su un'istanza dove i due ordini danno risposte
+  diverse: con L1 prima si piazzano entrambe e la vecchia si sposta; con L4
+  prima la vecchia resta e la nuova viene scartata.
+
+  Suite: **486 test verdi**, 16 skip.
 
 - **2026-08-26 (notte, pezzo 3 — ondata 5)** — 🔑 **L3, e il debito di §9.7
   chiuso da una misura.** Il terzo livello della catena conta le **violazioni
