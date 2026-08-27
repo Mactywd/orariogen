@@ -202,3 +202,73 @@ def test_un_livello_che_non_dimostra_l_ottimo_lo_dichiara():
     assert soluzione is not None
     assert esiti[0].valore == 2, "il valore trovato si legge comunque"
     assert not esiti[0].ottimo, "un livello non dimostrato non puo' dirsi ottimo"
+
+
+def test_l3_conta_le_quote_consumate_e_le_riparazioni_mancate():
+    """L3 — le violazioni **nuove** che il modello si concede — e i suoi due
+    conteggi, provati sul conteggio che è più facile dimenticare.
+
+    Qui la riparazione è **impossibile**: `min_days=3` su una griglia di due
+    giorni, con una congelata che rende la baseline già violata. Il ramo
+    disgiuntivo di ADR-018 esiste, il modello sceglie lo status quo, e L3 deve
+    contare quella riparazione mancata: vale 1.
+
+    ⚠ Il conteggio delle riparazioni mancate è la metà che una mutazione
+    lascerebbe passare senza questo test: le quote consumate si vedono anche
+    altrove, le riparazioni no.
+
+    🔑 La **preferenza** per la riparazione — il debito di §9.7 — non si prova
+    qui ma nel banco che congela: dopo L3 il fenomeno non compare più su 60
+    semi, e l'esenzione che lo perdonava è stata rimossa
+    (`tests/solver_harness.py::_classifica_nuove`). Un test giocattolo su
+    questa proprietà non discriminerebbe, perché senza L3 il solver può
+    scegliere la soluzione riparata **per caso**: misurato, restava verde con
+    la mutazione."""
+    from domain.models import Activity, Placement, ResourceTimeConstraint
+
+    env = mini_school(days=2, slots=2)
+    congelata = make_activity(env["subject"], teachers=[env["teacher"]],
+                              classes=[env["klass"]])
+    Activity.objects.filter(pk=congelata.pk).update(
+        immobility=Activity.Immobility.FIXED)
+    Placement.objects.create(schedule=env["schedule"], activity=congelata,
+                             day=0, start_slot=0)
+    make_activity(env["subject"], teachers=[env["teacher"]],
+                  classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["teacher"],
+        type=ResourceTimeConstraint.Type.MIN_DISTRIBUTION,
+        params={"min_days": 3, "min_minutes_per_day": 60})
+
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.status == "OPTIMAL", soluzione.stats
+    assert soluzione.stats["scartate"] == 0, soluzione.stats
+    livelli = {l["nome"]: l["valore"] for l in soluzione.stats["livelli"]}
+    assert list(livelli) == ["minuti_scartati", "attivita_scartate",
+                             "violazioni_nuove"]
+    assert livelli["violazioni_nuove"] == 1, (
+        "la riparazione mancata non è contata: L3 sta guardando solo le quote")
+
+
+def test_l3_non_consuma_una_quota_se_non_serve():
+    """L'altra metà: sotto il tetto della quota se ne consuma il **meno
+    possibile**. Con un alleggerimento disponibile ma un orario che sta in
+    piedi senza, L3 vale zero — la quota è un tetto, non un budget da spendere."""
+    from domain.models import RelaxationQuota, ResourceTimeConstraint
+
+    env = mini_school(days=2, slots=2)
+    for _ in range(2):
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=ResourceTimeConstraint.Type.MAX_HOURS,
+        params={"day_minutes": 60})
+    RelaxationQuota.objects.create(
+        family=RelaxationQuota.Family.MAX_HOURS, resource=env["klass"],
+        max_violations=2, params={"margine": 60})
+
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.status == "OPTIMAL", soluzione.stats
+    livelli = {l["nome"]: l["valore"] for l in soluzione.stats["livelli"]}
+    assert livelli["violazioni_nuove"] == 0, (
+        "il solver ha consumato una quota che non gli serviva")

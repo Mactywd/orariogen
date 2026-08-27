@@ -163,7 +163,9 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > margine e deroga, tetti per (famiglia, risorsa) e per risorsa, agganciate a
 > **tutte** le famiglie che EDT dichiara alleggeribili. Le indisponibilità
 > **gialle** si rispettano come le rosse, con l'override per categoria di
-> risorsa che EDT espone come opzione di calcolo. **483 test verdi**, 16 skip.
+> risorsa che EDT espone come opzione di calcolo. E **L3**, che conta le
+> violazioni nuove — quote consumate e riparazioni mancate — e con cui il
+> debito del «ramo pigro» di §9.7 si chiude. **484 test verdi**, 16 skip.
 >
 > Restano i **due pezzi dichiarati fuori** — l'assegnazione delle aule e il
 > violatore di Hall (che non usa il solver: è un conteggio di capienza) — più
@@ -357,29 +359,15 @@ delle aule e il violatore di Hall. Vedi
       `tests/solver_harness.py`) invece di un'eccezione implicita. Il fenomeno
       è quindi più largo di quanto §9.5 dichiarasse: riguarda ogni famiglia il
       cui finding nomina l'argmin invece del secchio intero.
-- [ ] ⚠ **Il ramo «status quo» è pigro, e nel caso misto spegne la riga.**
-      Riguarda la **famiglia** dei rami disgiuntivi introdotti da ADR-018 —
-      `WeeklyOrderBuilder` dal Task 12, `MinDistributionBuilder` e
-      `FreeGuaranteedBuilder` dal 2026-08-26 — non i singoli builder. Il
-      modello non ha funzione di costo, quindi `riparato` e `riparato.Not()`
-      sono alla pari e CP-SAT non ha motivo di preferire la riparazione. Nel
-      solve incrementale «poche congelate + libere non ancora piazzate» la
-      baseline del checker è quasi sempre già violata **perché nulla è
-      piazzato**, `B` vale quanto qualificano le sole congelate, e il ramo
-      status quo diventa **vacuo**: la riga smette di vincolare. Misurato —
-      una congelata, sei libere mai piazzate, `min_days=3`: ammassarle tutte
-      su due giorni è ammesso, mentre prima era vietato (al prezzo però di
-      `INFEASIBLE` su 33 istanze sporche su 45). È perdita di **qualità**, non
-      di correttezza: nessun finding nuovo, l'oracolo differenziale regge. Tre
-      strade in §9.7 della spec, nessuna adottata. ⚠ **Ora misurato anche dal
-      banco che congela** (2026-08-26 sera), che è la prima volta che questo
-      debito si vede da solo invece di essere dichiarato — e in una forma più
-      precisa di quella dichiarata qui: è uno **scambio**, non un peggioramento
-      secco. `free_guaranteed` passa da `free_days 4 / free_half_days 1` a
-      `free_days 1 / free_half_days 4`: ripara la soglia delle mezze e rompe
-      quella dei giorni, che era soddisfatta. Il banco lo esenta
-      **strettamente** — solo un peggioramento su una (causale, risorsa) già
-      violata, mai una violazione su una risorsa pulita.
+- [x] ⚠ ~~**Il ramo «status quo» è pigro, e nel caso misto spegne la riga.**~~
+      **Chiuso il 2026-08-26 (pezzo 3, ondata 5).** La causa era testuale — il
+      modello non aveva funzione di costo, quindi `riparato` e `riparato.Not()`
+      erano alla pari — e **L3 gliene ha data una**: minimizza le riparazioni
+      mancate insieme alle quote consumate. Non cambia cosa il modello ammette,
+      cambia cosa preferisce. La prova è una misura, non un argomento: su **60
+      semi** del banco che congela il fenomeno non compare più (prima: 20, 35,
+      41, 45, 52), e l'esenzione che lo perdonava è stata **rimossa** insieme
+      al suo test. Il banco è ora più severo: se tornasse, sarebbe rosso.
 
 - [~] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
       piazzamento**, e il tetto **settimanale** del peso didattico è il primo
@@ -431,6 +419,39 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, pezzo 3 — ondata 5)** — 🔑 **L3, e il debito di §9.7
+  chiuso da una misura.** Il terzo livello della catena conta le **violazioni
+  nuove** che il modello si concede: le quote consumate e le riparazioni
+  mancate dei rami disgiuntivi di ADR-018. Due conteggi distinti sommati in un
+  livello solo — un conteggio, non una somma pesata — e restano separati dove
+  conta: una riparazione mancata **non consuma quota**, perché non è un
+  alleggerimento.
+
+  **Il debito era testuale**: «il modello non ha funzione di costo, quindi
+  `riparato` e `riparato.Not()` sono alla pari e CP-SAT non ha motivo di
+  preferire la riparazione». Adesso ne ha uno. Non cambia cosa il modello
+  ammette — cambia cosa preferisce — ed era la quarta strada, quella senza
+  rischio semantico, delle tre che §9.7 elencava senza adottarne nessuna.
+
+  ⚠ **E la prova non è un argomento, è una misura**: dopo L3 il ramo pigro non
+  compare più su **60 semi** del banco che congela, dove prima c'era ai semi
+  20, 35, 41, 45 e 52. Quindi **l'esenzione che lo perdonava è stata rimossa**
+  da `_classifica_nuove`, insieme al test che la esercitava — un'esenzione che
+  non scatta mai non è un'esenzione, è codice che nessun test afferma. Il banco
+  è ora **più severo di prima**: se il fenomeno tornasse diventerebbe rosso
+  invece di perdonarlo in silenzio, e rimetterlo sarebbe una decisione da
+  prendere guardando la misura.
+
+  ⚠ **Il primo test scritto per L3 non discriminava**, ed è la solita forma:
+  provava che il solver *ripara*, ma senza L3 il solver può riparare **per
+  caso** — misurato, restava verde con la mutazione. Sostituito da due test sul
+  valore del livello: la riparazione mancata contata quando riparare è
+  impossibile (una griglia di due giorni con `min_days=3`), e la quota non
+  consumata quando non serve. Tre mutazioni, tre rossi, ciascuno sul test
+  giusto.
+
+  Suite: **484 test verdi**, 16 skip.
 
 - **2026-08-26 (notte, pezzo 3 — ondata 4)** — **I pre-filtri, e il task che
   aveva la premessa sbagliata.** L'ondata era scritta come «le quote nei

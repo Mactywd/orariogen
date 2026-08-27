@@ -2526,7 +2526,6 @@ def sporca(w, seed, quota=6):
 # `FreeGuaranteedBuilder` (time_counting.py) — cercare `riparato` per
 # trovarli. Se un quarto adottasse la stessa forma, la sua causale va aggiunta
 # qui, altrimenti il banco lo dara' per rotto.
-DISGIUNTIVI = {"min_distribution", "free_guaranteed", "subject_weekly_order"}
 
 
 def _per_settimana(findings):
@@ -2560,36 +2559,33 @@ def _causale_risorsa(chiave_settimana):
 
 
 def _classifica_nuove(nuove, base):
-    """Divide le violazioni comparse dopo il solve in tre mucchi, e solo il
-    terzo e' un fallimento.
+    """Divide le violazioni comparse dopo il solve in due mucchi, e solo il
+    secondo e' un fallimento.
 
     - **deriva d'identita'**: stessa causale, risorsa e quantita' gia' nella
       baseline, altre attivita' nominate. Vedi `_grossa`.
-    - **ramo pigro**: un peggioramento su una famiglia a ramo disgiuntivo
-      dove la stessa (causale, risorsa) era **gia'** violata. E' il debito di
-      §9.7, dichiarato e non risolto: senza funzione di costo CP-SAT non
-      preferisce riparare, e con le libere non piazzate lo status quo non e'
-      rappresentabile, quindi il ramo scende a `>= 0` ed e' vacuo. Misurato al
-      seme 20, ed e' uno **scambio**, non un peggioramento secco:
-      `free_guaranteed` sulla risorsa 3 passa da `free_days 4 / free_half_days
-      1` a `free_days 1 / free_half_days 4` — ripara la soglia delle mezze
-      (min 3) e rompe quella dei giorni (min 2), che era soddisfatta. Le due
-      soglie stanno sotto **lo stesso** booleano proprio per impedirlo, ma il
-      ramo vacuo scavalca il booleano.
-      ⚠ L'esenzione e' stretta apposta: una violazione su una risorsa
-      **pulita** resta un fallimento anche per queste tre famiglie.
-    - **vere**: tutto il resto."""
+    - **vere**: tutto il resto.
+
+    ⚠ **C'era un terzo mucchio, il «ramo pigro», ed e' stato tolto il
+    2026-08-26 (ondata 5).** Perdonava un peggioramento su una famiglia a ramo
+    disgiuntivo dove la stessa (causale, risorsa) era gia' violata: il debito
+    di §9.7 della spec del modello hard, dove senza funzione di costo CP-SAT
+    non aveva motivo di preferire la riparazione. **L3 gliene ha dato uno**, e
+    la misura lo dice: su **60 semi** il fenomeno non compare piu' — prima
+    c'era ai semi 20, 35, 41, 45 e 52. Un'esenzione che non scatta mai non e'
+    un'esenzione: e' codice che nessun test afferma (Ruling 127).
+
+    Se il fenomeno tornasse, questo banco diventerebbe **rosso** invece di
+    perdonarlo in silenzio. E' il comportamento giusto: rimettere l'esenzione
+    e' una decisione da prendere guardando la misura, non un default."""
     grosse = {_grossa(k) for k in base}
-    coppie = {_causale_risorsa(k) for k in base}
-    deriva, pigro, vere = [], [], []
+    deriva, vere = [], []
     for k in sorted(nuove, key=str):
         if _grossa(k) in grosse:
             deriva.append(k)
-        elif k[0][0] in DISGIUNTIVI and _causale_risorsa(k) in coppie:
-            pigro.append(k)
         else:
             vere.append(k)
-    return deriva, pigro, vere
+    return deriva, vere
 
 
 def run_modello_sporco(seed, time_limit=120):
@@ -2692,13 +2688,12 @@ def run_modello_sporco(seed, time_limit=120):
         f"{soluzione.stats}")
     apply(soluzione, w.schedule)
     nuove = _per_settimana(_findings(w.schedule, codici)) - prima
-    deriva, pigro, vere = _classifica_nuove(nuove, prima)
+    deriva, vere = _classifica_nuove(nuove, prima)
     assert vere == [], (
         f"il solver ha introdotto violazioni nuove (seed {seed}): "
         f"{[k[0][0] for k in vere]}\n" + "\n".join(str(k) for k in vere))
     return w, congelate, libere, {
         "dirt": sorted({f.code for f in prima_completa}),
         "deriva": [k[0][0] for k in deriva],
-        "pigro": [k[0][0] for k in pigro],
         "soluzione": soluzione,
     }

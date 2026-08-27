@@ -275,6 +275,7 @@ class MinDistributionBuilder(ResourceBuilder):
             model.Add(sum(qualificati) >= minimo)
             return
         riparato = model.NewBoolVar(f"mindist_fix_{row.pk}_{key}_{rep}")
+        ctx.riparazioni.append(riparato)
         model.Add(sum(qualificati) >= minimo).OnlyEnforceIf(riparato)
         model.Add(sum(qualificati) >= quantita["days"]).OnlyEnforceIf(riparato.Not())
 
@@ -466,6 +467,7 @@ class FreeGuaranteedBuilder(ResourceBuilder):
         else:
             b_giorni = b_mezze = 0
         riparato = model.NewBoolVar(f"freeguar_fix_{row.pk}_{key}_{rep}")
+        ctx.riparazioni.append(riparato)
         # ⚠ Il margine si applica al ramo della **riparazione**, non allo
         # status quo: quello non e' una soglia da alleggerire, e' il divieto di
         # peggiorare rispetto alla baseline (ADR-018). Alleggerirlo

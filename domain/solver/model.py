@@ -9,7 +9,7 @@ from ortools.sat.python import cp_model
 
 from domain.models import Placement
 from domain.solver.context import SolverContext
-from domain.solver.objective import livelli_di_scarto, solve_chain
+from domain.solver.objective import livelli, solve_chain
 from domain.solver.registry import all_builders
 from domain.solver.vocabulary import Vocabulary
 
@@ -103,14 +103,14 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
     model, ctx = build_model(schedule, extraction=extraction,
                              allow_unplaced=allow_unplaced,
                              ignora_opzionali=ignora_opzionali)
-    livelli = livelli_di_scarto(ctx, model)
+    catena = livelli(ctx, model)
 
     def estrai(solver):
         return {aid: (day, slot) for (aid, day, slot), var in ctx.x.items()
                 if solver.Value(var)}
 
     stato, placements, esiti = solve_chain(
-        model, livelli, estrai=estrai, time_limit=time_limit, workers=workers)
+        model, catena, estrai=estrai, time_limit=time_limit, workers=workers)
 
     # ⚠ La distinzione è fra «nessuna soluzione» e «una soluzione senza
     # piazzamenti»: un'istanza la cui unica attività è impiazzabile ha

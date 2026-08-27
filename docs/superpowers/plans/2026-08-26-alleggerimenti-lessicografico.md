@@ -166,14 +166,23 @@ di §9.8: un documento che dichiara vera una proprietà falsificata dai dati.
       `UNAVAILABILITY` e `OPTIONAL_UNAVAILABILITY` **non** sono quote,
       nonostante siano nell'enum.
 
-## Task 5 — L3, e il ramo pigro
+## Task 5 — L3, e il ramo pigro ✅ (2026-08-26)
 
-- [ ] L3: i `v` consumati **e** i booleani di riparazione dei rami disgiuntivi,
-      in due conteggi separati dentro lo stesso livello.
-- [ ] Il test che pretende la riparazione dove §9.7 misurava lo scambio di
-      soglie di `free_guaranteed` (seme 20 del banco che congela).
-- [ ] §9.7 della spec precedente aggiornata: il debito si chiude qui, e si
-      scrive **come**.
+- [x] L3: le quote consumate **e** i booleani di riparazione mancata, in due
+      conteggi distinti sommati in un livello solo — un conteggio, non una
+      somma pesata. Una riparazione mancata **non consuma quota**.
+- [x] 🔑 Il debito di §9.7 è chiuso, e la prova è una **misura**: dopo L3 il
+      ramo pigro non compare più su **60 semi** del banco che congela (prima
+      era ai semi 20, 35, 41, 45, 52).
+- [x] ⚠ **L'esenzione che lo perdonava è stata rimossa** da
+      `_classifica_nuove`, insieme al test che la esercitava: un'esenzione che
+      non scatta mai non è un'esenzione (Ruling 127). Se il fenomeno tornasse,
+      il banco diventerebbe rosso invece di perdonarlo in silenzio.
+- [x] ⚠ E il primo test scritto per L3 **non discriminava**: senza L3 il
+      solver può scegliere la soluzione riparata per caso, e restava verde con
+      la mutazione. Sostituito da due test sul valore del livello — la
+      riparazione mancata contata quando riparare è impossibile, e la quota
+      non consumata quando non serve.
 
 ## Task 6 — L4, la stabilità
 

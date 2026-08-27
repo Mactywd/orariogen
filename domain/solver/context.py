@@ -33,6 +33,8 @@ class SolverContext:
     vocab: object = None      # Vocabulary, assegnato da build_model
     relax: object = None      # Relaxation: le quote di alleggerimento
     ignora_opzionali: frozenset = frozenset()   # Resource.Kind con le gialle ignorate
+    riparazioni: list = field(default_factory=list)  # i booleani «riparato»
+                             # dei rami disgiuntivi di ADR-018: L3 li minimizza
 
     @classmethod
     def build(cls, schedule, extraction=None, ignora_opzionali=()):

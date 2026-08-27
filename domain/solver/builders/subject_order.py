@@ -155,6 +155,7 @@ class WeeklyOrderBuilder(SubjectBuilder):
             return
 
         riparato = model.NewBoolVar(f"weekorder_fix_{row.pk}_{rep}")
+        ctx.riparazioni.append(riparato)
         model.Add(prima_a <= prima_b).OnlyEnforceIf(guardie + [riparato])
         # status quo: divieto per attivita', non sul solo minimo aggregato
         # (vedi il docstring) -- esclude anche il pareggio con la congelata.

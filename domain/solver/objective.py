@@ -41,8 +41,8 @@ class Esito:
                 "ottimo": self.ottimo, "secondi": self.secondi}
 
 
-def livelli_di_scarto(ctx, model):
-    """L1 e L2. ⚠ **L'ordine è la decisione D1 della spec**: prima le ore, poi
+def livelli(ctx, model):
+    """La catena: L1, L2, L3. ⚠ **L'ordine è la decisione D1 della spec**: prima le ore, poi
     il numero di attività come spareggio. Uno scarto da 3h fa più danno al
     monte ore di una classe di tre da 1h; EDT conta le attività nella propria
     finestra ma riporta entrambi («284 attività / 288h00»), quindi la scelta
@@ -54,6 +54,8 @@ def livelli_di_scarto(ctx, model):
     presolve — quella la spegne `presolve_substitution_level = 0` in
     `solve_chain`, con la misura scritta lì."""
     if not ctx.placed_var:
+        # senza scarto non c'è L1/L2; L3 da solo non ha senso, perché
+        # alleggerire serve a ridurre gli scarti e qui non ce ne sono.
         return []
 
     minuti_totali = sum(ctx.activities[aid].duration_minutes for aid in ctx.placed_var)
@@ -64,7 +66,30 @@ def livelli_di_scarto(ctx, model):
     numero = model.NewIntVar(0, len(ctx.placed_var), "attivita_scartate")
     model.Add(numero == sum(1 - piazzata for piazzata in ctx.placed_var.values()))
 
-    return [Level("minuti_scartati", minuti), Level("attivita_scartate", numero)]
+    livelli = [Level("minuti_scartati", minuti), Level("attivita_scartate", numero)]
+
+    # L3 — le violazioni **nuove** che il modello si concede: le quote
+    # consumate e le riparazioni mancate. Due conteggi distinti sommati in un
+    # livello solo: nessuno dei due pesa più dell'altro, ed è un conteggio, non
+    # una somma pesata.
+    #
+    # 🔑 Ed è qui che si chiude il debito di §9.7 della spec del modello hard.
+    # I rami disgiuntivi di ADR-018 offrono «ripara **oppure** non peggiorare»,
+    # e senza funzione di costo i due rami erano alla pari: CP-SAT non aveva
+    # nessun motivo di preferire la riparazione, e nel solve incrementale il
+    # ramo status quo diventava vacuo. Minimizzare `riparato.Not()` non cambia
+    # cosa il modello **ammette** — cambia cosa preferisce, che è esattamente
+    # la forma di rimedio senza rischio semantico.
+    #
+    # ⚠ I due conteggi restano separati dove conta: una riparazione mancata
+    # **non consuma quota**, perché non è un alleggerimento.
+    quote = ctx.relax.letterali()
+    mancate = [r.Not() for r in ctx.riparazioni]
+    if quote or mancate:
+        nuove = model.NewIntVar(0, len(quote) + len(mancate), "violazioni_nuove")
+        model.Add(nuove == sum(quote) + sum(mancate))
+        livelli.append(Level("violazioni_nuove", nuove))
+    return livelli
 
 
 def solve_chain(model, levels, *, estrai, time_limit=None, workers=None,

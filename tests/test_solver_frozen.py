@@ -58,8 +58,8 @@ pytestmark = pytest.mark.django_db
 #   6   fa scattare l'esenzione «deriva d'identita'»
 #   9   free_guaranteed e max_gap insieme
 #  16   arrival_departure, e deriva d'identita'
-#  20   ⚠ l'unico che fa scattare **entrambe** le esenzioni: senza di lui il
-#       ramo `pigro` di `_classifica_nuove` non verrebbe mai eseguito
+#  20   deriva d'identita' su subject_imposed_succession (fino all'ondata 5
+#       faceva scattare anche l'esenzione del ramo pigro, che non esiste piu')
 #  27   la dirt piu' larga misurata: undici causali su un solo testimone
 #  30   il rapporto piu' estremo, 29 congelate contro 3 libere
 #  36   min_distribution e site_transition insieme
@@ -85,7 +85,7 @@ def test_modello_sporco(seed):
         f"costruzione si sta svuotando")
     print(f"\nsporco, seed {seed}: {len(congelate)} congelate in violazione / "
           f"{len(libere)} libere, dirt={esiti['dirt']}, "
-          f"deriva={esiti['deriva']}, pigro={esiti['pigro']}, "
+          f"deriva={esiti['deriva']}, "
           f"{esiti['soluzione'].status}")
 
 
@@ -130,22 +130,10 @@ def _cerca(fenomeno, semi):
 SEMI_FENOMENI = [12, 16, 20, 24, 35, 7, 11]
 
 
-def test_l_esenzione_del_ramo_pigro_e_esercitata():
-    """Un'esenzione che non scatta mai non e' un'esenzione: e' codice che
-    nessun test afferma.
-
-    Il ramo pigro (§9.7 della spec del modello hard): senza funzione di costo
-    `riparato` e `riparato.Not()` sono alla pari, e con le libere non ancora
-    piazzate il ramo status quo diventa vacuo. Si vede come uno **scambio** —
-    `free_guaranteed` ripara la soglia delle mezze giornate e rompe quella dei
-    giorni, che era soddisfatta."""
-    trovato = _cerca("pigro", SEMI_FENOMENI)
-    assert trovato is not None, (
-        f"nessun ramo pigro su {SEMI_FENOMENI}: l'esenzione sul debito di "
-        f"§9.7 non e' piu' esercitata da nessun test — rimisurare i semi, non "
-        f"togliere il test")
-    seme, esiti = trovato
-    print(f"\nramo pigro al seme {seme}: {len(esiti['pigro'])} occorrenze")
+# ⚠ **L'esenzione del ramo pigro non esiste piu'** (ondata 5): L3 minimizza le
+# riparazioni mancate, e su 60 semi il fenomeno non compare piu' — prima era ai
+# semi 20, 35, 41, 45 e 52. Il test che la esercitava e' stato tolto insieme a
+# lei: un'esenzione che non scatta mai non e' un'esenzione.
 
 
 def test_l_esenzione_della_deriva_d_identita_e_esercitata():

@@ -87,6 +87,13 @@ class Relaxation:
         self._letterali[(famiglia, risorsa)].append(var)
         return quanto * var
 
+    def letterali(self):
+        """Tutti i letterali di violazione creati, per l'ottimizzazione: L3
+        minimizza le quote **consumate**, così che si alleggerisca solo quando
+        alleggerire serve. La quota resta il tetto; il livello lessicografico
+        dice che sotto quel tetto se ne consuma il meno possibile."""
+        return [lit for letterali in self._letterali.values() for lit in letterali]
+
     def post_caps(self, model):
         """Le quote, postate una volta sola alla fine: nessun builder le
         conosce, ognuno chiede solo il proprio letterale."""
