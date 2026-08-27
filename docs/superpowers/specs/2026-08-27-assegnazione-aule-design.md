@@ -56,8 +56,25 @@ occuperebbe entrambe — e produrrebbe conflitti `HARD` che l'assegnazione
 risolverebbe da sola. Cioè manderebbe l'utente a smontare vincoli sani, che è
 precisamente il difetto per cui il violatore di Hall è stato riscritto.
 
-**Decisione: senza assegnazione, nessuna aula occupata**, e la richiesta
-insoddisfatta si **nomina** invece di stimarla:
+**Decisione: senza assegnazione, occupa solo se la scelta è determinata** —
+cioè se la candidata è **una sola**. Con due o più candidate non occupa niente,
+e la richiesta insoddisfatta si **nomina** invece di stimarla.
+
+⚠ La distinzione non è un'attenuazione della regola: è la stessa regola detta
+con precisione. Sovrastimare è vietato perché produce conflitti che
+l'assegnazione risolverebbe; a cardinalità uno non c'è niente da risolvere,
+l'insieme candidato ha un solo elemento e occupare è **esatto**. Ed è anche il
+comportamento del prodotto: nel risolutore passo-passo un'attività porta il
+conto di **tutte e cinque** le risorse, aula compresa, quindi una lezione con la
+sua aula vincola il piazzamento. La versione grossolana di questa decisione
+spegnerebbe invece l'occupazione delle aule nella fase di piazzamento — e tre
+test esistenti (`test_la_capacita_simultanea_dell_aula_ammette_due_attivita`,
+più due in `tests/test_solver_sites.py`) la falsificherebbero subito.
+
+Il checker della richiesta insoddisfatta **non** fa questa distinzione: finché
+`assigned_room` è `NULL` la richiesta è aperta, anche a candidata unica. La
+fase la chiuderà con una scelta forzata, e il finding sparirà. Una sola regola,
+nessun caso speciale nel catalogo delle causali:
 
 `structural:room_assignment` (ventinovesimo checker del registro), causale
 *«l'attività chiede un'aula e non ne ha una assegnata»*, `HARD`, sulle sole
