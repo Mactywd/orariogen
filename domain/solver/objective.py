@@ -1,0 +1,129 @@
+"""La catena lessicografica: risolvi per il criterio 1, **fissa** quel valore
+come vincolo, passa al 2. Mai `minimize(w1*a + w2*b)`.
+
+Non è una preferenza di stile. In EDT non esiste alcuna funzione di costo
+numerica (`docs/edt/motore-risoluzione.md`): i compromessi si governano a
+quote, a criteri ordinati e a perdita di qualità tollerata, e nessuno dei tre
+è una somma pesata. Un peso è ingovernabile per chi usa il prodotto — nessun
+vicepreside sa dire se un buco vale 3 o 5 — mentre un ordine di priorità si
+spiega in una frase.
+
+🔑 **E la strategia a due passate di EDT è questa catena, non due esecuzioni.**
+«Il piazzamento rispetta automaticamente tutti i vincoli; se rimangono delle
+attività scartate, potete alleggerire» è esattamente «L3 dopo L1»: il modello
+consuma un alleggerimento solo quando quell'alleggerimento riduce gli scarti,
+perché a scarti pari il livello successivo preferisce zero violazioni.
+
+Oggi la catena ha due livelli — gli scarti in ore e in numero (D1) — e i
+prossimi (le quote consumate, la stabilità fra periodi) si aggiungono qui."""
+
+import time
+from dataclasses import dataclass
+
+from ortools.sat.python import cp_model
+
+
+@dataclass(frozen=True)
+class Level:
+    nome: str
+    var: object     # IntVar: il valore da minimizzare
+
+
+@dataclass(frozen=True)
+class Esito:
+    nome: str
+    valore: int | None   # None se il livello non ha concluso
+    ottimo: bool         # False se ha restituito una soluzione senza dimostrarla
+    secondi: float
+
+    def as_dict(self):
+        return {"nome": self.nome, "valore": self.valore,
+                "ottimo": self.ottimo, "secondi": self.secondi}
+
+
+def livelli_di_scarto(ctx, model):
+    """L1 e L2. ⚠ **L'ordine è la decisione D1 della spec**: prima le ore, poi
+    il numero di attività come spareggio. Uno scarto da 3h fa più danno al
+    monte ore di una classe di tre da 1h; EDT conta le attività nella propria
+    finestra ma riporta entrambi («284 attività / 288h00»), quindi la scelta
+    non contraddice il prodotto: ne fissa lo spareggio.
+
+    Entrambi i livelli passano da un `IntVar` con **dominio dichiarato**: è il
+    posto dove leggere il valore del livello dopo il solve, e non costa nulla.
+    ⚠ Il dominio da solo **non** difende dall'espansione dell'obiettivo in
+    presolve — quella la spegne `presolve_substitution_level = 0` in
+    `solve_chain`, con la misura scritta lì."""
+    if not ctx.placed_var:
+        return []
+
+    minuti_totali = sum(ctx.activities[aid].duration_minutes for aid in ctx.placed_var)
+    minuti = model.NewIntVar(0, minuti_totali, "minuti_scartati")
+    model.Add(minuti == sum(ctx.activities[aid].duration_minutes * (1 - piazzata)
+                            for aid, piazzata in ctx.placed_var.items()))
+
+    numero = model.NewIntVar(0, len(ctx.placed_var), "attivita_scartate")
+    model.Add(numero == sum(1 - piazzata for piazzata in ctx.placed_var.values()))
+
+    return [Level("minuti_scartati", minuti), Level("attivita_scartate", numero)]
+
+
+def solve_chain(model, levels, *, estrai, time_limit=None, workers=None,
+                solver=None):
+    """Percorre la catena e restituisce `(stato, soluzione, esiti)`.
+
+    `estrai(solver)` fotografa la soluzione corrente: serve perché un livello
+    che non conclude **non annulla il lavoro dei precedenti**. La catena si
+    ferma lì, e ciò che si restituisce è la fotografia dell'ultimo livello
+    concluso — con il livello mancato dichiarato negli esiti, non nascosto.
+
+    ⚠ Il limite di tempo è **per livello**, non per la catena: è la forma
+    naturale (ogni livello è un `Solve`) e va detta, perché una catena di
+    quattro livelli con `time_limit=60` può spendere quattro minuti. Un livello
+    che scade lascia il proprio fissaggio all'ultimo valore trovato invece che
+    all'ottimo: la catena resta corretta, diventa meno ambiziosa.
+    """
+    # `solver` iniettabile: e' la cucitura con cui un test puo' far mancare un
+    # livello **deterministicamente**, invece di sperare che un limite di tempo
+    # morda. Il ramo «un livello non conclude» altrimenti non sarebbe affermato
+    # da nessun test.
+    solver = solver if solver is not None else cp_model.CpSolver()
+    if workers is not None:
+        solver.parameters.num_workers = int(workers)
+    if time_limit is not None:
+        solver.parameters.max_time_in_seconds = float(time_limit)
+    if levels:
+        # ⚠ Misurato, e non è un dettaglio di prestazioni: senza questo, la
+        # presolve **espande l'obiettivo** («objective: expanded via tight
+        # equality», 36 volte su un testimone da 32 attività). I booleani
+        # `piazzata` spariscono, al loro posto entrano nell'obiettivo 723
+        # letterali di cella, e il dominio iniziale passa da [0, 660] a
+        # [-35460, 2040]. Il solver trova `best:0` in un decimo di secondo e
+        # poi spende **sessanta secondi** a dimostrare che non esiste un ottimo
+        # negativo — vero per costruzione, ma non più per lui. Con la
+        # sostituzione spenta: `OPTIMAL` in 0,09 s.
+        solver.parameters.presolve_substitution_level = 0
+
+    if not levels:
+        stato = solver.Solve(model)
+        ammesso = stato in (cp_model.OPTIMAL, cp_model.FEASIBLE)
+        return stato, (estrai(solver) if ammesso else None), ()
+
+    esiti, soluzione, stato_buono = [], None, None
+    for level in levels:
+        model.Minimize(level.var)
+        inizio = time.monotonic()
+        stato = solver.Solve(model)
+        secondi = round(time.monotonic() - inizio, 3)
+        if stato not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            esiti.append(Esito(level.nome, None, False, secondi))
+            if soluzione is None:
+                return stato, None, tuple(esiti)
+            break
+        valore = solver.Value(level.var)
+        esiti.append(Esito(level.nome, valore, stato == cp_model.OPTIMAL, secondi))
+        soluzione, stato_buono = estrai(solver), stato
+        # il fissaggio: `<=` e non `==`, perché è un tetto sul livello già
+        # deciso e la soluzione appena trovata resta ammissibile per costruzione
+        model.Add(level.var <= valore)
+
+    return stato_buono, soluzione, tuple(esiti)

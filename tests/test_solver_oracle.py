@@ -503,13 +503,15 @@ def test_fermi_intero_misurato():
     constraint, identici a quelli dello spike a cinque vincoli** del
     2026-08-09, e lo stesso 0,56s.
 
-    ⚠ Dal 2026-08-26 i numeri sono **8425 e 1083**, e la differenza e' tutta
-    la macchina dello scarto, contata: +284 booleani `piazzata` (uno per
-    attivita' libera) e +1 per i minuti scartati; i 284 `AddExactlyOne`
-    diventano 284 `somma(celle) == piazzata`, quindi sui constraint resta il
-    solo +1 dell'uguaglianza dell'obiettivo. Il resto del modello e' identico
-    a prima, ed e' la forma in cui «le quote a zero danno il modello di oggi»
-    si vede su un dataset vero.
+    ⚠ Dal 2026-08-26 i numeri sono **8426 e 1086**, e la differenza e' tutta
+    la macchina dello scarto e della catena, contata. Variabili: +284 booleani
+    `piazzata` (uno per attivita' libera), +1 per i minuti scartati e +1 per il
+    numero di attivita' scartate — i due livelli. Constraint: i 284
+    `AddExactlyOne` diventano 284 `somma(celle) == piazzata` (netto zero), piu'
+    le due uguaglianze dei livelli e i **due fissaggi** che la catena aggiunge
+    percorrendola (`minuti <= v1`, `numero <= v2`). Il resto del modello e'
+    identico a prima, ed e' la forma in cui «le quote a zero danno il modello
+    di oggi» si vede su un dataset vero.
 
     Quindi «OPTIMAL sul Fermi col modello completo» **non e' una misura del
     modello completo**: e' una misura del dataset. La misura del modello sta
@@ -529,7 +531,12 @@ def test_fermi_intero_misurato():
         # Il Fermi si piazza per intero: nessuna rinuncia. Se un giorno
         # comparisse uno scarto qui, sarebbe la notizia — non un dettaglio.
         assert soluzione.stats["scartate"] == 0, soluzione.stats
-        assert soluzione.stats["variabili"] == 8425
-        assert soluzione.stats["constraint"] == 1083
+        assert soluzione.stats["variabili"] == 8426
+        assert soluzione.stats["constraint"] == 1086
+        # i due livelli hanno concluso, e con l'ottimo dimostrato
+        assert [l["nome"] for l in soluzione.stats["livelli"]] == [
+            "minuti_scartati", "attivita_scartate"]
+        assert all(l["ottimo"] and l["valore"] == 0
+                   for l in soluzione.stats["livelli"])
         apply(soluzione, dataset["schedule"])
         assert violazioni(dataset["schedule"], LEGALITA) == set()

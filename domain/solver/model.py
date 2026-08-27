@@ -9,6 +9,7 @@ from ortools.sat.python import cp_model
 
 from domain.models import Placement
 from domain.solver.context import SolverContext
+from domain.solver.objective import livelli_di_scarto, solve_chain
 from domain.solver.registry import all_builders
 from domain.solver.vocabulary import Vocabulary
 
@@ -84,51 +85,34 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
     osservano *quale* ottimo torna e non solo che ne torni uno: con più
     lavoratori CP-SAT restituisce l'ottimo che il primo thread trova, e due
     esecuzioni della stessa istanza possono dare due orari diversi — entrambi
-    ottimi, ma con fenomeni diversi da osservare."""
+    ottimi, ma con fenomeni diversi da osservare.
+
+    ⚠ `time_limit` è **per livello** della catena lessicografica, non per la
+    chiamata: vedi `solve_chain`."""
     started = time.monotonic()
     model, ctx = build_model(schedule, extraction=extraction,
                              allow_unplaced=allow_unplaced)
-    # L1 — si minimizzano le **ore** scartate, non il numero di attività (D1
-    # della spec): uno scarto da 3h fa più danno al monte ore di una classe di
-    # tre da 1h. Senza questo obiettivo «scarta tutto» è ammissibile, e CP-SAT
-    # la restituisce in un millisecondo.
-    if ctx.placed_var:
-        totale = sum(ctx.activities[aid].duration_minutes for aid in ctx.placed_var)
-        scarti = model.NewIntVar(0, totale, "minuti_scartati")
-        model.Add(scarti == sum(ctx.activities[aid].duration_minutes * (1 - piazzata)
-                                for aid, piazzata in ctx.placed_var.items()))
-        model.Minimize(scarti)
-    solver = cp_model.CpSolver()
-    if workers is not None:
-        solver.parameters.num_workers = int(workers)
-    if ctx.placed_var:
-        # ⚠ Misurato, e non è un dettaglio di prestazioni: senza questo, la
-        # presolve **espande l'obiettivo** («objective: expanded via tight
-        # equality», 36 volte su un testimone da 32 attività). I booleani
-        # `piazzata` spariscono, al loro posto entrano nell'obiettivo 723
-        # letterali di cella, e il dominio iniziale passa da [0, 660] a
-        # [-35460, 2040]. Il solver trova `best:0` in un decimo di secondo e
-        # poi spende **sessanta secondi** a dimostrare che non esiste un ottimo
-        # negativo — che è vero per costruzione, ma non lo è più per lui.
-        # Con la sostituzione spenta: `OPTIMAL` in 0,09 s.
-        # ⚠ Il dominio dichiarato dell'IntVar da solo **non basta**: anche lui
-        # viene sostituito. Misurato: bound -720, sempre 15 s pieni.
-        solver.parameters.presolve_substitution_level = 0
-    if time_limit is not None:
-        solver.parameters.max_time_in_seconds = float(time_limit)
-    status = solver.Solve(model)
+    livelli = livelli_di_scarto(ctx, model)
 
-    placements, unplaced = {}, ()
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for (aid, day, slot), var in ctx.x.items():
-            if solver.Value(var):
-                placements[aid] = (day, slot)
-        unplaced = tuple(sorted(aid for aid in ctx.activities
-                                if aid not in placements))
+    def estrai(solver):
+        return {aid: (day, slot) for (aid, day, slot), var in ctx.x.items()
+                if solver.Value(var)}
+
+    stato, placements, esiti = solve_chain(
+        model, livelli, estrai=estrai, time_limit=time_limit, workers=workers)
+
+    # ⚠ La distinzione è fra «nessuna soluzione» e «una soluzione senza
+    # piazzamenti»: un'istanza la cui unica attività è impiazzabile ha
+    # `placements` vuoto **ed** è una risposta. Guardare il dizionario invece
+    # del `None` fa sparire proprio lo scarto che si voleva nominare.
+    trovata = placements is not None
+    placements = placements or {}
+    unplaced = tuple(sorted(aid for aid in ctx.activities
+                            if aid not in placements)) if trovata else ()
 
     proto = model.proto if hasattr(model, "proto") else model.Proto()
     return Solution(
-        status=_STATUS.get(status, str(status)),
+        status=_STATUS.get(stato, str(stato)),
         placements=placements,
         unplaced=unplaced,
         stats={
@@ -137,6 +121,7 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
             "scartate": len(unplaced),
             "minuti_scartati": sum(ctx.activities[aid].duration_minutes
                                    for aid in unplaced),
+            "livelli": tuple(e.as_dict() for e in esiti),
             "variabili": len(proto.variables),
             "constraint": len(proto.constraints),
             "secondi": round(time.monotonic() - started, 3),

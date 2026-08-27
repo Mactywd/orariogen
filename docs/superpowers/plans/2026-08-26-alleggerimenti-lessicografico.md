@@ -75,13 +75,24 @@ task. Senza, «scarta tutto» è ammissibile e CP-SAT la restituisce.
 - [x] *(non previsto)* `presolve_substitution_level = 0` e `workers=1` nel
       banco. Le due misure sono nel changelog.
 
-## Task 2 — La catena
+## Task 2 — La catena ✅ (2026-08-26)
 
-- [ ] `objective.py`: livelli, fissaggio del valore ottenuto, limite di tempo
-      **per livello**, `stats` livello per livello.
-- [ ] L2: numero di attività scartate, come spareggio di L1.
-- [ ] Test di **monotonia**: L2 non peggiora L1. È la proprietà che regge anche
-      quando un livello scade in tempo.
+- [x] `objective.py`: livelli, fissaggio del valore ottenuto (`<=`, non `==`),
+      limite di tempo **per livello**, `stats` livello per livello.
+- [x] L2: numero di attività scartate, come spareggio di L1.
+- [x] Test di **monotonia** — ⚠ nella forma che morde: un'istanza dove L1 e L2
+      tirano in direzioni **opposte**. Con l'istanza a pareggio scritta per
+      prima, togliere il fissaggio lasciava la suite verde.
+- [x] *(non previsto)* La cucitura `solver=` iniettabile, e con essa i due rami
+      di caduta: un livello che **non conclude** (la catena si ferma ma
+      restituisce l'ultimo livello concluso) e uno che **non dimostra**
+      l'ottimo (`ottimo=False`, fissaggio all'ultimo valore trovato). Nessuno
+      dei due sarebbe stato affermato da un test, e farli scattare con un
+      limite di tempo stretto avrebbe prodotto test flaky.
+- [x] *(non previsto)* I test delle due esenzioni del banco sporco **cercano**
+      il fenomeno su una lista di semi dichiarata invece di appuntarne uno: i
+      fenomeni si erano spostati per la terza volta in una sessione, perché
+      sono proprietà della soluzione restituita e ogni ondata ne cambia una.
 
 ## Task 3 — Le quote, sulle famiglie a clausola
 

@@ -63,7 +63,8 @@ domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
                         e lo scarto come stato nominato (checkers/placement.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
-                        residuo di ADR-018, ventisei builder su ventisette
+                        residuo di ADR-018, ventisei builder su ventisette,
+                        e la catena lessicografica (objective.py)
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
 ```
 
@@ -152,11 +153,13 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > ottimizzazione lessicografica
 > ([spec](docs/superpowers/specs/2026-08-26-alleggerimenti-lessicografico-design.md),
 > [piano](docs/superpowers/plans/2026-08-26-alleggerimenti-lessicografico.md)):
-> la prima delle sette ondate è fatta, e il modello **ha smesso di pretendere
-> il piazzamento**. `AddExactlyOne` è diventato `somma(celle) == piazzata`,
+> le prime **due** ondate sono fatte. Il modello **ha smesso di pretendere il
+> piazzamento** — `AddExactlyOne` è diventato `somma(celle) == piazzata`,
 > l'attività che non ci sta resta **scartata** e un checker la nomina
-> (`structural:placement`, ventottesimo del registro), e L1 minimizza le ore
-> scartate. **458 test verdi**, 16 skip.
+> (`structural:placement`, ventottesimo del registro) — e sopra c'è la
+> **catena lessicografica** (`domain/solver/objective.py`): L1 le ore
+> scartate, L2 il loro numero, il fissaggio fra un livello e l'altro, il
+> limite di tempo per livello. **464 test verdi**, 16 skip.
 >
 > Restano i **due pezzi dichiarati fuori** — l'assegnazione delle aule e il
 > violatore di Hall (che non usa il solver: è un conteggio di capienza) — più
@@ -424,6 +427,60 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-26 (notte, pezzo 3 — ondata 2)** — **La catena lessicografica.**
+  `domain/solver/objective.py`: risolvi per il criterio 1, **fissa** quel
+  valore, passa al 2 — mai una somma pesata. Due livelli, L1 le ore scartate e
+  L2 il loro numero come spareggio (D1), il fissaggio a `<=` e non `==`, il
+  limite di tempo **per livello** (una catena di quattro livelli con
+  `time_limit=60` può spendere quattro minuti: va detto, non scoperto), e gli
+  `stats` che riportano ogni livello con nome, valore, **se l'ottimo è stato
+  dimostrato** e quanto è costato.
+
+  🔑 **La strategia a due passate di EDT è questa catena, non due esecuzioni.**
+  «Il piazzamento rispetta tutti i vincoli; se restano attività scartate,
+  potete alleggerire» è «L3 dopo L1»: si consuma un alleggerimento solo quando
+  riduce gli scarti, perché a scarti pari il livello dopo preferisce zero
+  violazioni.
+
+  ⚠ **E la mutazione ha bocciato il test del meccanismo centrale.** Il primo
+  test di monotonia usava un'istanza a **pareggio** — un blocco da 2h contro
+  due ore singole — dove L1 e L2 indicano la stessa risposta: togliere
+  `model.Add(level.var <= valore)`, cioè il fissaggio, lasciava la suite
+  **verde**. Riscritto su un'istanza in cui i due livelli tirano in direzioni
+  **opposte** (quattro fasce, un blocco da 3h più tre ore singole: L1 vuole
+  fuori due ore in due attività, L2 vorrebbe fuori tre ore in una sola), dove
+  la mutazione diventa rossa.
+
+  ⚠ **Due rami che nessun test poteva affermare**, e la cucitura che li rende
+  affermabili: un livello che **non conclude** (la catena si ferma, ma
+  restituisce la fotografia dell'ultimo livello concluso invece di buttare via
+  il lavoro) e uno che **non dimostra** l'ottimo. Farli scattare con un limite
+  di tempo stretto sarebbe stato un test flaky su una macchina più lenta: da
+  qui `solve_chain(solver=...)`, con due solver finti di sei righe. Entrambe le
+  mutazioni corrispondenti diventano rosse.
+
+  ⚠ **I due fenomeni del banco sporco si sono spostati per la terza volta**, ed
+  era prevedibile: sono proprietà della **soluzione restituita**, e ogni ondata
+  cambia l'obiettivo. Invece di ri-appuntare un seme, i due test ora
+  **cercano** il fenomeno su una lista dichiarata — provando più semi dentro
+  lo stesso test con un `transaction.atomic` annullato, perché ricostruire la
+  scuola due volte nella stessa transazione violerebbe l'unicità delle
+  anagrafiche. Il test afferma così la cosa che conta — *l'esenzione è
+  esercitata da qualcosa* — invece di una coincidenza fra un seme e una
+  configurazione del solver.
+
+  ⚠ **Un difetto introdotto e colto dai test dell'ondata 1**: `unplaced`
+  calcolato solo `if placements` faceva sparire lo scarto proprio nell'istanza
+  in cui l'unica attività è impiazzabile — la distinzione è fra «nessuna
+  soluzione» e «una soluzione senza piazzamenti», e va fatta sul `None`.
+
+  **I numeri.** Fermi: `OPTIMAL`, zero scarti, due livelli conclusi e
+  dimostrati, **8426 variabili e 1086 constraint** — +1 variabile per L2, +2
+  constraint per le uguaglianze dei livelli e +2 per i fissaggi che la catena
+  aggiunge percorrendola. Suite: **464 test verdi**, 16 skip, **92 s** contro i
+  74,8 di ieri: è il costo di due solve per istanza invece di uno, ed è la
+  ragione per cui il limite di tempo è per livello.
 
 - **2026-08-26 (notte, pezzo 3)** — **Il modello smette di pretendere il
   piazzamento.** Comincia il **pezzo 3** — alleggerimenti a quota e

@@ -89,44 +89,74 @@ def test_modello_sporco(seed):
           f"{esiti['soluzione'].status}")
 
 
+class _Rollback(Exception):
+    """Uscita da `transaction.atomic` che annulla la fixture: serve a provare
+    piu' semi dentro un test solo, perche' ricostruire la scuola due volte
+    nella stessa transazione violerebbe l'unicita' delle anagrafiche."""
+
+
+def _cerca(fenomeno, semi):
+    """Il primo seme di `semi` che esercita `fenomeno`, o None.
+
+    ⚠ Perche' una **ricerca** e non un seme appuntato: i due fenomeni sono
+    proprieta' della **soluzione restituita**, non dell'istanza. Cambia
+    l'obiettivo — e questo pezzo ne aggiunge uno per ondata — e il solver
+    sceglie un altro ottimo, altrettanto valido, in cui il fenomeno non
+    compare. Appuntando un seme il test va rimisurato a ogni ondata (misurato:
+    tre volte in una sessione, spostandosi fra 7, 11, 16, 20 e 24); cercando
+    su una lista dichiarata, il test afferma la cosa che conta davvero —
+    **l'esenzione e' esercitata da qualcosa**.
+
+    Resta un test che puo' fallire, ed e' voluto: se nessuno dei semi esercita
+    piu' l'esenzione, quell'esenzione non e' piu' affermata da niente e va
+    rimisurata o rimossa."""
+    from django.db import transaction
+    for seme in semi:
+        esito = None
+        try:
+            with transaction.atomic():
+                esito = run_modello_sporco(seme)
+                raise _Rollback
+        except _Rollback:
+            pass
+        if esito is not None and esito[3][fenomeno]:
+            return seme, esito[3]
+    return None
+
+
+# I semi su cui cercare. Ristretti apposta: la ricerca costa un solve per seme,
+# e questi sono quelli che hanno esercitato l'uno o l'altro fenomeno in almeno
+# una delle configurazioni provate.
+SEMI_FENOMENI = [12, 16, 20, 24, 35, 7, 11]
+
+
 def test_l_esenzione_del_ramo_pigro_e_esercitata():
     """Un'esenzione che non scatta mai non e' un'esenzione: e' codice che
-    nessun test afferma. Qui si pretende che scatti su un seme dichiarato,
-    cosi' che toglierla faccia diventare rosso qualcosa.
+    nessun test afferma.
 
-    ⚠ Fino al 2026-08-26 il seme 20 esercitava **entrambe** le esenzioni, e
-    il test era uno solo. Con lo scarto ammesso e L1 attivo i due fenomeni si
-    sono separati, perche' sono proprieta' della **soluzione restituita**, non
-    dell'istanza: cambia l'obiettivo, cambia l'ottimo che il solver sceglie,
-    si spostano.
-
-    ⚠⚠ E la prima volta che li si e' rimisurati erano ancora **instabili fra
-    un'esecuzione e l'altra**: verdi da soli, rossi nella suite intera. Non
-    era il seme, era la ricerca in parallelo — con piu' lavoratori CP-SAT
-    restituisce l'ottimo che il primo thread trova. Da qui `workers=1` nella
-    prova B del banco (vedi `solver_harness.run_modello_sporco`): rimisurati
-    due volte di fila con lo stesso esito, il ramo pigro sta al 20 (e al 35,
-    41, 45, 52) e la deriva d'identita' all'11, unico su sessanta semi."""
-    esito = run_modello_sporco(20)
-    assert esito is not None
-    _w, _congelate, _libere, esiti = esito
-    assert esiti["pigro"], (
-        "nessun ramo pigro al seme 20: l'esenzione sul debito di §9.7 non e' "
-        "piu' esercitata da nessun test — rimisurare i semi, non togliere il "
-        "test")
+    Il ramo pigro (§9.7 della spec del modello hard): senza funzione di costo
+    `riparato` e `riparato.Not()` sono alla pari, e con le libere non ancora
+    piazzate il ramo status quo diventa vacuo. Si vede come uno **scambio** —
+    `free_guaranteed` ripara la soglia delle mezze giornate e rompe quella dei
+    giorni, che era soddisfatta."""
+    trovato = _cerca("pigro", SEMI_FENOMENI)
+    assert trovato is not None, (
+        f"nessun ramo pigro su {SEMI_FENOMENI}: l'esenzione sul debito di "
+        f"§9.7 non e' piu' esercitata da nessun test — rimisurare i semi, non "
+        f"togliere il test")
+    seme, esiti = trovato
+    print(f"\nramo pigro al seme {seme}: {len(esiti['pigro'])} occorrenze")
 
 
 def test_l_esenzione_della_deriva_d_identita_e_esercitata():
-    """L'altra meta' del test di sopra, sul seme che la esercita oggi (11):
-    ⚠ **uno solo su sessanta semi provati**, quindi il piu' fragile dei due —
-    se sparisce, si riscansiona prima di concludere qualunque cosa.
-    stessa causale, stessa risorsa, stesse quantita', **altra** coppia
-    nominata in `activities` — il finding cambia identita' senza che la
-    violazione cambi."""
-    esito = run_modello_sporco(11)
-    assert esito is not None
-    _w, _congelate, _libere, esiti = esito
-    assert esiti["deriva"], (
-        "nessuna deriva d'identita' al seme 11: l'esenzione `_grossa` non e' "
-        "piu' esercitata da nessun test — rimisurare i semi, non togliere il "
-        "test")
+    """L'altra esenzione: stessa causale, stessa risorsa, stesse quantita',
+    **altra** coppia nominata in `activities`. Il finding cambia identita'
+    senza che la violazione cambi, perche' piazzare una libera accanto a una
+    congelata cambia *quale* coppia e' l'argmin."""
+    trovato = _cerca("deriva", SEMI_FENOMENI)
+    assert trovato is not None, (
+        f"nessuna deriva d'identita' su {SEMI_FENOMENI}: l'esenzione "
+        f"`_grossa` non e' piu' esercitata da nessun test — rimisurare i "
+        f"semi, non togliere il test")
+    seme, esiti = trovato
+    print(f"\nderiva d'identita' al seme {seme}: {len(esiti['deriva'])} occorrenze")
