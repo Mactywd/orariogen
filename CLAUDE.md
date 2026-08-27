@@ -144,7 +144,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > vincolo da postare). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **568 test verdi**, 16 skip tutti misurati e attribuiti
+> minimo. **571 test verdi**, 16 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -431,6 +431,72 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-27 (review)** — **La review del pezzo 3, applicata: un errore di
+  unità che spegneva un vincolo, e un'attribuzione decisa dall'ordine dei pk.**
+  Sei rilievi su alleggerimenti e catena lessicografica, tutti chiusi. Il
+  risultato positivo va detto per primo: **nessun builder più largo del
+  checker**, nessuna traduzione sbagliata. I difetti stanno nelle unità di
+  misura, nell'attribuzione delle quote e nella forma delle API.
+
+  🔑 **Il margine di `MAX_PRESENCE` è in *ore*, e veniva sommato anche al tetto
+  dei *giorni*.** Con «margine 60» un tetto di «al massimo 1 giornata» diventava
+  61: il vincolo si spegneva, in silenzio. La fonte lo dice per nome
+  (`docs/edt/estratti/motore-punti-aperti.md`: *«MaxPresentielProf … | ore»*),
+  e il tetto dei giorni non è alleggeribile con quella grandezza.
+  ⚠ **Il test che c'era non poteva vederlo**: `mini_school(days=1)` contro un
+  tetto `days: 5` rende quel ramo irraggiungibile. È la forma consueta di
+  vacuità di questo progetto — un verde incapace di fallire — stavolta su una
+  famiglia scritta il giorno prima.
+
+  ⚠ **E lo stesso margine si consumava una volta per l'intera settimana.** Un
+  letterale solo per riga, issato fuori dal ciclo sui giorni, significa «due
+  giorni sforati al prezzo di una quota», mentre la riga di EDT dice «una volta
+  per settimana e per docente» — cioè conta le **volte**. Ora è per giorno, come
+  in `MAX_HOURS`, che quotava la stessa frase in modo opposto.
+  ⚠ `SITES` **resta com'era**, ed è una divergenza ora **dichiarata** invece che
+  accidentale: in francese quella riga dice *par semaine*, quindi un'allowance
+  settimanale e un letterale per riga sono difendibili.
+
+  ⚠ **La quota di una riga di materia si deduceva col minimo delle chiavi**, e
+  dava tre risposte diverse: la classe (per un accidente di chiavi esterne —
+  `ClassPartition` punta alla `SchoolClass`, quindi la classe prende il
+  `Resource.pk` più basso), la **parte** su una riga di parte, e una parte
+  **qualunque** su una riga di raggruppamento. Un raggruppamento è trasversale
+  (ADR-013): non esiste «la» sua classe, e attribuirgli la quota di un membro a
+  caso è un'attribuzione decisa dall'ordine di creazione delle righe.
+  `risorsa_di(row)` ora **legge** il campo che il `CheckConstraint` obbliga la
+  riga ad avere, e sul raggruppamento dà `None`, cioè la quota generica.
+
+  🔑 **`deroga()` restituiva `letterale | None`, e la prova che l'astrazione
+  mancava era già nel codice**: quattro call site ripetevano lo stesso
+  null-check, e il quinto (`post_cross`) si era scritto una chiusura locale per
+  non ripeterlo altre cinque volte. Quando un call site cresce un involucro
+  attorno a un helper, l'involucro appartiene all'helper. Ora restituisce sempre
+  un oggetto con `.applica(vincolo)`, e senza quota è l'oggetto nullo — la
+  stessa forma per cui `margine()` restituisce l'intero `0`.
+
+  Più tre pulizie: `AddExactlyOne([])` è **già** INFEASIBLE (verificato), quindi
+  il ramo `dominio_vuoto` e il suo booleano contraddittorio spariscono;
+  l'uscita anticipata di `livelli()` **dichiara** di confondere due condizioni
+  («niente di libero» e `allow_unplaced=False`) e la conseguenza in quella
+  modalità — quote non minimizzate, rami di ADR-018 di nuovo alla pari, con
+  l'oracolo di Hall fra i chiamanti; e la guardia di `qualcuna_piazzata` porta
+  gli id nel nome invece di un `hash(aids) & 0xffff`, che troncato a sedici bit
+  collideva.
+
+  **Tre test nuovi, tre mutazioni, tre esiti distinti** — nessuno passa per
+  caso. Suite: **571 test verdi**, 16 skip. Fermi invariato (8426 variabili,
+  1086 constraint): il dataset non ha righe `RelaxationQuota`, quindi nessuno
+  di questi letterali nasce lì — che è, di nuovo, la ragione per cui il Fermi
+  misura il costo e mai la copertura.
+
+  **Igiene**, dai residui di una sessione lavorata senza worktree: `AGENTS.md`
+  era una copia di `CLAUDE.md` ferma al 2026-07-26 — 615 righe contro 1922,
+  senza solver, analisi, Hall e pezzo 3 — cioè il peggior tipo di documento
+  invecchiato, autorevole e caricato in automatico. Verificato che non portasse
+  nulla di suo, è diventata un **symlink**. E `.claude/` entra nel `.gitignore`:
+  ci viveva un worktree registrato di 6,4 MB dentro il repository.
 
 - **2026-08-27** — **Il merge delle due linee, e il criterio dell'oracolo di
   Hall che il pezzo 3 aveva reso vuoto.** `master` e `origin/master` erano
