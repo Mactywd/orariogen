@@ -48,6 +48,8 @@ CAUSALI: dict[str, str] = {
     "weight_afternoon": "Limite dei pesi didattici superato nel pomeriggio",
     "weight_week": "Limite settimanale dei pesi didattici superato",
     "coverage_mismatch": "{unit}, {subject}: monte ore delle attività diverso dal servizio",
+    # lo scarto (pezzo 3, ondata 1)
+    "activity_unplaced": "{subject}, l'attività non è piazzata",
 }
 
 

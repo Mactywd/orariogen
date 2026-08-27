@@ -60,10 +60,14 @@ results.md             output dell'ultima esecuzione del prototipo
 requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
-  analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza, il violatore di Hall (fase 5, hall.py)
+  analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
+                        il violatore di Hall (fase 5, hall.py) e lo scarto come
+                        stato nominato (checkers/placement.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
-                        residuo di ADR-018, ventisei builder su ventisette
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale)
+                        residuo di ADR-018, ventisei builder su ventisette,
+                        la catena lessicografica (objective.py) e le quote
+                        di alleggerimento (relaxation.py)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, il comando solve)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -133,13 +137,15 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
 > predicati e l'analisi di capienza **sono anch'essi implementati**
 > (`domain/analysis/`); e il **modello CP-SAT hard è completo**
-> (`domain/solver/`): **ventisei builder su ventisette checker**, e il
-> ventisettesimo (`structural:coverage`) non ne ha uno per costruzione —
-> `PLACEMENT_INDEPENDENT`, il solver non crea né distrugge attività. Il
-> **violatore di Hall** (fase 5 dell'Analisi dei vincoli, `domain/analysis/hall.py`)
-> **è anch'esso implementato**: nessun solver, teorema di Hall in forma
-> deficitaria su flusso massimo e taglio minimo. **525 test verdi**, 16 skip
-> tutti misurati e attribuiti (`venv/bin/pytest`).
+> (`domain/solver/`): **ventisei builder su ventotto checker**, e i due senza
+> builder non ne hanno uno per costruzione — `structural:coverage`
+> (`PLACEMENT_INDEPENDENT`: il solver non crea né distrugge attività) e
+> `structural:placement` (lo scarto *è* il meccanismo del modello, non un
+> vincolo da postare). Il **violatore di Hall** (fase 5 dell'Analisi dei
+> vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
+> solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
+> minimo. **568 test verdi**, 16 skip tutti misurati e attribuiti
+> (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
 > righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
@@ -150,9 +156,32 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > testimone: 22–23 famiglie con righe su 26, 48–73 righe, `OPTIMAL` su tutti e
 > cinque i seed, oracolo pulito.
 >
-> Restano i **due pezzi dichiarati fuori**: l'assegnazione delle aule e gli
-> alleggerimenti a quota con l'ottimizzazione lessicografica. Più i punti
-> aperti elencati sotto.
+> Dal 2026-08-26 il **pezzo 3 è completo** — alleggerimenti a quota e
+> ottimizzazione lessicografica
+> ([spec](docs/superpowers/specs/2026-08-26-alleggerimenti-lessicografico-design.md),
+> [piano](docs/superpowers/plans/2026-08-26-alleggerimenti-lessicografico.md)),
+> sette ondate su sette. Il modello **ha smesso di pretendere il piazzamento**:
+> `AddExactlyOne` è diventato `somma(celle) == piazzata`, l'attività che non ci
+> sta resta **scartata** e un checker la nomina (`structural:placement`,
+> ventottesimo del registro). Sopra c'è la **catena lessicografica**
+> (`domain/solver/objective.py`) a quattro livelli — ore scartate, numero di
+> attività, violazioni nuove, spostamenti rispetto all'orario precedente — con
+> fissaggio fra un livello e l'altro, limite di tempo **per livello** e il
+> suggerimento che passa la soluzione al livello successivo. Le **quote**
+> (`domain/solver/relaxation.py`) coprono tutte le famiglie che EDT dichiara
+> alleggeribili, nelle due forme *margine* e *deroga*, con i tetti per
+> (famiglia, risorsa) e per risorsa. E c'è **`manage.py solve`**.
+>
+> Con L3 si chiude anche il debito del «ramo pigro» di §9.7, e la prova è una
+> misura: su 60 semi del banco che congela il fenomeno non compare più, quindi
+> l'esenzione che lo perdonava è stata **rimossa**.
+>
+> Fermi: `OPTIMAL`, zero scarti, 8426 variabili e 1086 constraint, 1,2 s dal
+> comando.
+>
+> Resta **un solo pezzo dichiarato fuori** — l'assegnazione delle aule — più i
+> punti aperti elencati sotto e i criteri di qualità di EDT (i buchi, la
+> distribuzione, le preferenze verdi), che sono il livello sopra questa catena.
 
 ### Prototipo solver — parcheggiato
 
@@ -342,33 +371,25 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
       `tests/solver_harness.py`) invece di un'eccezione implicita. Il fenomeno
       è quindi più largo di quanto §9.5 dichiarasse: riguarda ogni famiglia il
       cui finding nomina l'argmin invece del secchio intero.
-- [ ] ⚠ **Il ramo «status quo» è pigro, e nel caso misto spegne la riga.**
-      Riguarda la **famiglia** dei rami disgiuntivi introdotti da ADR-018 —
-      `WeeklyOrderBuilder` dal Task 12, `MinDistributionBuilder` e
-      `FreeGuaranteedBuilder` dal 2026-08-26 — non i singoli builder. Il
-      modello non ha funzione di costo, quindi `riparato` e `riparato.Not()`
-      sono alla pari e CP-SAT non ha motivo di preferire la riparazione. Nel
-      solve incrementale «poche congelate + libere non ancora piazzate» la
-      baseline del checker è quasi sempre già violata **perché nulla è
-      piazzato**, `B` vale quanto qualificano le sole congelate, e il ramo
-      status quo diventa **vacuo**: la riga smette di vincolare. Misurato —
-      una congelata, sei libere mai piazzate, `min_days=3`: ammassarle tutte
-      su due giorni è ammesso, mentre prima era vietato (al prezzo però di
-      `INFEASIBLE` su 33 istanze sporche su 45). È perdita di **qualità**, non
-      di correttezza: nessun finding nuovo, l'oracolo differenziale regge. Tre
-      strade in §9.7 della spec, nessuna adottata. ⚠ **Ora misurato anche dal
-      banco che congela** (2026-08-26 sera), che è la prima volta che questo
-      debito si vede da solo invece di essere dichiarato — e in una forma più
-      precisa di quella dichiarata qui: è uno **scambio**, non un peggioramento
-      secco. `free_guaranteed` passa da `free_days 4 / free_half_days 1` a
-      `free_days 1 / free_half_days 4`: ripara la soglia delle mezze e rompe
-      quella dei giorni, che era soddisfatta. Il banco lo esenta
-      **strettamente** — solo un peggioramento su una (causale, risorsa) già
-      violata, mai una violazione su una risorsa pulita.
+- [x] ⚠ ~~**Il ramo «status quo» è pigro, e nel caso misto spegne la riga.**~~
+      **Chiuso il 2026-08-26 (pezzo 3, ondata 5).** La causa era testuale — il
+      modello non aveva funzione di costo, quindi `riparato` e `riparato.Not()`
+      erano alla pari — e **L3 gliene ha data una**: minimizza le riparazioni
+      mancate insieme alle quote consumate. Non cambia cosa il modello ammette,
+      cambia cosa preferisce. La prova è una misura, non un argomento: su **60
+      semi** del banco che congela il fenomeno non compare più (prima: 20, 35,
+      41, 45, 52), e l'esenzione che lo perdonava è stata **rimossa** insieme
+      al suo test. Il banco è ora più severo: se tornasse, sarebbe rosso.
 
-- [ ] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
+- [~] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
       piazzamento**, e il tetto **settimanale** del peso didattico è il primo
-      caso incontrato. `AddExactlyOne` obbliga a piazzare ogni attività, e il
+      caso incontrato. ⚠ **Metà chiuso il 2026-08-26 (pezzo 3, ondata 1)**: la
+      «somma costante» che rendeva il vincolo vero-sempre o falso-sempre era
+      `AddExactlyOne`. Con lo scarto ammesso il tetto torna evadibile come lo
+      evade EDT — scartando — e la chiave grossolana diventa una scelta invece
+      di un obbligo. Resta il caso in cui a sforare sono le **sole congelate**,
+      che è un fatto e non una decisione. Il testo che segue è quello
+      originale, e vale per quella metà. `AddExactlyOne` obbliga a piazzare ogni attività, e il
       secchio settimanale di un'unità-studente contiene *tutte* le sue celle
       candidate: la somma dei letterali liberi è quindi una **costante**, e il
       vincolo è vero sempre o falso sempre. Ne discendono due cose. La prima è
@@ -410,6 +431,70 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-27** — **Il merge delle due linee, e il criterio dell'oracolo di
+  Hall che il pezzo 3 aveva reso vuoto.** `master` e `origin/master` erano
+  divergenti — diciannove commit locali del violatore di Hall contro undici del
+  pezzo 3, entrambi partiti dal merge della PR #1. Un solo conflitto testuale
+  (questo file); tutto il codice si è fuso da solo. **Ma le due linee si
+  contraddicevano nel merito**, e la suite l'ha detto: **cinque rossi**.
+
+  🔑 **Il pezzo 3 ha tolto da sotto i piedi alla fase 5 la sua unica prova.**
+  Il modello ha smesso di pretendere il piazzamento, quindi un insieme
+  deficiente non risponde più `INFEASIBLE`: **rinuncia**. La direzione 1
+  dell'oracolo — «se la fase 5 dichiara un insieme infattibile, il solver deve
+  rispondere INFEASIBLE» — chiedeva al solver una risposta che il solver non dà
+  più. Riscritta su **due** modelli: `allow_unplaced=False`, che è il modello di
+  prima dello scarto e che il suo stesso docstring chiama «il modo di chiedere:
+  questo vincolo morde?», deve dare `INFEASIBLE`; e col modello vero i **minuti
+  scartati** devono essere **esattamente** quelli che la fase 5 ha dichiarato
+  mancanti. La seconda metà è più forte di ciò che c'era prima: non conferma
+  che una deficienza esista, ne conferma l'**aritmetica**. Misurato sull'istanza
+  dell'oracolo: deficit dichiarato `420 − 360 = 60`, minuti scartati **60**.
+  ⚠ E la prova che non è un'asserzione di comodo è una **mutazione che il
+  vecchio criterio non avrebbe colto**: sbagliando di una fascia la capienza in
+  `hall.py` (`capacity - 1`), il test diventa rosso — mentre l'`INFEASIBLE` di
+  prima sarebbe passato indisturbato.
+
+  ⚠ **E il test che *non* era rosso era il peggiore dei due.**
+  `test_il_solver_conferma_anche_il_confine` continuava a passare: asserisce
+  `OPTIMAL`, e col pezzo 3 `OPTIMAL` è la risposta anche all'istanza
+  deficiente. La coppia era stata scritta perché la seconda metà impedisse a
+  una fase 5 «tutto infattibile» di passare la prima — e aveva smesso di poter
+  fallire in entrambe le direzioni. **L'ottava forma di vacuità di questo
+  progetto**, e la prima arrivata non da una svista ma da un merge: nessuno dei
+  due lati era sbagliato *da solo*. Ciò che separa le due istanze non è più lo
+  stato ma la rinuncia — **60 minuti là, zero qui** — ed è così che il confine
+  è riscritto.
+
+  ⚠ **La terza prova per `INFEASIBLE` passava per la ragione sbagliata.** In
+  `test_il_rilassamento_non_ha_spento_la_fase_5` la riga `MIN_DISTRIBUTION`
+  (min_days 3, docente libero un giorno solo) è una causa **indipendente e
+  sufficiente** di infattibilità: misurato, col modello che ammette lo scarto
+  la risposta è `INFEASIBLE` con **zero** minuti scartati, cioè l'infattibilità
+  non viene dalla capienza che il test crede di misurare. Passata a
+  `allow_unplaced=False` e **dichiarata**: quella metà *corrobora e non isola*,
+  l'isolamento è nell'oracolo.
+
+  🔑 **Un difetto di prestazione trovato per lettura, non cercato.** Il checker
+  nuovo del pezzo 3 (`structural:placement`) ereditava
+  `PLACEMENT_MONOTONE = True`, ma piazzare **ripara** la sua violazione — che è
+  la definizione stessa di non monotono scritta in `domain/analysis/domain_size.py`.
+  Sotto il criterio `chiavi_nuove = dopo − baseline` un checker che sa solo
+  *togliere* chiavi non ne produce mai di nuove, quindi la marcatura **non
+  cambia il verdetto di nessuna cella**: cambia il **costo**. Senza,
+  `admissible_starts` scorreva tutte le attività non piazzate per ogni cella di
+  prova, e la fase 5 sul Fermi era passata da **0,326 s a 1,887 s** — una
+  regressione di 5,8× che nessun test misurava, perché la soglia era `< 5.0`.
+  Marcato non monotono: **0,326 s**, il numero che il changelog dichiarava.
+
+  I quattro test di monotonia asserivano liste esatte di causali HARD, ora
+  sporcate da `activity_unplaced`: l'attività libera lì è deliberatamente non
+  piazzata, cioè la **premessa** e non un esito. Aggiunto `_violazioni()`, che
+  toglie l'incompletezza e lascia le violazioni di vincolo — il checker stesso
+  dichiara di descrivere «un orario incompleto, non illegale».
+
+  Suite dopo il merge: **568 test verdi**, 16 skip in ~100 s.
 
 - **2026-08-26 (notte, hall)** — **Il violatore di Hall: la fase 5,
   implementata senza solver.** Sette task sul branch `hall-violator`, sopra
@@ -649,6 +734,336 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
 
   **Suite a fine lavoro**: `venv/bin/pytest -q` → **525 test verdi**, 16 skip
   in ~85 s.
+
+- **2026-08-26 (notte, pezzo 3 — ondata 7)** — **`manage.py solve`, e il pezzo
+  3 è chiuso.** Il comando nella forma di `analyze`: stato, dimensioni del
+  modello, i **criteri in ordine di priorità** con valore, se l'ottimo è
+  dimostrato e quanto è costato, e gli scarti **nominati** uno per uno con
+  materia, classe e docente — non «infeasible», ma *chi* è rimasto fuori.
+  ⚠ Non scrive niente senza `--applica`: un solve sovrascrive l'orario di una
+  scuola, e il default non può essere scrivere. Exit code ≠ 0 se resta qualcosa
+  di scartato, come `analyze`; e dopo `--applica` le **violazioni residue** si
+  dichiarano, perché un orario illegale è uno stato ammesso.
+
+  🔑 **E il comando ha trovato un difetto della catena.** Sul Fermi L2 costava
+  **4,07 s** contro gli 0,47 s di L1 — per riscoprire lo stesso orario da zero.
+  Ogni livello ripartiva senza sapere nulla del precedente. Con la soluzione
+  del livello concluso passata come **suggerimento**: 0,27 s, e il totale del
+  comando da 4,9 s a **1,2 s**. ⚠ `AddHint` accumula, quindi `ClearHints`
+  prima — senza, a quattro livelli il proto porta quattro copie dei
+  suggerimenti; un test lo tiene fermo contandoli.
+
+  **Il pezzo 3 è completo**: sette ondate su sette. Suite: **493 test verdi**,
+  16 skip.
+
+- **2026-08-26 (notte, pezzo 3 — ondata 6)** — **L4: la stabilità fra
+  periodi.** L'ultimo livello minimizza le attività che cambiano cella rispetto
+  ai `Placement` esistenti. È la conseguenza di [ADR-010](docs/decisioni.md)
+  rimasta scoperta da luglio — rigenerando l'orario a ogni periodo serve un
+  criterio «mantieni il più possibile le collocazioni precedenti», o il secondo
+  quadrimestre viene stravolto per tutti — ed è anche ciò che EDT minimizza nel
+  risolutore passo-passo. Come previsto da D4, è costato un `minimize`, non
+  un'architettura.
+
+  ⚠ **Ultimo, e l'ordine è provato da un test**: conservare una collocazione
+  non vale uno scarto. ⚠ E il primo test scritto per quella proprietà **non
+  discriminava** — due ore accatastate nella stessa cella danno un movimento in
+  entrambi gli ordini, perché anche scartare un'attività già piazzata conta
+  come spostamento. Riscritto su un'istanza dove i due ordini danno risposte
+  diverse: con L1 prima si piazzano entrambe e la vecchia si sposta; con L4
+  prima la vecchia resta e la nuova viene scartata.
+
+  Suite: **486 test verdi**, 16 skip.
+
+- **2026-08-26 (notte, pezzo 3 — ondata 5)** — 🔑 **L3, e il debito di §9.7
+  chiuso da una misura.** Il terzo livello della catena conta le **violazioni
+  nuove** che il modello si concede: le quote consumate e le riparazioni
+  mancate dei rami disgiuntivi di ADR-018. Due conteggi distinti sommati in un
+  livello solo — un conteggio, non una somma pesata — e restano separati dove
+  conta: una riparazione mancata **non consuma quota**, perché non è un
+  alleggerimento.
+
+  **Il debito era testuale**: «il modello non ha funzione di costo, quindi
+  `riparato` e `riparato.Not()` sono alla pari e CP-SAT non ha motivo di
+  preferire la riparazione». Adesso ne ha uno. Non cambia cosa il modello
+  ammette — cambia cosa preferisce — ed era la quarta strada, quella senza
+  rischio semantico, delle tre che §9.7 elencava senza adottarne nessuna.
+
+  ⚠ **E la prova non è un argomento, è una misura**: dopo L3 il ramo pigro non
+  compare più su **60 semi** del banco che congela, dove prima c'era ai semi
+  20, 35, 41, 45 e 52. Quindi **l'esenzione che lo perdonava è stata rimossa**
+  da `_classifica_nuove`, insieme al test che la esercitava — un'esenzione che
+  non scatta mai non è un'esenzione, è codice che nessun test afferma. Il banco
+  è ora **più severo di prima**: se il fenomeno tornasse diventerebbe rosso
+  invece di perdonarlo in silenzio, e rimetterlo sarebbe una decisione da
+  prendere guardando la misura.
+
+  ⚠ **Il primo test scritto per L3 non discriminava**, ed è la solita forma:
+  provava che il solver *ripara*, ma senza L3 il solver può riparare **per
+  caso** — misurato, restava verde con la mutazione. Sostituito da due test sul
+  valore del livello: la riparazione mancata contata quando riparare è
+  impossibile (una griglia di due giorni con `min_days=3`), e la quota non
+  consumata quando non serve. Tre mutazioni, tre rossi, ciascuno sul test
+  giusto.
+
+  Suite: **484 test verdi**, 16 skip.
+
+- **2026-08-26 (notte, pezzo 3 — ondata 4)** — **I pre-filtri, e il task che
+  aveva la premessa sbagliata.** L'ondata era scritta come «le quote nei
+  pre-filtri». Controllando i documenti **prima** di scrivere il codice, la
+  premessa è caduta: in EDT l'indisponibilità **rossa non si alleggerisce
+  mai**, e la **gialla si rispetta come la rossa** — l'utente può autorizzare
+  il motore a ignorarla, ma con un'**opzione di calcolo per categoria di
+  risorsa** («Piazza le attività anche sulle fasce con indisponibilità
+  opzionali», declinata sulle cinque risorse), mai selettiva sulla singola.
+  Non è una quota. È §9.8 di nuovo, stavolta su un piano scritto poche ore
+  prima.
+
+  ⚠ **E la verifica ha trovato un difetto vero: il solver era più permissivo
+  di EDT su una famiglia intera.** Il pre-filtro ignorava il giallo del tutto —
+  si comportava come se l'override fosse sempre acceso — e **il test che
+  c'era affermava il comportamento sbagliato**, chiamandosi
+  `test_giallo_e_verde_non_restringono`. Ora il giallo restringe come il
+  rosso, l'override è il parametro `ignora_opzionali` per `Resource.Kind`, e
+  il verde resta fuori: è una preferenza, e il suo posto è un livello di
+  qualità della catena, non un pre-filtro.
+
+  ⚠ **Due famiglie dell'enum non sono quote**, e ora è dichiarato invece che
+  implicito: `UNAVAILABILITY` e `OPTIONAL_UNAVAILABILITY` restano nello schema
+  approvato ma nessun builder le consulta. Un test lo tiene fermo — con una
+  quota da cinque violazioni sull'indisponibilità rossa, il modello resta
+  `INFEASIBLE` — così che chi volesse renderle quote debba prima cancellarlo e
+  leggerne il perché.
+
+  Suite: **483 test verdi**, 16 skip.
+
+- **2026-08-26 (notte, pezzo 3 — ondata 3b)** — **Tutte le famiglie
+  alleggeribili.** Agganciate le restanti: presenza massima, massimo di mezze
+  giornate (tetto **e** «solo mezza giornata al giorno», che è una deroga),
+  entrate/uscite, giorni e mezze giornate libere, cambi di sede, peso
+  didattico, massimo di ore di una materia e sequenze indesiderate.
+
+  ⚠ **Sulle soglie il margine si sottrae, e va al ramo giusto.** «Togli se
+  necessario … mezze giornate libere per settimana» abbassa la soglia; ma nel
+  ramo disgiuntivo di ADR-018 si applica **solo** alla riparazione, mai allo
+  status quo — quello non è una soglia da alleggerire, è il divieto di
+  peggiorare rispetto alla baseline, e alleggerirlo autorizzerebbe un
+  peggioramento del passato, che è un'altra cosa da quella che la finestra di
+  EDT concede.
+
+  ⚠ **Un letterale per riga, non per parametro.** Presenza (minuti + giorni),
+  giorni liberi (giorni + mezze), sedi (per giorno + per settimana): sono due
+  parametri dello stesso alleggerimento, e due quote consumate per una sola
+  concessione sarebbero state un errore che nessun test avrebbe visto.
+
+  ⚠ **Le righe di materia sono tre famiglie, non una.** La finestra di EDT le
+  tiene distinte — `Incompatibilità materie`, `Massimo di ore delle materie`,
+  `Sequenze indesiderate di materie` — con quote separate, e il nostro enum ne
+  aveva una sola: aggiunte `SUBJECT_MAX_HOURS` e `SUBJECT_SEQUENCE`
+  (migrazione `0009`). Condividere una quota fra un margine e una deroga
+  sarebbe stata una deviazione silenziosa dal prodotto.
+
+  🔑 **E l'ondata 1 ha reso falso un argomento scritto in `weight.py`.** Il
+  salto sul secchio settimanale inevadibile era giustificato dal fatto che «la
+  somma dei letterali liberi è una costante» — vero solo con `AddExactlyOne`.
+  Ora non lo è più: il clamp non sarebbe *contraddittorio*, sarebbe la pretesa
+  che il presente **scarti** per espiare il peso del passato. La conclusione
+  regge, l'argomento no, e il commento è stato riscritto invece di lasciarlo
+  invecchiare. Stessa sorte per il commento di `post_separable` e per quello
+  del peso, che citavano `AddExactlyOne` per una proprietà che oggi discende
+  da `piazzata`.
+
+  **Quindici test su diciassette cadono** con una sola mutazione — il
+  meccanismo che non concede niente — e i due che restano verdi sono quelli
+  che devono restarlo: «senza righe il modello è quello di prima» e «una quota
+  a zero è come non averla». Suite: **481 test verdi**, 16 skip.
+
+- **2026-08-26 (notte, pezzo 3 — ondata 3a)** — **Le quote: un vincolo
+  rilassabile non diventa soft.** `domain/solver/relaxation.py`, il meccanismo
+  e due famiglie. Istruzione letterale del prodotto: *«Sbloccate i vincoli da
+  alleggerire e selezionateli per quantificare il margine di manovra concesso
+  al calcolo»* — non esiste «spegni il vincolo», resta hard con un numero
+  massimo di violazioni attribuito per famiglia e per risorsa.
+
+  **Due forme, perché le righe della finestra `Alleggerimenti` sono di due
+  tipi**: il **margine**, dove il vincolo si allarga di una quantità dichiarata
+  (`expr <= tetto + margine·v`), e la **deroga**, dove semplicemente non si
+  considera per quell'occorrenza (`OnlyEnforceIf(v.Not())`). Agganciate
+  `MAX_HOURS` (margine) e le tre incompatibilità di materia (deroga), queste
+  ultime in **entrambi** i rami `post_separable` e `post_cross`: alleggerirne
+  uno solo avrebbe lasciato metà famiglia scoperta senza che un test se ne
+  accorgesse.
+
+  ⚠ **Lo schema è cresciuto di due campi, ed era un buco di modellazione già
+  segnalato dalla spec**: `RelaxationQuota.params` (il *quanto*, che mancava
+  accanto al *quante volte*) e `InstituteSettings.max_relaxed_constraints_per_resource`
+  (il tetto globale «numero massimo di vincoli da alleggerire per risorsa»).
+  Più `ARRIVAL_DEPARTURE` fra le famiglie: in EDT `Gestione Entrate / Uscite`
+  è alleggeribile e non c'era. Migrazione additiva, nessun dato da riscrivere.
+
+  🔑 **Un vincolo alleggerito resta una violazione nominata.** `check_schedule`
+  continua a produrre il suo finding `HARD`, ed è il comportamento di EDT —
+  l'orario risolto della base di esempio conteneva 21 attività su 984 che non
+  rispettavano i vincoli, e il prodotto continuava a lavorare. La quota non
+  nasconde la violazione: autorizza il solver a produrla, in numero limitato.
+  Un test lo tiene fermo, contando i finding dopo il solve.
+
+  ⚠ **Il margine si somma al *residuo*, non al tetto grezzo**, ed è il punto in
+  cui questo pezzo poteva sbagliare in silenzio: alleggerire concede spazio
+  **sopra lo stato corrente**, mai la pretesa che il passato venga riparato
+  (ADR-018). Misurato per mutazione — con `cap + margine` al posto di
+  `residuo + margine` due libere entrano dove ne entra una sola, e il test
+  diventa rosso.
+
+  **Sette mutazioni, sette rossi**: quota non postata, tetto globale non
+  postato, margine decuplicato, quota a zero trattata come quota, deroga
+  sempre assente, deroga tolta da `post_cross`, margine sul tetto grezzo.
+  Suite: **472 test verdi**, 16 skip.
+
+  Restano le famiglie dell'ondata 3b — presenza, mezze giornate, giorni
+  liberi, entrate/uscite, sedi, peso didattico e le altre righe di materia —
+  e le quote nei pre-filtri (ondata 4), che è il caso storto.
+
+- **2026-08-26 (notte, pezzo 3 — ondata 2)** — **La catena lessicografica.**
+  `domain/solver/objective.py`: risolvi per il criterio 1, **fissa** quel
+  valore, passa al 2 — mai una somma pesata. Due livelli, L1 le ore scartate e
+  L2 il loro numero come spareggio (D1), il fissaggio a `<=` e non `==`, il
+  limite di tempo **per livello** (una catena di quattro livelli con
+  `time_limit=60` può spendere quattro minuti: va detto, non scoperto), e gli
+  `stats` che riportano ogni livello con nome, valore, **se l'ottimo è stato
+  dimostrato** e quanto è costato.
+
+  🔑 **La strategia a due passate di EDT è questa catena, non due esecuzioni.**
+  «Il piazzamento rispetta tutti i vincoli; se restano attività scartate,
+  potete alleggerire» è «L3 dopo L1»: si consuma un alleggerimento solo quando
+  riduce gli scarti, perché a scarti pari il livello dopo preferisce zero
+  violazioni.
+
+  ⚠ **E la mutazione ha bocciato il test del meccanismo centrale.** Il primo
+  test di monotonia usava un'istanza a **pareggio** — un blocco da 2h contro
+  due ore singole — dove L1 e L2 indicano la stessa risposta: togliere
+  `model.Add(level.var <= valore)`, cioè il fissaggio, lasciava la suite
+  **verde**. Riscritto su un'istanza in cui i due livelli tirano in direzioni
+  **opposte** (quattro fasce, un blocco da 3h più tre ore singole: L1 vuole
+  fuori due ore in due attività, L2 vorrebbe fuori tre ore in una sola), dove
+  la mutazione diventa rossa.
+
+  ⚠ **Due rami che nessun test poteva affermare**, e la cucitura che li rende
+  affermabili: un livello che **non conclude** (la catena si ferma, ma
+  restituisce la fotografia dell'ultimo livello concluso invece di buttare via
+  il lavoro) e uno che **non dimostra** l'ottimo. Farli scattare con un limite
+  di tempo stretto sarebbe stato un test flaky su una macchina più lenta: da
+  qui `solve_chain(solver=...)`, con due solver finti di sei righe. Entrambe le
+  mutazioni corrispondenti diventano rosse.
+
+  ⚠ **I due fenomeni del banco sporco si sono spostati per la terza volta**, ed
+  era prevedibile: sono proprietà della **soluzione restituita**, e ogni ondata
+  cambia l'obiettivo. Invece di ri-appuntare un seme, i due test ora
+  **cercano** il fenomeno su una lista dichiarata — provando più semi dentro
+  lo stesso test con un `transaction.atomic` annullato, perché ricostruire la
+  scuola due volte nella stessa transazione violerebbe l'unicità delle
+  anagrafiche. Il test afferma così la cosa che conta — *l'esenzione è
+  esercitata da qualcosa* — invece di una coincidenza fra un seme e una
+  configurazione del solver.
+
+  ⚠ **Un difetto introdotto e colto dai test dell'ondata 1**: `unplaced`
+  calcolato solo `if placements` faceva sparire lo scarto proprio nell'istanza
+  in cui l'unica attività è impiazzabile — la distinzione è fra «nessuna
+  soluzione» e «una soluzione senza piazzamenti», e va fatta sul `None`.
+
+  **I numeri.** Fermi: `OPTIMAL`, zero scarti, due livelli conclusi e
+  dimostrati, **8426 variabili e 1086 constraint** — +1 variabile per L2, +2
+  constraint per le uguaglianze dei livelli e +2 per i fissaggi che la catena
+  aggiunge percorrendola. Suite: **464 test verdi**, 16 skip, **92 s** contro i
+  74,8 di ieri: è il costo di due solve per istanza invece di uno, ed è la
+  ragione per cui il limite di tempo è per livello.
+
+- **2026-08-26 (notte, pezzo 3)** — **Il modello smette di pretendere il
+  piazzamento.** Comincia il **pezzo 3** — alleggerimenti a quota e
+  ottimizzazione lessicografica — con la spec
+  ([design](docs/superpowers/specs/2026-08-26-alleggerimenti-lessicografico-design.md))
+  e le sue quattro decisioni chiuse in sessione: **L1 conta le ore** (il numero
+  di attività è lo spareggio), lo scarto è **`HARD`**, il ramo pigro di §9.7 si
+  chiude dentro **L3**, la stabilità fra periodi è **L4** di questa catena. Poi
+  la prima delle sette ondate: `AddExactlyOne` diventa
+  `somma(celle) == piazzata`, e ciò che non ci sta resta **scartato** invece di
+  rendere infattibile tutto l'orario.
+
+  ⚠ **Lo scarto va nominato, o l'oracolo diventa vacuo** — previsto scrivendo
+  la spec, non scoperto dopo. In `domain/analysis` non esisteva alcuna causale
+  sul non-piazzamento e nessun checker guardava le attività prive di
+  `Placement` (l'occupazione si costruisce **dai** piazzamenti): appena cade
+  `AddExactlyOne`, «scarta tutto» è una soluzione con zero occupazioni, zero
+  findings, verde. Da qui `structural:placement`. **Il registro ha ora 28
+  checker e 26 builder**, e la seconda assenza è dichiarata da un test come la
+  prima: la traduzione dello scarto esiste — è `somma(celle) == piazzata` — ma
+  non è un builder, perché crea le **variabili di decisione** e deve esistere
+  prima che qualunque builder giri (`vocabulary.pos` la legge).
+
+  🔑 **Il «tetto inevadibile» di §9.5 era inevadibile per colpa di
+  `AddExactlyOne`.** L'argomento diceva che le libere «vanno collocate, e
+  ovunque vadano pesano»: vero solo finché il piazzamento è obbligatorio. Con
+  `somma(celle) == piazzata` la somma dei letterali liberi torna a dipendere
+  dalle decisioni, e il tetto settimanale del peso didattico torna evadibile
+  **nel modo in cui lo evade EDT: scartando**. La chiave grossolana per le
+  famiglie indipendenti dal piazzamento diventa una scelta invece di un
+  obbligo. ⚠ Resta la metà delle congelate, che è un fatto e non una decisione.
+
+  ⚠ **E la regola della casa cambia forma.** «Forza la violazione e attendi
+  `INFEASIBLE`» smette di funzionare: con lo scarto ammesso la risposta a una
+  violazione forzata non è l'infattibilità ma la **rinuncia** — misurato,
+  `OPTIMAL` con esattamente uno scarto in 23 test su 27 rossi. Da qui
+  `build_model(allow_unplaced=False)`, che è il modello di prima e resta il
+  modo di chiedere «questo vincolo morde?». I 23 test lo usano; la domanda che
+  ponevano è intatta.
+
+  ⚠ **Il banco a testimone si era indebolito in silenzio**, ed è la forma
+  vecchia del difetto nuovo: cancella i piazzamenti, risolve e controlla che la
+  soluzione sia pulita per la famiglia — ma **una soluzione che scarta è pulita
+  per qualunque famiglia**, perché un'attività non piazzata non viola niente.
+  Il testimone esiste, quindi l'ottimo è zero scarti: preteso in tre punti
+  (`run_family`, `run_tutte_le_famiglie`, prova B del banco che congela).
+
+  🔑 **La presolve espandeva l'obiettivo, e il banco ci passava dentro senza
+  accorgersene.** Quattro test del testimone erano passati da ~0,5 s a **60 s
+  esatti** — il limite di tempo — restando verdi. Il log lo dice per nome:
+  *«objective: expanded via tight equality»*, 36 volte su un testimone da 32
+  attività. I 32 booleani `piazzata` spariscono dall'obiettivo e al loro posto
+  entrano **723 letterali di cella**; il dominio iniziale passa da `[0, 660]` a
+  `[-35460, 2040]`. Il solver trova `best:0` in un decimo di secondo e poi
+  spende un minuto a dimostrare che non esiste un ottimo negativo — vero per
+  costruzione, ma non più per lui. Con `presolve_substitution_level = 0`:
+  **`OPTIMAL` in 0,09 s**. ⚠ Il dominio dichiarato di un `IntVar` da solo
+  **non basta** (misurato: bound −720, tempo pieno), e nemmeno `AddHint` sui
+  `piazzata` (nessun guadagno: rimosso, perché un meccanismo che nessuna misura
+  giustifica è peso morto).
+
+  ⚠ **I due fenomeni del banco sporco dipendono da *quale* ottimo torna, e
+  CP-SAT in parallelo non è riproducibile.** La deriva d'identità e il ramo
+  pigro si sono spostati di seme due volte in una sessione — una per
+  l'obiettivo, una per la presolve — e la prima volta erano **verdi da soli e
+  rossi nella suite intera**. Non era il seme: con più lavoratori CP-SAT
+  restituisce l'ottimo che il primo thread trova. Da qui `workers=1` nella
+  prova B (e il parametro su `solve()`); rimisurati due volte di fila con lo
+  stesso esito, il ramo pigro sta al **20** (e al 35, 41, 45, 52), la deriva
+  d'identità all'**11**, unica su sessanta semi.
+
+  ⚠ **Due mutazioni hanno bocciato metà del lavoro nuovo, di nuovo.** Il test
+  su `apply()` che cancella il piazzamento di ciò che è stato scartato
+  **restava verde** con la cancellazione rimossa: l'attività scartata non aveva
+  una riga da cancellare. E i due guardiani di `pos` — la sentinella «oltre la
+  griglia» e la guardia del builder d'ordine — erano coperti da **un solo**
+  test che nessuna delle due mutazioni faceva diventare rosso, perché in
+  quell'istanza ciascun meccanismo bastava da solo. Separati in due test, uno
+  per meccanismo, ciascuno ucciso dalla propria mutazione.
+
+  **I numeri.** Fermi: `OPTIMAL`, **zero scarti**, 0,74 s, **8425 variabili e
+  1083 constraint** — la differenza dai vecchi 8140/1082 è tutta la macchina
+  dello scarto, contata: +284 booleani `piazzata`, +1 per i minuti scartati, e
+  sui constraint il solo +1 dell'obiettivo (i 284 `AddExactlyOne` sono
+  diventati 284 uguaglianze). Suite: **458 test verdi**, 16 skip, e il tempo
+  totale è **quello di prima** (74,8 s contro 74,6 s) — che è il vero verdetto
+  sulla riparazione della presolve.
 
 - **2026-08-26 (notte)** — **La review della PR #1, e il gemello del difetto
   nella famiglia che il banco non poteva vedere.** Quattro rilievi sistemati

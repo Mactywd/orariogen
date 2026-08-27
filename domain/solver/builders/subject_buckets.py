@@ -15,12 +15,23 @@ dell'incompatibilita' non e' separabile: `ha`/`hb` sono indicatori derivati
 `post_cross` sotto. Il tetto di ore (`_MaxHoursSubject`) resta invece
 separabile anche con A != B, perche' somma solo i minuti di A."""
 
-from domain.models import SubjectConstraint
+from domain.models import RelaxationQuota, SubjectConstraint
 from domain.solver.builders.base import SubjectBuilder
 from domain.solver.registry import register
 from domain.solver.residual import any_free, residual_cap
 
 T = SubjectConstraint.Type
+
+
+def _risorsa_di(keys):
+    """La risorsa a cui attribuire la quota di una riga di materia. EDT conta
+    gli alleggerimenti di questa famiglia **per classe** («… per settimana e
+    per classe»), e l'unita' della riga e' proprio quella: si prende la chiave
+    intera piu' piccola, cioe' la risorsa vera e non un atomo di partizione
+    (ADR-017), cosi' due secchi della stessa classe consumano la stessa quota.
+    """
+    intere = sorted(k for k in keys if isinstance(k, int))
+    return intere[0] if intere else None
 
 
 def post_separable(ctx, model, v, subject_id, kind, bucket, keys, rep):
@@ -44,12 +55,24 @@ def post_separable(ctx, model, v, subject_id, kind, bucket, keys, rep):
     # set a un solo elemento per costruzione, indipendentemente dal caso).
     distinte = {aid for _, aid, _ in termini if aid in ctx.free}
     if cap >= 1 and len(distinte) <= 1:
-        # Implicato da AddExactlyOne: si contano le attivita' distinte, non i
-        # letterali, perche' una sola attivita' puo' contribuire piu'
-        # letterali allo stesso secchio (piu' celle candidate li'), ma la sua
-        # somma sulle proprie celle resta comunque <= 1.
+        # Implicato da `somma(celle) == piazzata`: si contano le attivita'
+        # distinte, non i letterali, perche' una sola attivita' puo'
+        # contribuire piu' letterali allo stesso secchio (piu' celle candidate
+        # li'), ma la sua somma sulle proprie celle resta comunque <= 1.
+        # ⚠ Il commento diceva «implicato da AddExactlyOne» fino al
+        # 2026-08-26: quella riga non esiste piu', la conclusione regge lo
+        # stesso perche' `piazzata` e' un booleano.
         return
-    model.Add(sum(lit for _, lit in free) <= cap)
+    # «Non considerare le incompatibilita' … una sola volta al giorno»: qui
+    # l'alleggerimento e' una **deroga**, non un margine — il vincolo non si
+    # allarga, non si considera. Senza quota il letterale e' None e la
+    # clausola si posta secca, com'e' sempre stato.
+    deroga = ctx.relax.deroga(
+        model, RelaxationQuota.Family.SUBJECT_CONSTRAINT, _risorsa_di(keys),
+        f"{subject_id}_{kind}_{bucket}_{rep}")
+    vincolo = model.Add(sum(lit for _, lit in free) <= cap)
+    if deroga is not None:
+        vincolo.OnlyEnforceIf(deroga.Not())
 
 
 def post_cross(ctx, model, v, subject_a_id, kind_a, bucket_a,
@@ -101,23 +124,36 @@ def post_cross(ctx, model, v, subject_a_id, kind_a, bucket_a,
         return
     fa = any(aid not in ctx.free for aid, _ in la)
     fb = any(aid not in ctx.free for aid, _ in lb)
+    # Una **sola** deroga per secchio, qualunque ramo si imbocchi: «non
+    # considerare l'incompatibilita'» vale per l'occorrenza, non per il
+    # singolo letterale che il ramo capita a postare. Senza quota e' None e
+    # tutti i vincoli restano secchi.
+    deroga = ctx.relax.deroga(
+        model, RelaxationQuota.Family.SUBJECT_CONSTRAINT, _risorsa_di(keys),
+        f"{subject_a_id}_{kind_a}_{bucket_a}_{subject_b_id}_{kind_b}_{bucket_b}_{rep}")
+
+    def _posta(vincolo):
+        if deroga is not None:
+            vincolo.OnlyEnforceIf(deroga.Not())
+        return vincolo
+
     if not fa and not fb:
         ha = v.subject_bucket(keys, subject_a_id, kind_a, bucket_a, signature=rep)
         hb = v.subject_bucket(keys, subject_b_id, kind_b, bucket_b, signature=rep)
-        model.Add(ha + hb <= 1)
+        _posta(model.Add(ha + hb <= 1))
     elif fa and not fb:
         hb = v.subject_bucket(keys, subject_b_id, kind_b, bucket_b, signature=rep)
-        model.Add(hb == 0)
+        _posta(model.Add(hb == 0))
     elif fb and not fa:
         ha = v.subject_bucket(keys, subject_a_id, kind_a, bucket_a, signature=rep)
-        model.Add(ha == 0)
+        _posta(model.Add(ha == 0))
     else:
         for aid, lit in la:
             if aid in ctx.free:
-                model.Add(lit == 0)
+                _posta(model.Add(lit == 0))
         for aid, lit in lb:
             if aid in ctx.free:
-                model.Add(lit == 0)
+                _posta(model.Add(lit == 0))
 
 
 class _Bucketed(SubjectBuilder):
@@ -225,7 +261,13 @@ class _MaxHoursSubject(_Bucketed):
                      for aid, lit in lits]
             liberi, residuo = residual_cap(ctx, terms, row.param)
             if liberi:
-                model.Add(sum(w * lit for w, lit in liberi) <= residuo)
+                # «Massimo di ore delle materie: autorizza un supplemento di …
+                # una volta per settimana e per classe». Famiglia a sé in EDT,
+                # distinta dalle incompatibilità: qui è un **margine**.
+                margine = ctx.relax.margine(
+                    model, RelaxationQuota.Family.SUBJECT_MAX_HOURS,
+                    _risorsa_di(keys), f"{row.pk}_{bucket}_{rep}")
+                model.Add(sum(w * lit for w, lit in liberi) <= residuo + margine)
 
 
 @register(T.MAX_HOURS_DAY)
@@ -278,5 +320,13 @@ class ForbiddenSequenceBuilder(SubjectBuilder):
                     fine = slot + durata
                     if (day, fine) not in ctx.cells[pb]:
                         continue
-                    model.AddBoolOr([ctx.x[(pa, day, slot)].Not(),
-                                     ctx.x[(pb, day, fine)].Not()])
+                    # «Autorizza una sequenza indesiderata … per settimana e
+                    # per classe, una sola volta al giorno»: deroga, non
+                    # margine — la sequenza o si considera o no.
+                    deroga = ctx.relax.deroga(
+                        model, RelaxationQuota.Family.SUBJECT_SEQUENCE,
+                        _risorsa_di(keys), f"{pa}_{pb}_{day}_{slot}_{rep}")
+                    vincolo = model.AddBoolOr([ctx.x[(pa, day, slot)].Not(),
+                                               ctx.x[(pb, day, fine)].Not()])
+                    if deroga is not None:
+                        vincolo.OnlyEnforceIf(deroga.Not())

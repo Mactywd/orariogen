@@ -87,7 +87,7 @@ def test_free_guaranteed_non_regala_mezze_giornate_dei_giorni_vuoti():
     ResourceTimeConstraint.objects.create(
         resource=env["klass"], type=T.FREE_GUARANTEED,
         params={"free_half_days": 3})
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 
@@ -123,7 +123,7 @@ def test_arrival_departure_morde():
     ResourceTimeConstraint.objects.create(
         resource=env["klass"], type=T.ARRIVAL_DEPARTURE,
         params={"not_before_slot": 1, "days": 5})
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 
@@ -437,7 +437,7 @@ def test_min_distribution_morde_da_zero_senza_congelate():
     ResourceTimeConstraint.objects.create(
         resource=env["teacher"], type=T.MIN_DISTRIBUTION,
         params={"min_minutes_per_day": 60, "min_days": 3})
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 
@@ -558,7 +558,7 @@ def test_free_guaranteed_morde_da_zero_senza_congelate():
     ResourceTimeConstraint.objects.create(
         resource=env["teacher"], type=T.FREE_GUARANTEED,
         params={"free_days": 5})
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 

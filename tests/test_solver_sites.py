@@ -70,7 +70,7 @@ def test_max_site_changes_intercetta_il_cambio_con_una_senza_sede_in_mezzo():
     ResourceTimeConstraint.objects.create(
         resource=env["klass"], type=T.MAX_SITE_CHANGES, params={"per_day": 0})
 
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 
@@ -197,7 +197,7 @@ def test_adr018_clamp_impedisce_alla_libera_di_aggiungere_un_cambio():
     ResourceTimeConstraint.objects.create(
         resource=env["klass"], type=T.MAX_SITE_CHANGES, params={"per_day": 0})
 
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 
@@ -266,7 +266,7 @@ def test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa():
     make_activity(env["subject"], teachers=[altro_docente],
                   classes=[altra_classe], rooms=[aula], site=b_site)
 
-    soluzione = solve(env["schedule"], time_limit=30)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
 
 

@@ -32,7 +32,7 @@ def test_il_docente_con_troppe_ore_e_infattibile():
     env = mini_school()
     for _ in range(31):   # la griglia ha 30 fasce
         make_activity(env["subject"], teachers=[env["teacher"]])
-    assert solve(env["schedule"]).status == "INFEASIBLE"
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
 
 
 def test_la_capacita_simultanea_dell_aula_ammette_due_attivita():

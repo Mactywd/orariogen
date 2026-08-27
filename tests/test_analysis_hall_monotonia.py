@@ -43,6 +43,15 @@ def _hard(schedule):
     return [f for f in check_schedule(schedule) if f.severity == Severity.HARD]
 
 
+def _violazioni(schedule):
+    """I finding HARD **meno** l'incompletezza. `structural:placement` (pezzo 3)
+    nomina ogni attivita' non piazzata, e in questi test l'attivita' libera e'
+    deliberatamente non piazzata: e' la **premessa**, non un esito. Il checker
+    lo dichiara di suo — «descrive un orario incompleto, non illegale» — e cio'
+    che qui si asserisce e' *quale violazione di vincolo* preesiste."""
+    return [f for f in _hard(schedule) if f.code != "activity_unplaced"]
+
+
 def _blocca(resource, giorni=(), celle=()):
     for day in giorni:
         for slot in range(6):
@@ -137,7 +146,7 @@ def test_max_gap_non_inventa_una_deficienza():
     # tetto 0 — e nessuna mossa sulle libere lo ripara. Ma il solver una
     # collocazione la trova (ADR-018), quindi «nessuna collocazione
     # ammissibile» e' un falso positivo dimostrato.
-    assert [f.code for f in _hard(env["schedule"])] == ["max_gap"]
+    assert [f.code for f in _violazioni(env["schedule"])] == ["max_gap"]
     assert solve(env["schedule"], time_limit=30).status in ("OPTIMAL", "FEASIBLE")
     assert analyze_hall(env["schedule"]) == []
 
@@ -161,7 +170,7 @@ def test_peso_didattico_non_inventa_una_deficienza():
     place(env["schedule"], congelata, day=0, slot=0)
     make_activity(env["subject"], classes=[env["klass"]], slots=1)
 
-    assert [f.code for f in _hard(env["schedule"])] == ["weight_week"]
+    assert [f.code for f in _violazioni(env["schedule"])] == ["weight_week"]
     assert solve(env["schedule"], time_limit=30).status in ("OPTIMAL", "FEASIBLE")
     assert analyze_hall(env["schedule"]) == []
 
@@ -191,7 +200,7 @@ def test_weekly_order_non_inventa_una_deficienza():
     place(env["schedule"], a_cong, day=0, slot=5)
     libera = make_activity(env["subject"], classes=[env["klass"]], slots=1)
 
-    prima = {(f.code, f.resources) for f in _hard(env["schedule"])}
+    prima = {(f.code, f.resources) for f in _violazioni(env["schedule"])}
     assert prima == {("subject_weekly_order", (env["klass"].pk,))}
 
     assert analyze_hall(env["schedule"]) == []
@@ -199,7 +208,7 @@ def test_weekly_order_non_inventa_una_deficienza():
     # La collocazione esiste: la libera in fascia 1 e' pur sempre dopo la B, e
     # la violazione resta quella di prima — cambia solo *chi* e' nominato.
     place(env["schedule"], libera, day=0, slot=1)
-    assert {(f.code, f.resources) for f in _hard(env["schedule"])} == prima
+    assert {(f.code, f.resources) for f in _violazioni(env["schedule"])} == prima
 
 
 def test_parts_order_non_inventa_una_deficienza():
@@ -241,7 +250,7 @@ def test_parts_order_non_inventa_una_deficienza():
     place(env["schedule"], di_parte, day=0, slot=3)   # dopo: gia' in violazione
     libera = make_activity(env["subject"], parts=[parte], slots=1)
 
-    prima = {(f.code, f.resources) for f in _hard(env["schedule"])}
+    prima = {(f.code, f.resources) for f in _violazioni(env["schedule"])}
     assert prima == {("subject_parts_order", (env["klass"].pk,))}
 
     assert analyze_hall(env["schedule"]) == []
@@ -250,7 +259,7 @@ def test_parts_order_non_inventa_una_deficienza():
     # della classe, cioe' proprio l'ordine che la riga chiede, e non aggiunge
     # nessuna coppia (causale, risorsa) che non ci fosse gia'.
     place(env["schedule"], libera, day=0, slot=0)
-    assert {(f.code, f.resources) for f in _hard(env["schedule"])} == prima
+    assert {(f.code, f.resources) for f in _violazioni(env["schedule"])} == prima
 
 
 def test_il_rilassamento_non_ha_spento_la_fase_5():
@@ -275,4 +284,13 @@ def test_il_rilassamento_non_ha_spento_la_fase_5():
     assert findings[0].n_activities == 7
     assert findings[0].required_minutes == 7 * 60
     assert findings[0].placeable_minutes == 6 * 60
-    assert solve(env["schedule"], time_limit=30).status == "INFEASIBLE"
+    # ⚠ `allow_unplaced=False` dal pezzo 3: col modello vero un insieme
+    # deficiente non e' INFEASIBLE, **rinuncia**. E qui la rinuncia non si puo'
+    # misurare, perche' la riga MIN_DISTRIBUTION (min_days 3, docente libero un
+    # giorno solo) e' una causa **indipendente e sufficiente** di
+    # infattibilita': misurato, il modello con lo scarto risponde INFEASIBLE
+    # con zero minuti scartati. Questa meta' quindi **corrobora e non isola** —
+    # l'isolamento e' in `test_hall_oracle.py`, dove la sola deficienza di
+    # capienza produce esattamente i 60 minuti dichiarati.
+    assert solve(env["schedule"], time_limit=30,
+                 allow_unplaced=False).status == "INFEASIBLE"

@@ -134,7 +134,7 @@ constraint a 2 sedi a 21830 a 4 sedi sul Fermi — piu' del baseline
 pre-riparazione (4008 → 12254) perche' la riparazione dell'Important 1 e'
 un'intera famiglia di vincoli in piu', non un'ottimizzazione."""
 
-from domain.models import ResourceTimeConstraint
+from domain.models import RelaxationQuota, ResourceTimeConstraint
 from domain.solver.builders.base import ResourceBuilder
 from domain.solver.registry import Builder, register
 from domain.solver.residual import any_free
@@ -207,6 +207,11 @@ class MaxSiteChangesBuilder(ResourceBuilder):
         per_settimana = row.params.get("per_week")
         tutti = []
         consumo_settimana = 0
+        # «Cambi di sede: autorizza N cambi …». Un letterale per riga,
+        # condiviso dal tetto giornaliero e da quello settimanale: sono due
+        # parametri dello stesso alleggerimento.
+        margine = ctx.relax.margine(
+            model, RelaxationQuota.Family.SITES, key, f"{rep}")
         for day in range(ctx.grid.days_per_cycle):
             cambi = []
             # Minor 2: le sedi davvero raggiungibili in ogni fascia,
@@ -237,10 +242,10 @@ class MaxSiteChangesBuilder(ResourceBuilder):
             consumo_giorno = _frozen_site_changes(ctx, key, day, rep, sedi)
             consumo_settimana += consumo_giorno
             if per_giorno is not None and cambi:
-                model.Add(sum(cambi) <= max(per_giorno, consumo_giorno))
+                model.Add(sum(cambi) <= max(per_giorno, consumo_giorno) + margine)
             tutti += cambi
         if per_settimana is not None and tutti:
-            model.Add(sum(tutti) <= max(per_settimana, consumo_settimana))
+            model.Add(sum(tutti) <= max(per_settimana, consumo_settimana) + margine)
 
 
 def _sede_congelata(ctx, key, day, slot, site_id, rep):

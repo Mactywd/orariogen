@@ -192,7 +192,7 @@ def test_max_hours_day_con_a_diverso_da_b_conta_solo_a():
     place(env["schedule"], a_congelata, day=0, slot=1)
     riga.param = 60
     riga.save()
-    model, ctx = build_model(env["schedule"])
+    model, ctx = build_model(env["schedule"], allow_unplaced=False)
     model.Add(ctx.x[(a_libera.id, 0, 2)] == 1)
     solver = cp_model.CpSolver()
     assert solver.Solve(model) == cp_model.INFEASIBLE
@@ -250,14 +250,14 @@ def test_forbidden_sequence_con_a_uguale_b():
 
     # verso «B finisce dove A comincia»: la libera non puo' partire alla
     # fascia 0 (0 + durata 1 = 1, dove la congelata comincia).
-    model, ctx = build_model(env["schedule"])
+    model, ctx = build_model(env["schedule"], allow_unplaced=False)
     model.Add(ctx.x[(b.id, 0, 0)] == 1)
     solver = cp_model.CpSolver()
     assert solver.Solve(model) == cp_model.INFEASIBLE
 
     # verso «B comincia dove A finisce»: la libera non puo' partire alla
     # fascia 2 (la congelata finisce li', 1 + durata 1 = 2).
-    model, ctx = build_model(env["schedule"])
+    model, ctx = build_model(env["schedule"], allow_unplaced=False)
     model.Add(ctx.x[(b.id, 0, 2)] == 1)
     solver = cp_model.CpSolver()
     assert solver.Solve(model) == cp_model.INFEASIBLE
@@ -355,5 +355,5 @@ def test_adr018_forbidden_sequence_una_congelata_forza_infattibile():
     SubjectConstraint.objects.create(
         subject_a=env["subject"], subject_b=matematica,
         school_class=env["klass"], type=T.FORBIDDEN_SEQUENCE)
-    soluzione = solve(env["schedule"])
+    soluzione = solve(env["schedule"], allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats

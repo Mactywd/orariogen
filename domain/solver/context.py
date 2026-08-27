@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from domain.analysis.conformity import week_signatures
 from domain.analysis.state import ScheduleState
 from domain.models import Activity
+from domain.solver.relaxation import Relaxation
 
 _IMMOBILE = (Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE)
 
@@ -27,11 +28,18 @@ class SolverContext:
     time_rows: list           # righe ResourceTimeConstraint
     subject_rows: list        # [(riga SubjectConstraint, unit_keys precalcolate)]
     x: dict = field(default_factory=dict)        # (id, giorno, fascia) → BoolVar
+    placed_var: dict = field(default_factory=dict)  # id → BoolVar «piazzata», solo le libere
     by_cell: dict = field(default_factory=dict)  # (chiave, giorno, fascia) → [(id, letterale)]
     vocab: object = None      # Vocabulary, assegnato da build_model
+    relax: object = None      # Relaxation: le quote di alleggerimento
+    ignora_opzionali: frozenset = frozenset()   # Resource.Kind con le gialle ignorate
+    riparazioni: list = field(default_factory=list)  # i booleani «riparato»
+                             # dei rami disgiuntivi di ADR-018: L3 li minimizza
+    placed_before: dict = field(default_factory=dict)  # id → (giorno, fascia)
+                             # com'era prima del solve: L4 minimizza gli spostamenti
 
     @classmethod
-    def build(cls, schedule, extraction=None):
+    def build(cls, schedule, extraction=None, ignora_opzionali=()):
         signatures = week_signatures(schedule)
         states = {rep: ScheduleState.build(schedule, week=rep) for rep, _ in signatures}
         base = states[signatures[0][0]]
@@ -77,6 +85,10 @@ class SolverContext:
             activities=activities, free=free, cells=cells, tokens=tokens,
             capacity=base.capacity, material_quantity=material_quantity,
             time_rows=base.time_rows, subject_rows=base.subject_rows,
+            relax=Relaxation.build(),
+            ignora_opzionali=frozenset(ignora_opzionali),
+            placed_before={aid: cella for aid, cella in placed.items()
+                           if aid in free},
         )
 
     def index_cells(self):

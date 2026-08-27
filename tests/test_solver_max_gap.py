@@ -50,7 +50,7 @@ def test_due_buchi_da_un_ora_sforano_un_budget_di_un_ora_e_mezza():
     env = mini_school()
     _scena_due_buchi(env)
     _dtb(env["teacher"], 90)
-    assert solve(env["schedule"]).status == "INFEASIBLE"
+    assert solve(env["schedule"], allow_unplaced=False).status == "INFEASIBLE"
 
 
 def test_senza_vincolo_la_stessa_scena_e_fattibile():
