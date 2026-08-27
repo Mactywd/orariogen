@@ -9,17 +9,9 @@ from ortools.sat.python import cp_model
 
 from domain.models import Placement
 from domain.solver.context import SolverContext
-from domain.solver.objective import livelli, solve_chain
+from domain.solver.objective import STATUS_NAME, livelli, solve_chain
 from domain.solver.registry import all_builders
 from domain.solver.vocabulary import Vocabulary
-
-_STATUS = {
-    cp_model.OPTIMAL: "OPTIMAL",
-    cp_model.FEASIBLE: "FEASIBLE",
-    cp_model.INFEASIBLE: "INFEASIBLE",
-    cp_model.MODEL_INVALID: "MODEL_INVALID",
-    cp_model.UNKNOWN: "UNKNOWN",
-}
 
 
 @dataclass(frozen=True)
@@ -135,7 +127,7 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
 
     proto = model.proto if hasattr(model, "proto") else model.Proto()
     return Solution(
-        status=_STATUS.get(stato, str(stato)),
+        status=STATUS_NAME.get(stato, str(stato)),
         placements=placements,
         unplaced=unplaced,
         stats={
