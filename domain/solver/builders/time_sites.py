@@ -61,29 +61,36 @@ coppia di sedi effettivamente compresenti in quella cella, filtrate da
 `test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa` in
 `tests/test_solver_sites.py`.
 
-⚠ **`MaxSiteChangesBuilder` — NON riparato, deliberatamente (Ruling 33).** Lo
-stesso buco esiste anche qui (due sedi diverse sulla stessa fascia sono un
-cambio per il checker), ma qui la riparazione non e' univoca, perche' la
-semantica del checker stesso non lo e'. `ScheduleState.occupancy`
-(`domain/analysis/state.py`) e' un `defaultdict(list)`, e `_site_sequence` la
-scorre **in ordine di lista** — l'ordine in cui `ScheduleState.build` ha
-inserito le occupazioni. Sotto capienza cumulativa il **conteggio** dei
-cambi dipende quindi dall'**ordine di inserimento**: la stessa coppia di
-attivita' simultanee da' un conteggio diverso a seconda che la sequenza
-letta sia `[A, B]` o `[B, A]` seguita da una terza occupazione. Non e' una
-proprieta' del piazzamento, e' un artefatto di implementazione del checker —
-e il checker e' **l'autorita'** su cosa significhi il vincolo. Tradurre
-l'artefatto nel builder (per esempio imponendo un ordine arbitrario fra le
-due sedi simultanee) significherebbe replicare un comportamento che nessuno
-ha deciso essere corretto, non tradurre una semantica. **Va prima deciso in
-`domain/analysis` cosa significhi «cambio di sede» quando due sedi
-coesistono nella stessa fascia** (per esempio: ordinare la sequenza
-intra-fascia in modo deterministico, o dichiarare che sedi diverse
-simultanee valgono un cambio e basta indipendentemente da quante sono e in
-che ordine) — solo allora questo builder ha una semantica bersaglio univoca
-da tradurre. Fino a quella decisione resta **esatto solo per chiavi a
-capienza 1** (confronto esaustivo nel report del Task 9, giro di correzione
-1 e nella review). Voce gia' in CLAUDE.md, elenco «Ancora aperto».
+🔑 **`MaxSiteChangesBuilder` — la decisione mancante e' stata presa
+(2026-08-28), e con essa questo builder torna traducibile.** Il blocco che
+stava qui dichiarava di **non** riparare il buco gemello (due sedi diverse
+sulla stessa fascia contate come un cambio) perche' la semantica del checker
+non era univoca: `ScheduleState.occupancy` e' un `defaultdict(list)`, e il
+vecchio `_site_sequence` la scorreva **in ordine di lista**, cioe' in ordine
+d'inserimento. Sotto capienza cumulativa lo stesso orario dava `[A, B, A]` →
+due cambi oppure `[B, A, A]` → uno, a seconda dei pk. Tradurre quello
+avrebbe significato replicare un comportamento che nessuno aveva deciso
+essere corretto.
+
+La decisione, presa in `domain/analysis` dove doveva essere presa, e' la
+seconda delle due che questo blocco elencava, nella sua forma piu' netta:
+**dentro una fascia non si viaggia**. Una fascia contribuisce l'*insieme*
+delle sedi che la occupano, e un cambio e' una transizione fra due fasce
+consecutive i cui insiemi differiscono — sedi diverse simultanee valgono
+**zero** cambi. Il docstring di `MaxSiteChangesChecker` porta l'argomento
+per esteso: essere in due posti insieme e' impossibile
+(`structural:site_transition` lo dice, e resta), ma non e' un **viaggio**.
+
+Conseguenza per questo builder: la costruzione a coppie `s < t` non esprime
+il caso `s == t`, e adesso **non deve esprimerlo** — l'incapacita' e'
+diventata la risposta giusta. Resta una sovra-approssimazione **dichiarata**
+sul caso a piu' sedi per fascia: con `{A,B}` alla fascia s e `{A,B}` alla
+fascia t il checker conta 0 (insiemi uguali) e il builder posta due
+letterali di cambio (le coppie incrociate A→B e B→A). Il builder e' quindi
+**piu' stretto** del checker — puo' rifiutare un orario legale, mai
+accettarne uno illegale — che e' il verso in cui una sovra-approssimazione
+non rompe l'oracolo differenziale. A capienza 1, cioe' ovunque salvo l'aula
+col `Numero di aule` di EDT, i due coincidono esattamente.
 
 ⚠ **ADR-018.** `MaxSiteChangesBuilder` posta somme su variabili derivate
 (i letterali di cambio `c`), non su termini `(peso, id, letterale)`
@@ -182,16 +189,25 @@ def _frozen_site_changes(ctx, key, day, rep, sedi):
     ctx.free` e, se attivo, `aid in ctx.states[rep].activities`): stesso
     schema di `_frozen_gap_minutes`/`_frozen_presence_minutes` in
     `time_presence.py`, qui sulla sequenza di sede invece che sui minuti di
-    buco/presenza."""
+    buco/presenza.
+
+    ⚠ **Conta come conta il checker, o il residuo di ADR-018 e' sbagliato.**
+    Una fascia contribuisce l'**insieme** delle sue sedi e un cambio e' una
+    transizione fra insiemi diversi: dentro una fascia non si viaggia
+    (`MaxSiteChangesChecker`). Appiattire `by_cell` in una sequenza — come
+    faceva questa funzione — rimetterebbe qui l'artefatto dell'ordine
+    d'inserimento appena tolto dall'analisi, e per giunta nel punto in cui
+    serve un numero **fedele**: un consumo sovrastimato alza il tetto
+    clampato e allenta il vincolo per tutti."""
     active = ctx.states[rep].activities
     sequenza = []
     for slot in range(ctx.grid.slots_per_day):
-        for aid, _lit in ctx.by_cell.get((key, day, slot), ()):
-            if aid in ctx.free or aid not in active:
-                continue
-            sito = ctx.activities[aid].site_id
-            if sito is not None:
-                sequenza.append(sito)
+        sedi_qui = {ctx.activities[aid].site_id
+                    for aid, _lit in ctx.by_cell.get((key, day, slot), ())
+                    if aid not in ctx.free and aid in active
+                    and ctx.activities[aid].site_id is not None}
+        if sedi_qui:
+            sequenza.append(sedi_qui)
     return sum(a != b for a, b in zip(sequenza, sequenza[1:]))
 
 
