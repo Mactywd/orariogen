@@ -604,3 +604,61 @@ dell'oracolo vanno riscritti sul confronto prima/dopo: `violazioni()` diventa
 una differenza di insiemi, non un totale.
 
 **Data.** 2026-08-24
+
+## ADR-019 — Dentro una fascia non si viaggia: il cambio di sede e il pareggio di collocazione
+
+**Decisione.** Due decisioni gemelle, entrambe su verdetti che dipendevano
+dall'**ordine d'inserimento** invece che dall'orario.
+
+1. **Il cambio di sede.** Una fascia contribuisce l'**insieme** delle sedi che
+   la occupano; un cambio è una transizione fra due fasce consecutive (nella
+   sottosequenza di quelle con sede nota) i cui insiemi **differiscono**. Due
+   sedi diverse sulla stessa fascia valgono **zero** cambi.
+   ⚠ Ma restano una violazione di `structural:site_transition`: essere in due
+   posti insieme è impossibile (`gap_slots = -1`, minore di qualunque soglia).
+   Le due domande sono diverse — «è fisicamente possibile?» contro «quante
+   volte ci si è spostati?» — e tengono risposte diverse.
+2. **Il pareggio di collocazione.** `_placed_of` ordina per `(giorno, fascia,
+   identità dell'attività)`. Il pareggio si rompe con il pk: arbitrario, ma
+   **stabile e riproducibile**.
+
+**Alternative scartate.** (a) **Ordinare la sequenza intra-fascia in modo
+deterministico** e continuare a contare i cambi al suo interno: renderebbe il
+conteggio riproducibile senza renderlo *sensato* — un ordine inventato fra due
+occupazioni simultanee resta inventato, e il numero che ne esce non descrive
+nessun viaggio. (b) **Sedi diverse simultanee valgono un cambio**, comunque e
+indipendentemente da quante siano: riproducibile e semplice, ma afferma che
+stare fermi in due posti sia uno spostamento, e sarebbe l'unico punto del
+modello in cui un cambio non corrisponde a un tragitto. (c) Per il pareggio,
+**nominare tutte le occorrenze in parità** invece di sceglierne una: sarebbe
+funzione della sola forma dell'orario, che è meglio, e per `WEEKLY_ORDER`
+funzionerebbe — ma non generalizza alle famiglie a **coppie consecutive**
+(`IMPOSED_SUCCESSION` con A = B), dove il pareggio sposta la coppia invece di
+allargare un secchio. Una regola sola per tutti i lettori di `_placed_of` vale
+più di due contratti di finding diversi.
+
+**Motivo.** Un checker è **l'autorità** su cosa significhi un vincolo: il
+builder CP-SAT traduce lui. Finché il checker risponde in base all'ordine in
+cui il queryset ha restituito le righe, non c'è nulla da tradurre — e infatti
+`MaxSiteChangesBuilder` si era fermato, dichiarando l'artefatto invece di
+replicarlo. La scelta fra le alternative è governata dal verso dell'errore: per
+il conteggio dei cambi la nuova regola conta **meno** cambi del massimo che
+l'ordine poteva produrre, quindi perde richiamo e mai precisione — che per un
+checker è il verso giusto, perché mandare l'utente a smontare un vincolo sano è
+il danno peggiore.
+
+**Conseguenze.** A capienza 1 — cioè ovunque salvo l'aula col `Numero di aule`
+di EDT e gli stati già illegali — le nuove regole coincidono riga per riga con
+le vecchie, quindi nessun dataset reale si muove. `MaxSiteChangesBuilder` torna
+traducibile: la sua costruzione a coppie `s < t` non esprime il caso `s == t`, e
+ora **non deve** esprimerlo. Resta su di lui una sovra-approssimazione
+**dichiarata** nel caso a più sedi per fascia (posta le coppie incrociate dove
+il checker conta zero), cioè è più stretto del checker — il verso in cui una
+sovra-approssimazione non rompe l'oracolo differenziale.
+⚠ E il residuo di ADR-018 va calcolato con **la stessa** regola: contarlo
+appiattendo le occupazioni sovrastimava il consumo delle congelate, alzava il
+tetto clampato e faceva accettare al solver un cambio che il checker non
+perdona — misurato, `OPTIMAL` con un `max_site_changes` `HARD` nuovo sulla
+soluzione applicata.
+
+**Data.** 2026-08-28
