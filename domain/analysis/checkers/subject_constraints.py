@@ -37,11 +37,36 @@ def _unit_resources(row):
 
 
 def _placed_of(state, keys, subject_id):
+    """Le occorrenze piazzate della materia dentro l'unità della riga, in
+    ordine di collocazione.
+
+    ⚠ **Il pareggio va rotto da qualcosa di dichiarato.** L'ordine è
+    `(giorno, fascia)` e `sorted` è **stabile**: a parità esatta restava
+    davanti l'occorrenza che il queryset aveva restituito per prima, cioè un
+    fatto del database. Non è un caso di scuola — due occorrenze della stessa
+    materia su parti diverse della **stessa** partizione (uno sdoppiamento)
+    condividono legittimamente una cella, e le famiglie d'ordine
+    (`WEEKLY_ORDER`, `IMPOSED_SUCCESSION`) **nominano** l'argmin: il valore
+    aggregato restava identico e cambiava *chi* veniva incolpato, cioè la
+    `Finding.key`.
+
+    Si rompe con l'identità dell'attività. È arbitraria — fra due occorrenze
+    davvero intercambiabili nessuna proprietà dell'orario le distingue — ma è
+    **stabile e riproducibile**, che è precisamente ciò che l'ordine di un
+    queryset senza `order_by` non promette.
+
+    ⚠ L'alternativa considerata era nominarle **tutte** invece di sceglierne
+    una: sarebbe una funzione della sola forma dell'orario, e per
+    `WEEKLY_ORDER` funzionerebbe. Scartata perché non generalizza alle
+    famiglie a **coppie consecutive** (`IMPOSED_SUCCESSION` con A = B), dove
+    non esiste un «insieme in pareggio» da nominare: là il pareggio sposta la
+    coppia, non allarga un secchio. Una regola sola per tutti i lettori di
+    questa funzione vale più di due contratti di finding diversi."""
     return sorted(
         (pl for aid, pl in state.placed.items()
          if state.activities[aid].subject_id == subject_id
          and state.tokens[aid] & keys),
-        key=lambda p: (p.day, p.start_slot))
+        key=lambda p: (p.day, p.start_slot, p.activity_id))
 
 
 def _half(state, day, slot):

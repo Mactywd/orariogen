@@ -28,6 +28,35 @@ def resource_sort_key(key):
         return (1, key)
 
 
+def site_occupation(state, key, day, slots):
+    """Le sedi che occupano una chiave, fascia per fascia:
+    `[(fascia, {sede: frozenset(attività)}), ...]`, solo per le fasce con
+    almeno una sede **nota** e in ordine di fascia crescente.
+
+    ⚠ **Dentro una fascia le occupazioni non hanno ordine.** `occupancy` è un
+    `defaultdict(list)` e conserva l'ordine in cui `build()` ha visto le
+    attività, cioè l'ordine del queryset `Activity` — un fatto del database,
+    non dell'orario. I due checker delle sedi leggevano quella lista come una
+    **sequenza temporale**, e a capienza cumulativa (`simultaneous_capacity >
+    1`, il `Numero di aule` di EDT) due attività di sedi diverse sulla stessa
+    fascia facevano dipendere il verdetto dai pk: `[A, B, A]` dava due cambi,
+    `[B, A, A]` uno solo. Raggruppare per sede toglie l'ordine di mezzo e
+    lascia ai checker una decisione da prendere invece di un accidente da
+    subire — vedi i loro docstring, e
+    `tests/test_analysis_ordine_inserimento.py`."""
+    out = []
+    for s in slots:
+        by_site = defaultdict(set)
+        for aid in state.occupancy[(key, day, s)]:
+            site = state.activities[aid].site_id
+            if site is not None:
+                by_site[site].add(aid)
+        if by_site:
+            out.append((s, {site: frozenset(aids)
+                            for site, aids in by_site.items()}))
+    return out
+
+
 @dataclass(frozen=True)
 class AtomMap:
     """ADR-017. Due partizioni della stessa classe sono due modi di dividere

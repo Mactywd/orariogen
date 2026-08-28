@@ -72,7 +72,7 @@ domain/                l'app Django del modello di dominio v1
                         per popolazione con la perdita tollerata (Arbitrato)
                         e la **seconda fase** — l'assegnazione delle aule
                         (rooms.py), modello a sé con due livelli propri
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -149,7 +149,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > vincolo da postare). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **599 test verdi**, 16 skip tutti misurati e attribuiti
+> minimo. **680 test verdi**, 16 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -397,21 +397,22 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
       stato ammesso — è il comportamento di EDT, che con 21 attività in
       violazione piazzate a mano continua a lavorare. **Da implementare** nella
       spec del modello completo, prima dei ventidue builder restanti.
-- [ ] ⚠ **Cosa significa «cambio di sede» quando due sedi coesistono nella
-      stessa fascia?** Sotto capienza cumulativa (aula con `Qtà > 1`, feature
-      EDT documentata) due attività di sedi diverse possono occupare la stessa
-      fascia della stessa risorsa. `MaxSiteChangesChecker` **conta un cambio**,
-      ma solo come conseguenza di un dettaglio implementativo:
-      `state.occupancy` è una `list` e `_site_sequence` la scorre in ordine
-      d'inserimento, quindi il conteggio dipende dall'ordine. È un **artefatto,
-      non una semantica**, e va deciso in `domain/analysis` prima di poter
-      essere tradotto — tradurre un artefatto sarebbe peggio che lasciare lo
-      scarto. Il builder CP-SAT lo dichiara nel proprio docstring. Trovato
-      nella review del Task 9 del piano `modello-hard-completo`. ⚠ Non tocca il
-      Fermi, dove le aule non sono mai state inserite (voce qui sopra).
+- [x] ⚠ ~~**Cosa significa «cambio di sede» quando due sedi coesistono nella
+      stessa fascia?**~~ **Deciso il 2026-08-28: dentro una fascia non si
+      viaggia.** Una fascia contribuisce l'**insieme** delle sedi che la
+      occupano, e un cambio è una transizione fra due fasce consecutive i cui
+      insiemi differiscono — sedi diverse simultanee valgono **zero** cambi.
+      È la seconda delle due strade che il builder elencava, nella forma più
+      netta. L'argomento: essere in due posti insieme è *impossibile*
+      (`structural:site_transition` lo dice, e resta una violazione) ma non è
+      un **viaggio**; le due domande sono diverse e meritano risposte diverse.
+      A capienza 1 la nuova regola coincide riga per riga con la vecchia.
+      → [ADR-019](docs/decisioni.md), `MaxSiteChangesChecker`,
+      `domain/analysis/state.site_occupation`.
 - [ ] ⚠ **Il tie-break di `_placed_of` è un artefatto dell'ordine
       d'inserimento, non una semantica** — la stessa forma del problema qui
-      sopra su `MaxSiteChangesChecker`. `_placed_of` (in
+      sopra su `MaxSiteChangesChecker`. **Chiuso il 2026-08-28** (vedi in coda
+      alla voce). `_placed_of` (in
       `domain/analysis/checkers/subject_constraints.py`) ordina le occorrenze
       piazzate per `(day, start_slot)` con `sorted` **stabile**: a parità di
       collocazione, quale attività diventi `a[0]` dipende dall'ordine del
@@ -437,6 +438,17 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
       `tests/solver_harness.py`) invece di un'eccezione implicita. Il fenomeno
       è quindi più largo di quanto §9.5 dichiarasse: riguarda ogni famiglia il
       cui finding nomina l'argmin invece del secchio intero.
+      ✅ **Chiuso il 2026-08-28**: il pareggio si rompe con l'identità
+      dell'attività (`(day, start_slot, activity_id)`). È arbitraria — fra due
+      occorrenze davvero intercambiabili nessuna proprietà dell'orario le
+      distingue — ma **stabile e riproducibile**, che è ciò che l'ordine di un
+      queryset senza `order_by` non promette. ⚠ L'alternativa di nominarle
+      **tutte** è stata considerata e scartata: sarebbe funzione della sola
+      forma dell'orario, e per `WEEKLY_ORDER` funzionerebbe, ma non
+      generalizza alle famiglie a coppie consecutive (`IMPOSED_SUCCESSION`
+      con A = B), dove il pareggio sposta la coppia invece di allargare un
+      secchio. La **deriva d'identità sotto piazzamento** resta e resta
+      giusta: è `PLACEMENT_MONOTONE = False`, non un artefatto.
 - [x] ⚠ ~~**Il ramo «status quo» è pigro, e nel caso misto spegne la riga.**~~
       **Chiuso il 2026-08-26 (pezzo 3, ondata 5).** La causa era testuale — il
       modello non aveva funzione di costo, quindi `riparato` e `riparato.Not()`
@@ -497,6 +509,75 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (l'ordine d'inserimento)** — **Due artefatti dichiarati erano
+  tre, e il terzo rompeva l'oracolo.** I due punti aperti da luglio —
+  «cosa significa cambio di sede quando due sedi coesistono nella stessa
+  fascia» e «il tie-break di `_placed_of`» — erano la stessa forma: un
+  `Finding` la cui identità dipendeva dall'**ordine d'inserimento** invece che
+  dall'orario. `ScheduleState.occupancy` è un `defaultdict(list)` e
+  `state.placed` un `dict`: entrambi conservano l'ordine del queryset
+  `Activity`, che è un fatto del database e non un fatto dell'orario.
+  Le due decisioni sono in [ADR-019](docs/decisioni.md).
+
+  🔑 **La decisione sulle sedi: dentro una fascia non si viaggia.** Una fascia
+  contribuisce l'**insieme** delle sue sedi, e un cambio è una transizione fra
+  due fasce consecutive i cui insiemi differiscono — sedi diverse simultanee
+  valgono **zero** cambi. L'argomento che la sceglie fra le due candidate:
+  essere in due posti insieme è *impossibile*, e
+  `structural:site_transition` continua a dirlo (`gap_slots = -1`, minore di
+  qualunque soglia), ma non è un **viaggio**. Le due domande sono diverse —
+  «è fisicamente possibile?» contro «quante volte si è spostato?» — e ognuna
+  tiene la sua risposta. A capienza 1, cioè ovunque salvo l'aula col `Numero
+  di aule` di EDT, la nuova regola coincide riga per riga con la vecchia.
+
+  ⚠ **E gli artefatti erano tre: `SiteTransitionChecker` aveva lo stesso, e
+  non era in nessun elenco.** Anche lui appiattiva `occupancy` in una
+  sequenza: con `[A@0, B@0, A@1]` le coppie adiacenti sono `(A,B)` e `(B,A)`
+  — due violazioni — mentre con `[B@0, A@0, A@1]` sono `(B,A)` e `(A,A)`, e la
+  seconda sparisce. Lo stesso orario, due verdetti. Ora le coppie si enumerano
+  dagli insiemi, e il checker si **allinea al proprio builder**, che quelle
+  coppie le postava già tutte.
+
+  ⛔ **Il quarto sito dell'artefatto era nel solver, e non era cosmetico.**
+  `_frozen_site_changes` calcola il residuo di ADR-018 — quanti cambi le sole
+  congelate hanno già contratto, cioè il pavimento sotto cui il tetto non
+  scende — e lo calcolava **appiattendo** `by_cell`. Due congelate di sede
+  diversa sulla stessa fascia gli valevano un cambio che per il checker non
+  esiste: il tetto clampato saliva da `max(0, 0)` a `max(0, 1)` e il solver si
+  ritrovava in tasca un cambio che il checker non gli perdona. **Misurato**:
+  baseline pulita, `solve` risponde `OPTIMAL`, e la soluzione applicata porta
+  un `max_site_changes` `HARD` **nuovo** — l'oracolo differenziale rotto.
+  Non l'ha trovato una rilettura: l'ha trovato l'obbligo di far contare al
+  builder come conta il checker, una volta che il checker aveva finalmente una
+  regola da seguire.
+
+  🔑 **Il tie-break si rompe con l'identità dell'attività**, `(day,
+  start_slot, activity_id)`. È arbitraria — fra due occorrenze davvero
+  intercambiabili nessuna proprietà dell'orario le distingue — ma **stabile e
+  riproducibile**, che è precisamente ciò che l'ordine di un queryset senza
+  `order_by` non promette. ⚠ L'alternativa di nominarle **tutte** è stata
+  considerata e scartata, non dimenticata: sarebbe funzione della sola forma
+  dell'orario e per `WEEKLY_ORDER` funzionerebbe, ma non generalizza alle
+  famiglie a coppie consecutive (`IMPOSED_SUCCESSION` con A = B), dove il
+  pareggio sposta la coppia invece di allargare un secchio. Una regola sola
+  per tutti i lettori di `_placed_of` vale più di due contratti di finding.
+  ⚠ La **deriva d'identità sotto piazzamento** resta, e resta giusta: è
+  `PLACEMENT_MONOTONE = False`, una proprietà del checker, non un artefatto.
+
+  ⚠ **Nessuno dei quattro tocca il Fermi**, che non ha né sedi né righe
+  d'ordine con pareggi: sono difetti che solo un test costruito apposta poteva
+  esibire — la forma di sempre, una proprietà del dataset scambiata per una
+  proprietà del codice. `tests/test_analysis_ordine_inserimento.py` costruisce
+  lo stesso orario due volte e pretende la stessa risposta; **quattro
+  mutazioni, quattro rossi distinti**, uno per correzione e nessuno per caso.
+
+  🔑 **E che nessun test esistente si sia mosso è la misura, non un sollievo.**
+  Suite da 674 a **680 verdi** — i sei nuovi e nient'altro — e il Fermi
+  invariato byte per byte (8426 variabili, 1116 constraint). È la prova che
+  «a capienza 1 la nuova regola coincide riga per riga con la vecchia» è un
+  fatto e non una speranza: se avesse cambiato qualcosa altrove, 674 test
+  l'avrebbero detto.
 
 - **2026-08-28 (assegnazione delle aule)** — **L'ultimo pezzo dichiarato fuori
   è dentro, e non è un vincolo in più: è una seconda fase.**

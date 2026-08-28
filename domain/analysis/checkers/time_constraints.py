@@ -6,6 +6,7 @@ pranzo non è mai un buco (linea di fine mattinata, vincoli.md)."""
 from domain.analysis import causali
 from domain.analysis.findings import Finding, Severity
 from domain.analysis.registry import Checker, register
+from domain.analysis.state import site_occupation
 from domain.models import ResourceTimeConstraint
 
 T = ResourceTimeConstraint.Type
@@ -161,24 +162,38 @@ class MaxHalfDaysChecker(_TimeChecker):
                 yield _finding(state, "only_half_day", row, day=day)
 
 
-def _site_sequence(state, key, day, slots):
-    sequence = []
-    for s in slots:
-        for aid in state.occupancy[(key, day, s)]:
-            site = state.activities[aid].site_id
-            if site is not None:
-                sequence.append(site)
-    return sequence
-
-
 @register(T.MAX_SITE_CHANGES)
 class MaxSiteChangesChecker(_TimeChecker):
+    """🔑 **Dentro una fascia non si viaggia.** Una fascia contribuisce
+    l'**insieme** delle sedi che la occupano, e un cambio è una transizione
+    fra due fasce consecutive (nella sottosequenza di quelle con sede nota)
+    i cui insiemi **differiscono**. Due sedi diverse simultanee valgono
+    quindi zero cambi, non uno: la risorsa non si è spostata, è in due posti
+    insieme — cosa che `structural:site_transition` giudica *impossibile*,
+    ma che non è un **viaggio**. Le due domande sono diverse («è fisicamente
+    possibile?» contro «quante volte si è spostato?») e meritano risposte
+    diverse.
+
+    ⚠ È la decisione che mancava, non un dettaglio d'implementazione. Prima
+    la sequenza si leggeva dalla lista `occupancy` in ordine d'inserimento,
+    quindi `[A, B, A]` dava due cambi e `[B, A, A]` uno solo **sullo stesso
+    orario**: il verdetto dipendeva dai pk. `domain/solver/builders/time_sites.py`
+    si era fermato davanti a questo e aveva rifiutato di tradurre l'artefatto,
+    lasciando `MaxSiteChangesBuilder` esatto solo a capienza 1.
+
+    A capienza 1 — cioè ovunque, salvo l'aula col `Numero di aule` di EDT e
+    gli stati già illegali — ogni fascia ha al più una sede e la nuova regola
+    coincide con la vecchia riga per riga. Dove differisce conta **meno**
+    cambi del massimo che l'ordine poteva produrre, cioè sbaglia verso il
+    richiamo e mai verso la precisione: è il verso giusto per un checker, che
+    mandando l'utente a smontare un vincolo sano fa il danno peggiore."""
     TYPE = T.MAX_SITE_CHANGES
 
     def violations(self, state, row, days):
         per_week = 0
         for day, slots in days.items():
-            sites = _site_sequence(state, row.resource_id, day, slots)
+            sites = [set(per_slot) for _, per_slot
+                     in site_occupation(state, row.resource_id, day, slots)]
             changes = sum(a != b for a, b in zip(sites, sites[1:]))
             per_week += changes
             cap = row.params.get("per_day")
