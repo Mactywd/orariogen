@@ -24,6 +24,30 @@ from domain.solver.objective import STATUS_NAME, Level, solve_chain
 _IMMOBILE = (Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE)
 
 
+def _aula_tenuta(aula, dichiarate):
+    """L'aula che un'attivita' occupa **senza** che questa fase la decida.
+
+    🔑 Non e' solo `assigned_room`, ed e' il punto in cui questa fase e
+    `activity_tokens` devono dire la stessa cosa. `domain/analysis/state.py`
+    mette l'aula fra le chiavi di occupazione anche **senza assegnazione**,
+    quando le candidate dichiarate sono **una sola**: la' la scelta e'
+    determinata, quindi occupare non e' una stima, e' esatto. Un'attivita'
+    cosi', se non e' una decisione di questa fase (perche' sta fuori
+    dall'estrazione), consuma capienza pur avendo `assigned_room` a NULL.
+
+    ⚠ Leggere il solo `assigned_room` lasciava quella capienza invisibile a
+    `frozen_load`, e `_post_capacity` la regalava a chi stava dentro il
+    perimetro: `assign_rooms --estrazione` poteva quindi assegnare a
+    un'estratta un'aula gia' occupata, e `structural:occupation` trovava dopo
+    il calcolo un conflitto che prima non c'era. Misurato, e tenuto fermo da
+    `test_apply_rooms_non_ruba_l_aula_a_chi_sta_fuori`."""
+    if aula is not None:
+        return aula
+    if len(dichiarate) == 1:
+        return next(iter(dichiarate))
+    return None
+
+
 @dataclass
 class RoomContext:
     schedule: object
@@ -52,16 +76,17 @@ class RoomContext:
                 if aid in requests or aid in held or aid not in state.placed:
                     continue
                 aula = state.assigned_room.get(aid)
+                rooms = {r.pk for r in act.rooms.all()}
                 if selected is not None and aid not in selected:
                     # ⚠ Fuori perimetro: **mai** una decisione, nemmeno senza
                     # aula. L'immobile senza assegnazione resta una decisione
                     # perche' il blocco riguarda l'aula che ha; l'estrazione
                     # no, perche' riguarda il lavoro che si e' chiesto di fare.
                     # Cio' che tiene un'aula continua a consumarne la capienza.
-                    if aula is not None:
-                        held[aid] = aula
+                    tenuta = _aula_tenuta(aula, rooms)
+                    if tenuta is not None:
+                        held[aid] = tenuta
                     continue
-                rooms = {r.pk for r in act.rooms.all()}
                 # Il blocco riguarda l'aula che ha, non quella che non ha:
                 # un'immobile senza assegnazione resta una decisione.
                 if rooms and not (act.immobility in _IMMOBILE and aula is not None):
@@ -69,8 +94,10 @@ class RoomContext:
                     dichiarate[aid] = rooms
                     if aula is not None:
                         previous[aid] = aula
-                elif aula is not None:
-                    held[aid] = aula
+                else:
+                    tenuta = _aula_tenuta(aula, rooms)
+                    if tenuta is not None:
+                        held[aid] = tenuta
 
         room_sites = dict(Room.objects.values_list("pk", "site_id"))
         candidates = {

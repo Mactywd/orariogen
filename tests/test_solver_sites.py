@@ -372,3 +372,51 @@ def test_adr018_site_transition_due_sedi_gia_sulla_stessa_fascia_non_blocca():
     soluzione = solve(env["schedule"], time_limit=30)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     assert libera.id in soluzione.placements
+
+
+def test_adr018_due_sedi_sulla_stessa_fascia_non_bloccano_max_site_changes():
+    """⚠ Il residuo di ADR-018 si misura nell'unita' del **builder**, non in
+    quella del checker, e per un giorno le due grandezze hanno divergito.
+
+    `MaxSiteChangesChecker` conta le transizioni fra **insiemi** di sedi
+    (dentro una fascia non si viaggia, ADR-019), mentre
+    `MaxSiteChangesBuilder` crea un letterale di cambio per ogni coppia
+    **ordinata** di sedi diverse fra due fasce adiacenti. A capienza
+    cumulativa le due cose non coincidono: `{A, B}` alla fascia 0 e `{C}`
+    alla fascia 1 valgono **un** cambio per il checker e **due** letterali
+    per il builder. Con `_frozen_site_changes` che contava alla maniera del
+    checker, il clamp `max(per_day, consumo)` valeva 1 mentre le sole
+    congelate ne forzavano 2: `INFEASIBLE` per colpa del solo passato, cioe'
+    la meta' vietata di ADR-018 — e con il checker che sullo stesso orario
+    non ha **niente** da ridire.
+
+    Il tetto e' quindi `per_day = 1`, che e' esattamente cio' che il checker
+    concede: la premessa e' asserita prima del solve, o il test misurerebbe
+    un orario gia' illegale invece del residuo."""
+    env = mini_school(days=1, slots=3)
+    env["grid"].morning_end_slot = 3
+    env["grid"].save()
+    InstituteSettings.objects.update_or_create(
+        pk=1, defaults={"site_transition_slots": 0})
+    prof = env["teacher"]
+    prof.simultaneous_capacity = 2     # il «Numero di aule» di EDT, sul docente
+    prof.save()
+    sedi = [Site.objects.create(name=n) for n in ("A", "B", "C")]
+
+    for sede, slot in ((sedi[0], 0), (sedi[1], 0), (sedi[2], 1)):
+        congelata = make_activity(env["subject"], teachers=[prof], site=sede,
+                                  immobility=Activity.Immobility.FIXED)
+        Placement.objects.create(schedule=env["schedule"], activity=congelata,
+                                 day=0, start_slot=slot)
+    libera = make_activity(env["subject"], teachers=[prof], site=sedi[2])
+    ResourceTimeConstraint.objects.create(
+        resource=prof, type=T.MAX_SITE_CHANGES, params={"per_day": 1})
+
+    prima = [f for f in check_schedule(env["schedule"])
+             if f.code == "max_site_changes" and f.severity == Severity.HARD]
+    assert not prima, ("il checker gia' boccia questo passato: il test "
+                       "misurerebbe un orario illegale, non il residuo")
+
+    soluzione = solve(env["schedule"], time_limit=30)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    assert libera.id in soluzione.placements

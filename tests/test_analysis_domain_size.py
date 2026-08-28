@@ -79,7 +79,7 @@ def test_admissible_starts_e_la_lista_di_cui_sp_e_il_conteggio():
     env = mini_school()
     a = make_activity(env["subject"], teachers=[env["teacher"]], slots=1)
     state = ScheduleState.build(env["schedule"])
-    starts = admissible_starts(a, state)
+    starts = admissible_starts(a, state, relaxed=True)
     size = residual_domain(a, state)
     assert size.placements == len(starts)
     assert size.days == len({day for day, _ in starts})
@@ -94,3 +94,34 @@ def test_admissible_starts_non_lascia_l_attivita_spiazzata():
     admissible_starts(a, state)
     assert state.placed[a.id].day == 2
     assert state.placed[a.id].start_slot == 3
+
+
+def test_l_aula_candidata_non_azzera_il_dominio():
+    """⚠ `structural:room_assignment` non stringe il dominio: lo **azzera**.
+
+    Il suo finding esiste solo per le attività *piazzate* — la richiesta
+    d'aula la soddisfa la seconda fase, non il piazzamento — quindi ogni cella
+    di prova produce una chiave che la baseline (attività sospesa) non ha. Con
+    la lettura letterale del criterio «chiave nuova ⇒ cella inammissibile»
+    un'attività che dichiara **una sola** aula candidata misura `S.P. = 0` su
+    una griglia interamente libera: la frase «nessuna collocazione
+    ammissibile» su qualcosa che il solver piazza senza fatica.
+
+    ⚠ Una sola candidata, e non due, perché `_hard_keys` filtra i finding
+    sulle `resources` dell'attività: con due o più candidate l'aula non entra
+    nei token (`activity_tokens` la aggiunge solo a candidata unica) e il
+    finding non passa nemmeno il filtro. Il caso che morde è quello che il
+    Fermi ha davvero — `SPECIAL_ROOMS["MOT"] = ("PALESTRA",)`."""
+    from domain.models import Room
+
+    env = mini_school(days=2, slots=3)
+    palestra = Room.objects.create(name="PALESTRA")
+    senza = make_activity(env["subject"], classes=[env["klass"]])
+    con = make_activity(env["subject"], teachers=[env["teacher"]],
+                        rooms=[palestra])
+    state = ScheduleState.build(env["schedule"])
+
+    assert residual_domain(senza, state).placements == 6
+    assert residual_domain(con, state).placements == 6
+    # E la lettura letterale, che resta disponibile, mostra il fenomeno.
+    assert residual_domain(con, state, relaxed=False).placements == 0

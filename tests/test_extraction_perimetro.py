@@ -191,3 +191,59 @@ def test_fermi_una_classe_e_il_perimetro_che_serve_davvero():
     # apposta, perché il rapporto è una proprietà della macchina e la proprietà
     # da tenere ferma è solo che restringere non costi di più.
     assert ristretto < pieno
+
+
+def test_apply_rooms_non_ruba_l_aula_a_chi_sta_fuori():
+    """⚠ Chi sta fuori dal perimetro tiene la sua aula anche **senza
+    assegnazione**, e per un giorno la seconda fase non lo sapeva.
+
+    `activity_tokens` mette l'aula fra le chiavi di occupazione anche con
+    `assigned_room` a NULL, se le candidate dichiarate sono **una sola**: a
+    candidata unica la scelta è determinata, quindi occupare è esatto e non è
+    una stima. `RoomContext.build` invece leggeva il solo `assigned_room`,
+    quindi quella capienza non entrava in `frozen_load` e `_post_capacity` la
+    regalava a chi stava dentro.
+
+    Qui `fuori` dichiara la sola `R` e non ha assegnazione; `dentro` e
+    `altra`, entrambe estratte e piazzate sulla stessa fascia, dichiarano
+    `{R, S}` e devono spartirsele — quindi una delle due prende `R`, che è già
+    occupata. La misura non è sul modello ma sull'orario che ne esce: zero
+    conflitti d'occupazione prima, zero anche dopo. Con la lettura vecchia ne
+    compariva uno **nuovo** sull'aula, creato dalla fase stessa."""
+    from domain.analysis.conformity import check_schedule
+    from domain.analysis.findings import Severity
+    from domain.models import Extraction, SchoolClass
+    from domain.solver.rooms import apply_rooms
+
+    env = mini_school(days=1, slots=1)
+    r = Room.objects.create(name="R")
+    s = Room.objects.create(name="S")
+    seconda = SchoolClass.objects.create(name="1B", study_plan=env["plan"],
+                                         year=1)
+    terza = SchoolClass.objects.create(name="1C", study_plan=env["plan"],
+                                       year=1)
+    fuori = make_activity(env["subject"], classes=[env["klass"]], rooms=[r])
+    dentro = make_activity(env["subject"], classes=[seconda], rooms=[r, s])
+    altra = make_activity(env["subject"], classes=[terza], rooms=[r, s])
+    for act in (fuori, dentro, altra):
+        place(env["schedule"], act, 0, 0)
+
+    estrazione = Extraction.objects.create(name="le-due")
+    estrazione.activities.set([dentro.pk, altra.pk])
+
+    def conflitti():
+        return sorted((f.code, f.resources) for f in check_schedule(env["schedule"])
+                      if f.severity == Severity.HARD
+                      and f.code.startswith("resource_"))
+
+    assert conflitti() == [], "il passato è già in conflitto: il test non misura nulla"
+
+    ctx = RoomContext.build(env["schedule"], extraction=estrazione)
+    assert ctx.held == {fuori.pk: r.pk}, ctx.held
+
+    soluzione = solve_rooms(env["schedule"], extraction=estrazione, workers=1)
+    apply_rooms(soluzione, env["schedule"])
+    assert conflitti() == [], "la seconda fase ha creato un conflitto d'aula"
+    # `R` è tenuta da chi sta fuori: dentro la fascia resta una sola aula
+    # libera, quindi una delle due estratte rinuncia. È il verdetto corretto.
+    assert len(soluzione.unassigned) == 1, soluzione.assignments

@@ -88,12 +88,25 @@ def trial_placements(activity, state, relaxed=False):
     inventa una deficienza — falso positivo dimostrato nella review finale del
     violatore di Hall (Critical 1).
 
-    Il default resta `relaxed=False`: S.P. (`residual_domain`) è una **stima
-    di difficoltà** mostrata all'utente in una colonna ordinabile, non una
-    dimostrazione, e per lui un dominio più stretto è informazione, non un
-    bug. Il violatore di Hall è l'opposto — il suo verdetto negativo è una
-    dimostrazione, e ogni approssimazione deve **sovrastimare** la capienza —
-    quindi `hall.py` passa `relaxed=True`.
+    ⚠ **Fino al 2026-08-28 il default valeva anche per S.P., con l'argomento
+    che «per l'utente un dominio più stretto è informazione, non un bug».
+    L'argomento è stato falsificato da una misura**, ed è caduto insieme al
+    default: `structural:room_assignment` non stringe il dominio, lo
+    **azzera**. Il suo finding esiste solo per le attività *piazzate*, quindi
+    ogni cella di prova produce una chiave che la baseline non ha, e
+    un'attività con una sola aula candidata dà `S.P. = 0` su una griglia
+    interamente libera (misurato: 6 → 0 su `mini_school(days=2, slots=3)`).
+    Zero non è una stima più prudente: è la frase «nessuna collocazione
+    ammissibile», che `manage.py analyze` stampa per prima perché ordina in
+    senso crescente. Un numero che dice *impossibile* su qualcosa che il
+    solver piazza senza fatica non è informazione, è la stessa diagnosi falsa
+    che la fase 5 non ha il diritto di dare.
+
+    Quindi `residual_domain` rilassa anche lui, e le tre letture di
+    `trial_placements` — S.P., violatore di Hall, classifica dei vincoli —
+    hanno ora la **stessa** regola. `relaxed=False` resta il default del
+    parametro, perché è la lettura letterale del criterio e serve a chi vuole
+    misurarne la differenza; nessun chiamante di produzione la usa.
 
     Rilassare fa perdere **richiamo**, mai precisione: un dominio più largo
     significa più capienza, quindi meno deficienze trovate. È il verso giusto
@@ -141,6 +154,12 @@ def admissible_starts(activity, state, relaxed=False):
             if not causali]
 
 
-def residual_domain(activity, state):
-    starts = admissible_starts(activity, state)
+def residual_domain(activity, state, relaxed=True):
+    """S.P. e Nr G.: quante fasce e quanti giorni restano legali.
+
+    ⚠ `relaxed=True` di default — vedi l'argomento in `trial_placements`: con
+    la lettura letterale un'attività che dichiara **una sola** aula candidata
+    misura `0` su una griglia vuota, e S.P. è la colonna che l'utente ordina
+    per sapere cosa sta per diventare impiazzabile."""
+    starts = admissible_starts(activity, state, relaxed=relaxed)
     return DomainSize(len(starts), len({day for day, _ in starts}))

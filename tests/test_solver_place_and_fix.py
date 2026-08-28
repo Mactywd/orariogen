@@ -10,8 +10,8 @@ import pytest
 
 from domain.analysis.conformity import check_schedule
 from domain.analysis.findings import Severity
-from domain.models import (Activity, Placement, ResourceUnavailability,
-                          SchoolClass)
+from domain.models import (Activity, Extraction, Placement,
+                          ResourceUnavailability, SchoolClass)
 from domain.solver.model import apply, solve
 from domain.solver.place_and_fix import place_and_fix
 from domain.solver.registry import Builder, all_builders
@@ -245,3 +245,61 @@ def test_fermi_intero_misurato():
     hard = [f for f in check_schedule(dataset["schedule"])
             if f.severity == Severity.HARD and f.code != "room_unassigned"]
     assert hard == [], hard[:5]
+
+
+def test_il_pin_su_una_bloccata_dice_che_e_bloccata():
+    """⚠ «I pre-filtri sono due» non implica «un pin fuori dominio viene solo
+    dai pre-filtri», e per un giorno il commento di `CAUSALI_DI_PREFILTRO`
+    diceva il contrario. Il dominio lo restringe anche `SolverContext.build`:
+    a un'immobile gia' piazzata da' un dominio di **cardinalita' uno**, quindi
+    qualunque altra cella e' «fuori dominio» — anche una cella vuota, su una
+    griglia senza un solo vincolo.
+
+    La vecchia risposta era «La collocazione non e' ammissibile per
+    l'attivita'»: falsa, e falsa nella direzione peggiore, perche' manda a
+    cercare un vincolo che non esiste. Il rimedio non e' allentare niente, e'
+    sbloccare."""
+    env = mini_school(days=1, slots=3)
+    bloccata = make_activity(env["subject"], classes=[env["klass"]],
+                             immobility=Activity.Immobility.LOCKED_IN_PLACE)
+    place(env["schedule"], bloccata, 0, 0)
+
+    esito = place_and_fix(env["schedule"], bloccata.pk, 0, 2, workers=1)
+    assert not esito.ok
+    assert esito.solution.stats["pin_fuori_dominio"] == ((bloccata.pk, 0, 2),)
+    assert len(esito.obstruction) == 1
+    frase = esito.obstruction[0]
+    assert "bloccata su giorno 0, fascia 0" in frase, frase
+    assert "sbloccata" in frase, frase
+
+
+def test_il_pin_fuori_estrazione_nomina_l_estrazione():
+    """Il gemello: fuori dal perimetro un'attivita' e' congelata dov'e'
+    (`SolverContext.build`), quindi il pin esce dal dominio per una ragione
+    che non e' un vincolo dell'orario. La frase deve nominare l'estrazione,
+    perche' il rimedio e' allargarla."""
+    env = mini_school(days=1, slots=3)
+    fuori = make_activity(env["subject"], classes=[env["klass"]])
+    dentro = make_activity(env["subject"])
+    place(env["schedule"], fuori, 0, 0)
+    place(env["schedule"], dentro, 0, 1)
+    estrazione = Extraction.objects.create(name="solo-dentro")
+    estrazione.activities.add(dentro)
+
+    esito = place_and_fix(env["schedule"], fuori.pk, 0, 2,
+                          extraction=estrazione, workers=1)
+    assert not esito.ok
+    assert esito.obstruction and "solo-dentro" in esito.obstruction[0]
+
+
+def test_il_pin_su_una_sospesa_lo_dice():
+    """Una sospesa non entra nemmeno in `ScheduleState`: senza questa lettura
+    la risposta era «L'attivita' non fa parte di questo orario», che e' vera
+    ma non dice **perche'**."""
+    env = mini_school(days=1, slots=3)
+    sospesa = make_activity(env["subject"], classes=[env["klass"]],
+                            immobility=Activity.Immobility.SUSPENDED)
+
+    esito = place_and_fix(env["schedule"], sospesa.pk, 0, 1, workers=1)
+    assert not esito.ok
+    assert esito.obstruction and "sospesa" in esito.obstruction[0]
