@@ -8,14 +8,26 @@ lavoro di qualcun altro premendo invio. Senza il flag il comando dice cosa
 farebbe; con il flag scrive i piazzamenti e **cancella** quelli delle attività
 che ha deciso di scartare.
 
-⚠ **Con i criteri di qualità accesi, `--limite` non è opzionale.** Misurato sul
-Fermi (284 attività, cinque criteri): senza limite il calcolo non è tornato in
-**nove minuti**; con `--limite 15` finisce in ~40 s, e due livelli su sei
-chiudono con l'ottimo **non dimostrato** — `regularity` e `free_half_days`, che
-sono i due che aprono più simmetrie. La catena resta corretta: un livello che
-scade fissa l'ultimo valore trovato invece dell'ottimo, quindi diventa meno
-ambizioso, mai sbagliato. Il comando lo dichiara riga per riga, e chi legge
-«ottimo non dimostrato» sa che alzare il limite può migliorare quel numero.
+⚠ **I criteri di qualità hanno un budget proprio**, e da qui in poi `--limite`
+è un'opzione e non un obbligo: senza, ogni livello di qualità ha
+`BUDGET_QUALITA` secondi e i livelli che dimostrano l'ottimo non hanno limite.
+Prima il default era «nessun limite ovunque», e sul Fermi con cinque criteri
+il comando **non tornava in nove minuti** — una configurazione predefinita che
+non termina.
+
+🔑 **E il motivo per cui certi livelli non concludono non è che siano difficili
+da ottimizzare: è che sono impossibili da dimostrare.** Misurato sul Fermi:
+`gaps` arriva a 0 e lo dimostra in un secondo, perché zero è anche il limite
+inferiore banale; `free_half_days` si ferma a 202 con un limite inferiore di
+**6** e `regularity` a 236 con **18**. Il divario non è un residuo di ricerca:
+è tutto il valore. Il comando lo stampa, perché «ottimo non dimostrato» da solo
+non distingue chi ha finito da chi non ha cominciato — e quando valore e limite
+coincidono lo dice, così nessuno alza `--limite` per niente.
+
+⚠ **E i lavoratori contano più del limite.** A 15 s per livello, un solo
+lavoratore dà `regularity 359` dove quattro danno **236**: `--lavoratori 1`
+serve alla riproducibilità e si paga in qualità. Il comando dichiara quanti ne
+ha usati, perché un numero di qualità senza quel dato non è confrontabile.
 
 `--popolazione` è la separazione di EDT, che **non cerca mai un ottimo
 congiunto**: si ottimizza una popolazione, e `--tolleranza` dichiara di quanto
@@ -37,6 +49,23 @@ from domain.solver.quality import Arbitrato
 
 def _hm(minutes):
     return f"{minutes // 60}h{minutes % 60:02d}"
+
+
+def _esito(livello):
+    """La riga di un livello. Estratta perché sia verificabile senza costruire
+    un'istanza che produca *deterministicamente* un divario: farla scattare con
+    un solve vero vorrebbe dire dipendere dalla velocità della macchina."""
+    valore, divario = livello["valore"], livello["divario"]
+    if valore is None:
+        return "non concluso"
+    if livello["ottimo"]:
+        return str(valore)
+    if divario == 0:
+        # 🔑 Valore e limite inferiore coincidono ma il solver non ha chiuso la
+        # dimostrazione: è l'ottimo, e leggerlo come «forse c'è di meglio»
+        # manda ad alzare il limite di tempo per niente.
+        return f"{valore} (è l'ottimo, non dimostrato)"
+    return f"{valore} (ottimo non dimostrato, non sotto {livello['limite']})"
 
 
 class Command(BaseCommand):
@@ -93,16 +122,18 @@ class Command(BaseCommand):
                           f"({stats['libere']} libere)")
         self.stdout.write(f"  Modello: {stats['variabili']} variabili, "
                           f"{stats['constraint']} constraint")
-        self.stdout.write(f"  Tempo totale: {stats['secondi']}s")
+        # ⚠ I lavoratori si dichiarano perché **cambiano il risultato**, non
+        # solo il tempo: misurato sul Fermi a 15 s per livello, un solo
+        # lavoratore dà `regularity 359` dove quattro danno 236, e
+        # `free_half_days 243` contro 202. Un numero di qualità senza il
+        # numero di lavoratori non è confrontabile con nessun altro.
+        self.stdout.write(f"  Tempo totale: {stats['secondi']}s "
+                          f"({stats['lavoratori'] or 'tutti i core'} in ricerca)")
 
         if stats["livelli"]:
             self.stdout.write("\n== Criteri, in ordine di priorità ==")
             for i, livello in enumerate(stats["livelli"], 1):
-                valore = livello["valore"]
-                esito = ("non concluso" if valore is None
-                         else f"{valore}" + ("" if livello["ottimo"]
-                                             else " (ottimo non dimostrato)"))
-                self.stdout.write(f"  [{i}] {livello['nome']}: {esito}"
+                self.stdout.write(f"  [{i}] {livello['nome']}: {_esito(livello)}"
                                   f"   {livello['secondi']}s")
 
         if arbitrato is not None:

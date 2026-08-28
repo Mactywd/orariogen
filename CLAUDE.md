@@ -200,9 +200,21 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > quattro valori di `Ottimizzazione degli orari` — buchi, attività isolate,
 > mezze giornate libere, equilibrio didattico — più il pennello **verde**, come
 > livelli in coda alla catena, con l'**ordine dichiarato dai dati**
-> (`QualityCriterion`) e non dal codice. ⚠ E costano: sul Fermi cinque criteri
-> senza limite di tempo non tornano in nove minuti, con `--limite 15` chiudono
-> in 39,5 s lasciando due livelli su sei con l'ottimo non dimostrato.
+> (`QualityCriterion`) e non dal codice.
+>
+> ⚠ **E costano — ma non per la ragione che era scritta qui.** Fino al
+> 2026-08-28 questa nota diceva «senza limite di tempo non tornano in nove
+> minuti, con `--limite 15` chiudono in 39,5 s lasciando due livelli su sei con
+> l'ottimo non dimostrato», e la misura era a **un lavoratore**, che non è come
+> il comando gira. 🔑 Il fenomeno vero: un livello di qualità non è lento
+> perché difficile da ottimizzare, è lento perché **impossibile da
+> dimostrare** — `gaps` chiude in un secondo perché zero è anche il suo limite
+> inferiore banale, `free_half_days` si ferma a 202 con limite **6** e
+> `regularity` a 236 con **18**. Da qui il **budget dei soli livelli di
+> qualità** (`BUDGET_QUALITA`, 15 s): senza, `manage.py solve` non tornava, e
+> un budget globale avrebbe punito proprio i livelli che l'ottimo lo
+> dimostrano. E il rendiconto porta ora il **divario**, che distingue
+> `isolated 0` (è l'ottimo, non dimostrato) da `regularity 236` (non sotto 18).
 >
 > Dal 2026-08-27 (sera) c'è anche la **separazione per popolazione**
 > (`Arbitrato` in `domain/solver/quality.py`,
@@ -572,6 +584,66 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (il costo dei criteri di qualità)** — **Il numero che questo
+  file dichiarava da un giorno era misurato male, e la diagnosi che ne
+  discendeva era l'opposto di quella giusta.** La nota di stato diceva «cinque
+  criteri senza limite non tornano in nove minuti, con `--limite 15` chiudono
+  in 39,5 s lasciando due livelli su sei con l'ottimo non dimostrato», e da lì
+  il docstring di `manage.py solve` concludeva che *«`--limite` non è
+  opzionale»*. Entrambe le frasi vengono da una misura a **un lavoratore**, che
+  non è come il comando gira.
+
+  🔑 **Il fenomeno vero: un livello non è lento perché sia difficile da
+  ottimizzare, è lento perché è impossibile da dimostrare.** `gaps` arriva a 0
+  e chiude in un secondo, e la ragione non è che sia un criterio facile — è che
+  **zero è anche il suo limite inferiore banale**, quindi valore e limite si
+  toccano subito. `free_half_days` si ferma a 202 con limite inferiore **6**,
+  `regularity` a 236 con **18**: il divario non è un residuo di ricerca, è
+  tutto il valore. Il tempo se ne va in una dimostrazione che non arriverà.
+
+  🔑 **E i livelli che contano un fallimento non hanno il problema**, per la
+  stessa ragione e al contrario: scarti, violazioni nuove e spostamenti hanno
+  ottimo zero, cioè il limite banale, e sul Fermi chiudono in 1,7 s e 0,7 s.
+  Da qui il **budget dei soli livelli di qualità** (`BUDGET_QUALITA`, 15 s dal
+  ginocchio della curva: `free_half_days` 202 a 15 s e 199 a 60 s). ⚠ Un
+  comando la cui configurazione predefinita non termina è un difetto, e un
+  budget globale sarebbe stato il rimedio sbagliato — punirebbe proprio i
+  livelli che l'ottimo lo dimostrano. `--limite` sovrascrive in **entrambi** i
+  versi, anche allungando.
+
+  🔑 **Il rendiconto porta il divario, e CP-SAT quel numero ce l'aveva già.**
+  «Ottimo non dimostrato» da solo non distingue chi ha finito da chi non ha
+  cominciato: `isolated 0` con limite 0 è *l'ottimo*, e mandare a alzare
+  `--limite` è un consiglio a vuoto; `regularity 236` con limite 18 è un'altra
+  cosa. `BestObjectiveBound` costava zero e lo buttavamo via.
+
+  ⚠ **E i lavoratori pesano più del limite.** A 15 s per livello, misurato: con
+  **1** lavoratore `regularity 359`, `free_half_days 243`, `isolated 37`; con
+  **4**, `236`, `202` e **0** — l'ottimo, raggiunto in 7 s e non dimostrato.
+  Il tracciato dell'incumbent lo spiega: a un lavoratore `isolated` resta
+  fermo a 37 dal secondo 1 al secondo 36 e poi **crolla a 0** entro il 50°.
+  ⛔ Da cui una contromisura che sembrava ovvia e sarebbe stata esattamente
+  sbagliata: un limite «fermati dopo N secondi senza miglioramenti» avrebbe
+  tagliato al quinto secondo e fissato 37 invece di 0. Il plateau non era il
+  fondo. `manage.py solve` dichiara ora quanti lavoratori ha usato, perché un
+  numero di qualità senza quel dato non è confrontabile con nessun altro.
+
+  ⛔ **E la riparazione modellistica ovvia peggiora le cose.** Un limite
+  inferiore *implicato* per `free_half_days` — `somma_h attiva(g,h)·len(span_h)
+  >= somma_s occupata(g,s)` per chiave e giorno, valido sempre — non chiude il
+  divario: misurato a 15 s, il valore passa da 202 a **209** e il limite da 6 a
+  **4**. La presolve di CP-SAT ne deriva già almeno altrettanto, e le 140 righe
+  in più costano ricerca. Scritta, misurata, buttata — e non riprovata, perché
+  romperebbe anche l'invariante «un criterio posta **solo definizioni**», da
+  cui dipende `_valori_di_base` dell'arbitrato.
+
+  **Sei mutazioni, sei esiti distinti**, e il fenomeno entra nella suite invece
+  di restare in una sessione: `test_fermi_i_criteri_di_qualita_misurati` gira a
+  `--limite 3` (14 s) e pretende che `gaps` abbia divario zero e `regularity`
+  no — se il limite inferiore smettesse di essere inutile, quel test
+  diventerebbe rosso e la decisione si riprenderebbe guardando quel rosso.
+  **766 test verdi**, 16 skip.
 
 - **2026-08-28 (l'orario nel telefono)** — **Il primo pezzo che consegna
   invece di calcolare.** `domain/ical.py` più `manage.py export_ical`: è

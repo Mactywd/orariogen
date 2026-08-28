@@ -337,3 +337,139 @@ def test_l_ordine_dei_criteri_decide_chi_cede():
     livelli = _livelli(solve(env["schedule"], workers=1))
     assert (livelli["regularity_classes"],
             livelli["free_half_days_classes"]) == (2, 1), livelli
+
+
+# --- il budget dei livelli di qualità ---------------------------------------
+
+def test_solo_i_livelli_di_qualita_hanno_un_budget():
+    """🔑 Il default sta sui soli criteri di qualità, e la ragione è misurata.
+
+    I livelli che contano un **fallimento** chiudono dimostrando l'ottimo,
+    perché il loro ottimo è zero e zero è anche il limite inferiore banale: sul
+    Fermi 1,7 s e 0,7 s. I criteri di qualità hanno ottimi non nulli con limiti
+    inferiori inutili (`free_half_days` 202 con limite 6), quindi non
+    concludono mai — e senza budget `manage.py solve` **non torna**: nove
+    minuti senza risposta, misurati.
+
+    ⚠ Un budget globale sarebbe stato il rimedio sbagliato: punirebbe proprio i
+    livelli che l'ottimo lo dimostrano."""
+    from domain.solver.objective import BUDGET_QUALITA
+
+    env = mini_school(days=2, slots=4)
+    _n(env, 4)
+    QualityCriterion.objects.create(kind=K.GAPS, population=P.ALL, rank=1)
+    model, ctx = build_model(env["schedule"])
+
+    budget = {lv.nome: lv.limite for lv in livelli(ctx, model)}
+    assert budget["minuti_scartati"] is None
+    assert budget["attivita_scartate"] is None
+    assert budget["gaps_all"] == BUDGET_QUALITA
+
+
+def test_il_limite_esplicito_vince_in_entrambi_i_versi():
+    """⚠ Anche **allungando**: chi passa un numero sta rispondendo alla domanda
+    «quanto tempo mi costa», e non gli si mette davanti un default. Il test
+    guarda il parametro che il solver riceve, non il tempo di parete — che
+    dipenderebbe dalla macchina."""
+    from ortools.sat.python import cp_model
+
+    from domain.solver.objective import Level, solve_chain
+
+    visti = []
+
+    class _SolverCheAnnota:
+        def __init__(self):
+            self._vero = cp_model.CpSolver()
+            self.parameters = self._vero.parameters
+
+        def Solve(self, m):
+            visti.append(self.parameters.max_time_in_seconds)
+            return self._vero.Solve(m)
+
+        def Value(self, var):
+            return self._vero.Value(var)
+
+        def BestObjectiveBound(self):
+            return self._vero.BestObjectiveBound()
+
+    def catena(model):
+        x = [model.NewBoolVar(f"x{i}") for i in range(3)]
+        senza = model.NewIntVar(0, 3, "senza")
+        model.Add(senza == sum(x))
+        con = model.NewIntVar(0, 3, "con")
+        model.Add(con == sum(x))
+        return [Level("senza", senza), Level("con", con, 15.0)]
+
+    model = cp_model.CpModel()
+    solve_chain(model, catena(model), estrai=lambda s: {},
+                solver=_SolverCheAnnota())
+    assert visti[0] > 1e8 and visti[1] == 15.0   # il budget proprio, e nessuno
+
+    visti.clear()
+    model = cp_model.CpModel()
+    solve_chain(model, catena(model), estrai=lambda s: {}, time_limit=99.0,
+                solver=_SolverCheAnnota())
+    assert visti == [99.0, 99.0], "un limite esplicito vale per tutti i livelli"
+
+
+def test_fermi_i_criteri_di_qualita_misurati():
+    """Il costo dei criteri di qualità sul Fermi, e la diagnosi che lo spiega.
+
+    🔑 **Un livello non è lento perché sia difficile da ottimizzare: è lento
+    perché è impossibile da dimostrare.** `gaps` arriva a 0 e chiude in un
+    secondo — zero è anche il limite inferiore banale, quindi valore e limite
+    si toccano subito. `free_half_days` si ferma a 202 con limite inferiore
+    **6**, `regularity` a 236 con **18**: il divario non è un residuo di
+    ricerca, è tutto il valore. Da qui il budget dei soli livelli di qualità.
+
+    ⚠ **E i lavoratori pesano più del limite.** A 15 s per livello, misurato:
+    con **1** lavoratore `regularity 359`, `free_half_days 243`, `isolated 37`;
+    con **4**, `236`, `202` e **0** — l'ottimo, raggiunto in 7 s e non
+    dimostrato. `--lavoratori 1` serve alla riproducibilità e si paga.
+
+    ⛔ **E la riparazione ovvia non funziona.** Un limite inferiore
+    *implicato* per `free_half_days` — `somma_h attiva(g,h)·len(span_h) >=
+    somma_s occupata(g,s)` per chiave e giorno, valido sempre — non chiude il
+    divario: **lo peggiora**. Misurato a 15 s: valore da 202 a 209, limite da
+    6 a **4**. La presolve di CP-SAT ne deriva già almeno altrettanto, e le
+    140 righe in più costano ricerca. Scritta, misurata, buttata — e non
+    riprovata, perché romperebbe anche l'invariante «un criterio posta solo
+    definizioni», da cui dipende `_valori_di_base`.
+
+    ⚠ Qui si gira con `--limite 3` per non spendere un minuto di suite: i
+    numeri sopra vengono dalla misura a 15 s, che è il ginocchio della curva
+    (`free_half_days` 202 a 15 s e 199 a 60 s; `regularity` 236 e 226)."""
+    import time
+
+    from tests import fermi
+
+    dataset = fermi.build()
+    for i, kind in enumerate([K.GAPS, K.ISOLATED, K.FREE_HALF_DAYS,
+                              K.REGULARITY, K.PREFERENCES], 1):
+        QualityCriterion.objects.create(kind=kind, population=P.ALL, rank=i)
+
+    t0 = time.perf_counter()
+    soluzione = solve(dataset["schedule"], time_limit=3)
+    secondi = time.perf_counter() - t0
+    livelli_ = soluzione.stats["livelli"]
+    print(f"\nFermi qualità: {secondi:.1f}s, {len(livelli_)} livelli")
+    for lv in livelli_:
+        print(f"   {lv['nome']:<22} {lv['valore']:>6}  "
+              f"limite {lv['limite']:>4}  divario {lv['divario']:>6}"
+              f"  {lv['secondi']}s")
+
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE")
+    assert soluzione.unplaced == ()
+    nomi = [lv["nome"] for lv in livelli_]
+    # ⚠ `preferences` non diventa un livello: il Fermi non ha indisponibilità
+    # verdi, quindi il criterio è la costante zero e `livelli_di_qualita` lo
+    # salta. Cinque righe, quattro livelli — ed è la regola «un criterio senza
+    # niente da misurare non è un livello», non una perdita.
+    assert "preferences_all" not in nomi
+    assert nomi[-3:] == ["isolated_all", "free_half_days_all", "regularity_all"]
+
+    per_nome = {lv["nome"]: lv for lv in livelli_}
+    assert per_nome["gaps_all"]["divario"] == 0, "zero è anche il suo limite"
+    assert per_nome["regularity_all"]["divario"] > 0, (
+        "il divario di regularity è il fenomeno che questo test misura: se "
+        "diventasse zero, il limite inferiore avrebbe smesso di essere inutile")

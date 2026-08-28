@@ -152,3 +152,40 @@ def test_il_comando_dichiara_quando_non_c_e_una_base():
     assert errore is None, testo
     assert "nessun tetto" in testo
     assert "non è completo" in testo
+
+
+def test_il_rendiconto_distingue_l_ottimo_non_dimostrato_dal_divario():
+    """🔑 «Ottimo non dimostrato» da solo non è un'informazione: non distingue
+    chi ha finito da chi non ha cominciato. Con il limite inferiore le due
+    frasi diventano diverse, e quella a divario zero **toglie** il consiglio di
+    alzare `--limite` invece di darlo a vuoto.
+
+    I quattro casi vengono dalla misura sul Fermi: `gaps` dimostra 0;
+    `isolated` **arriva** a 0 e non lo dimostra; `regularity` si ferma a 236
+    con limite inferiore 18; un livello scaduto senza soluzione non conclude."""
+    from domain.management.commands.solve import _esito
+    from domain.solver.objective import Esito
+
+    def riga(**kw):
+        return _esito(Esito(**kw).as_dict())
+
+    assert riga(nome="gaps_all", valore=0, ottimo=True,
+                secondi=1.0, limite=0) == "0"
+    assert riga(nome="isolated_all", valore=0, ottimo=False,
+                secondi=15.0, limite=0) == "0 (è l'ottimo, non dimostrato)"
+    assert riga(nome="regularity_all", valore=236, ottimo=False,
+                secondi=15.0, limite=18) == (
+        "236 (ottimo non dimostrato, non sotto 18)")
+    assert riga(nome="x", valore=None, ottimo=False,
+                secondi=15.0, limite=None) == "non concluso"
+
+
+def test_i_lavoratori_si_dichiarano():
+    """⚠ Cambiano il **risultato**, non solo il tempo: a 15 s per livello un
+    lavoratore dà `regularity 359` dove quattro danno 236. Un numero di qualità
+    senza il numero di lavoratori non è confrontabile con nessun altro."""
+    env = mini_school(days=2, slots=2)
+    make_activity(env["subject"], teachers=[env["teacher"]],
+                  classes=[env["klass"]])
+    testo, _ = _esegui(env["schedule"])
+    assert "(1 in ricerca)" in testo
