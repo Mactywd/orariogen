@@ -144,7 +144,12 @@ famiglia. Elenco quelle in cui la scelta non è ovvia.
   fra «il calcolo è fallito» e «quale vincolo allento».
 - **La colonna `S.P.`** (dimensione del dominio residuo): il solver la calcola
   comunque durante la propagazione. Diagnostica preventiva **a costo zero**.
-- **Export iCal**: i docenti vogliono il proprio orario nel telefono.
+- **Export iCal** — **implementato il 2026-08-28** (`domain/ical.py`,
+  `manage.py export_ical`): i docenti vogliono il proprio orario nel telefono.
+  🔑 Ed è il punto in cui la **fascia di calcolo smette di essere l'ora**: un
+  calendario legge l'**etichetta oraria** (`SlotLabel`, il `Place` dello XSD con
+  `@LibelleHeureDebut`/`@LibelleHeureFin`), non `slot_minutes`. Senza etichette
+  l'export **rifiuta** invece di indovinare le 8:00.
 - I dati anagrafici e le loro conseguenze già decise: disciplina come tabella
   ([ADR-001](decisioni.md)), mappatura alle classi di concorso
   ([ADR-002](decisioni.md)), capacità ≠ assegnazione ([ADR-006](decisioni.md)),

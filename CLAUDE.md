@@ -75,6 +75,9 @@ domain/                l'app Django del modello di dominio v1
                         `Piazza e sistema` (place_and_fix.py) e la **seconda
                         fase** — l'assegnazione delle aule (rooms.py), modello
                         a sé con due livelli propri
+  ical.py               l'export iCalendar: l'orario nel telefono — l'unico
+                        pezzo che *consegna* invece di calcolare, e il punto in
+                        cui la fascia di calcolo smette di essere l'ora
   extraction.py         `Estrai`: la selezione di lavoro come operazione —
                         criteri, i sei rilevatori di problemi, le quattro
                         operazioni insiemistiche, e il perimetro che restringe
@@ -271,6 +274,15 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > `solve`. 🔑 La regola: **un'estrazione restringe ciò su cui si agisce, mai
 > ciò che si conta.** Fermi, `--estrazione biennio`: 104 attività libere su
 > 284, **3243 variabili contro 8426**, e 32 richieste d'aula contro 92.
+>
+> Dal 2026-08-28 (notte) c'è l'**export iCal** (`domain/ical.py`,
+> `manage.py export_ical`), la sola voce ✅ di `scope-v1.md` che non riguarda il
+> calcolo: tutto il resto produce un orario, questo lo **consegna**.
+> 🔑 Ed è il punto in cui la **fascia di calcolo smette di essere l'ora**:
+> `SlotLabel` (📦, il `Place` dello XSD con `@LibelleHeureDebut` /
+> `@LibelleHeureFin`) porta l'orologio, e `slot_minutes` non compare nel file.
+> Un'attività non è sempre **un** evento — dove l'orologio salta, il blocco si
+> spezza in corse contigue. Fermi: 9372 eventi, 1,8 MiB, 0,6 s; un docente 693.
 >
 > Restano i punti aperti elencati sotto.
 
@@ -560,6 +572,81 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (l'orario nel telefono)** — **Il primo pezzo che consegna
+  invece di calcolare.** `domain/ical.py` più `manage.py export_ical`: è
+  l'unica voce ✅ di `scope-v1.md` che non riguarda il motore, e la sua riga là
+  era una frase sola — *«i docenti vogliono il proprio orario nel telefono»*.
+  In EDT il canale esiste ed è dichiarato per quello che è
+  (`UtilitaireSco_ExportICal`, `ImpEDT_ExportICALRencontre`,
+  `ImpEDT_ExportICALConseil`): il verso **esterno**, distinto da
+  `Partenaire_Index` che è il verso verso gli altri gestionali.
+
+  🔑 **Ed è il punto in cui la fascia di calcolo smette di essere l'ora.**
+  `tempo-e-calendario.md` distingue per nome due grandezze che tutto il resto
+  del progetto ha potuto confondere impunemente, perché il motore ne usa una
+  sola: la **fascia di calcolo** (l'unità del piazzamento *e* dell'ora di
+  servizio del docente) e l'**etichetta oraria** (*«ad esempio 55 minuti»*,
+  orari sfalsati). Un calendario legge la seconda. Da qui `SlotLabel`
+  (migrazione `0011`), che non è un campo nostro: è il `Place` dello XSD
+  `Partenaire_Index` V4.6 (📦, livello 1) con i suoi `@LibelleHeureDebut` e
+  `@LibelleHeureFin` — cioè l'orologio sta **per fascia**, non sulla griglia,
+  ed è per questo che gli orari sfalsati sono rappresentabili. Nel file
+  `slot_minutes` non compare.
+
+  ⚠ **E senza etichette si rifiuta.** È la funzionalità, non una mancanza: il
+  fallimento alternativo — «si comincia alle 8» — non fa rumore e mette le
+  lezioni di tutta la scuola all'ora sbagliata. Il rifiuto nomina le fasce
+  scoperte.
+
+  🔑 **Un'attività non è sempre *un* evento.** Se l'orologio salta fra due
+  fasce consecutive — la pausa di mezza giornata è il caso normale, le 12 che
+  riprendono alle 14 — un blocco da due fasce a cavallo della linea non è una
+  lezione di quattro ore: sono due lezioni. Le fasce si spezzano quindi in
+  **corse contigue** nel tempo dell'orologio. Sommare `duration_minutes`
+  all'ora d'inizio avrebbe dato la risposta giusta su ogni scuola senza pausa
+  e sbagliata su tutte le altre, senza mai fallire rumorosamente.
+
+  ⚠ **E il Fermi non lo esercita, contro la previsione scritta nel test.** Il
+  suo orologio ha la pausa, ma i blocchi da due fasce sono **quattro** su 284 e
+  nessuno è atterrato a cavallo — per caso, non per regola: nel modello
+  *niente vieta* a un blocco di scavalcare la mezza giornata. Il divieto
+  esiste ed è `Break` + `respects_breaks` (`structural:grid`), che questo
+  dataset non usa. Il conto è quindi esatto — **9372 = 284 × 33** — e la metà
+  interessante la misura il test spostando a mano un blocco dove il solver non
+  l'ha messo: **33 eventi in più**, non 33 eventi più lunghi.
+
+  ⚠ **Niente `RRULE`, ed è una decisione.** «Ogni lunedì» sarebbe più compatto,
+  ma la maschera di settimane **non è una ricorrenza**: annuale e quadrimestre
+  lo sono, la sostituzione di ADR-014 (un bit solo) e l'`Amenagement` no, e
+  festivi e confini di periodo andrebbero elencati in `EXDATE` uno per uno. Un
+  `VEVENT` per occorrenza è corretto per **qualunque** maschera, e il prezzo è
+  misurato invece che temuto: 1,8 MiB per la scuola intera, **0,6 s**, e il
+  file che finisce davvero su un telefono è quello di un docente — **693
+  eventi**, 21 ore per 33 settimane.
+
+  ⚠ **Ora locale fluttuante**, senza `TZID` e senza `VTIMEZONE`: le 08:00 di
+  una scuola sono le 08:00 dell'orologio alla parete, ed è l'unica forma che
+  attraversa il cambio d'ora senza spostare le lezioni per metà anno.
+
+  🔑 **`Estrai` guadagna un dipendente, e con una deroga alla sua regola.**
+  `--risorsa` è `per_risorsa`, che ha già i tre versi che ai token non servono
+  (parte → classe, raggruppamento → classi, tutte le aule). Ma il perimetro
+  qui **restringe davvero l'uscita**, cioè l'unico posto in cui un'estrazione
+  tocca ciò che si «conta» — e la ragione è che qui non si conta niente:
+  pubblicare è agire, e un calendario non è una diagnosi.
+
+  ⚠ Fuori, dichiarato: la **sostituzione non oscura l'originale**. Per ADR-014
+  il sostituto è una riga di `Activity` con un bit solo e compare da sé, ma
+  l'originale è annuale e continua a comparire nella stessa settimana — il
+  modello non ha la relazione fra i due (`RELATIONCOURSSUBSTITUT` di EDT).
+
+  Le etichette del Fermi sono **nostra scelta di dimensionamento**, come le
+  aule: `tempo-e-calendario.md` dichiara che la configurazione oraria di EDT
+  non è mai stata osservata in UI. **Quindici mutazioni, quindici esiti
+  distinti** — e l'oracolo del pezzo non è il solver ma il **formato**:
+  `_srotola` rifà a ritroso la piegatura di RFC 5545, così un test che guarda
+  `DTEND` guarda ciò che un telefono leggerebbe. **761 test verdi**, 16 skip.
 
 - **2026-08-28 (i debiti del banco)** — **Tre debiti dichiarati, e due erano
   dichiarati male.** Il piano del modello hard ne aveva lasciati tre in

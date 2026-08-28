@@ -8,10 +8,25 @@ from domain import weeks
 from domain.models import (
     Activity, CompetitionClass, Discipline, InstituteSettings, Period,
     ResourceUnavailability, Room, Schedule, SchoolClass, SchoolYear, Service,
-    StudyPlan, Subject, Teacher, TeachingAssignment, TimeGrid,
+    SlotLabel, StudyPlan, Subject, Teacher, TeachingAssignment, TimeGrid,
 )
 
 WEEKS_IN_YEAR = 33  # periodicità S (33/33) osservata in EDT
+
+# Le etichette orarie delle sei fasce. ⚠ Come le aule e come `SPECIAL_ROOMS`,
+# è **nostra scelta di dimensionamento**, mai osservata: `tempo-e-calendario.md`
+# dichiara che la configurazione oraria di EDT non è mai stata vista in UI, e
+# la base del Fermi non ha un orologio. La pausa fra le 12 e le 14 non è
+# decorativa — è la discontinuità che fa esistere il caso del blocco spezzato,
+# e senza di essa il dataset misurerebbe un export senza gradi di libertà.
+SLOT_LABELS = [
+    (0, dt.time(8, 0), dt.time(9, 0)),
+    (1, dt.time(9, 0), dt.time(10, 0)),
+    (2, dt.time(10, 0), dt.time(11, 0)),
+    (3, dt.time(11, 0), dt.time(12, 0)),
+    (4, dt.time(14, 0), dt.time(15, 0)),
+    (5, dt.time(15, 0), dt.time(16, 0)),
+]
 
 # Spezzoni (vincoli-attesi.md): D06, D09, D15 indisponibili a giornata intera
 # nei giorni elencati. Il dataset dichiara il bisogno, non i giorni: questa è
@@ -114,6 +129,9 @@ def build():
     grid = TimeGrid.objects.create(
         days_per_cycle=5, slots_per_day=6, slot_minutes=60, morning_end_slot=4
     )
+    for slot, inizio, fine in SLOT_LABELS:
+        SlotLabel.objects.create(grid=grid, slot=slot,
+                                 start_time=inizio, end_time=fine)
 
     disciplines, subjects = {}, {}
     for code, (name, ccs) in DISCIPLINES.items():
