@@ -153,3 +153,27 @@ def test_l_estrazione_restringe_le_tre_fasi_e_non_la_conformita():
     assert "Rossi Anna ha una indisponibilità" in testo
     # ...ma la classifica ha esaminato una sola attività.
     assert "1 attività esaminate" in testo
+
+
+def test_l_aula_ancora_da_assegnare_non_e_un_incoerenza():
+    """⚠ `analyze` è dichiarato usabile in CI, e l'exit code dice «restano
+    incoerenze». Un'attività che chiede un'aula e non ce l'ha **non** è
+    un'incoerenza: è un orario **incompleto**, e a completarlo è la seconda
+    fase (`assign_rooms`), che per definizione non ha ancora girato. Contarla
+    faceva fallire la CI su un orario impeccabile appena uscito da `solve`.
+
+    È la stessa esclusione che `solve` e `assign_rooms` fanno già sulle
+    «violazioni residue» — qui mancava, ed era l'unica delle tre a decidere un
+    exit code. Il finding resta **stampato**: si dichiara, non si conta."""
+    from domain.models import Room
+
+    env = mini_school(days=1, slots=1)
+    palestra = Room.objects.create(name="PALESTRA")
+    a = make_activity(env["subject"], classes=[env["klass"]],
+                      rooms=[palestra])
+    place(env["schedule"], a, 0, 0)
+
+    testo = _run("--schedule", str(env["schedule"].pk))
+    assert "nessuna aula assegnata" in testo      # dichiarata...
+    assert "0 violazioni hard" in testo           # ...ma non contata
+    assert "nessuna incoerenza" in testo

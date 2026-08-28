@@ -655,10 +655,50 @@ ora **non deve** esprimerlo. Resta su di lui una sovra-approssimazione
 **dichiarata** nel caso a più sedi per fascia (posta le coppie incrociate dove
 il checker conta zero), cioè è più stretto del checker — il verso in cui una
 sovra-approssimazione non rompe l'oracolo differenziale.
-⚠ E il residuo di ADR-018 va calcolato con **la stessa** regola: contarlo
-appiattendo le occupazioni sovrastimava il consumo delle congelate, alzava il
-tetto clampato e faceva accettare al solver un cambio che il checker non
-perdona — misurato, `OPTIMAL` con un `max_site_changes` `HARD` nuovo sulla
-soluzione applicata.
+⚠ E il residuo di ADR-018 si conta invece nell'unità del **builder** — la
+somma dei letterali che *lui* crea — non con la regola del checker: vedi
+l'emendamento qui sotto, che corregge questa riga. Resta vero ciò che l'aveva
+motivata: contarlo **appiattendo** le occupazioni sovrastimava il consumo
+delle congelate, alzava il tetto clampato e faceva accettare al solver un
+cambio che il checker non perdona — misurato, `OPTIMAL` con un
+`max_site_changes` `HARD` nuovo sulla soluzione applicata.
 
 **Data.** 2026-08-28
+
+### Emendamento 2026-08-28 (sera) — il residuo si conta nell'unità del builder
+
+Le due decisioni **restano valide**; è sbagliata la riga che ne derivava il
+trattamento del residuo di ADR-018. Diceva che va calcolato «con **la stessa**
+regola» del checker, e da lì `_frozen_site_changes` era stato allineato alle
+transizioni fra **insiemi**. Ma il numero che quel conteggio produce non
+descrive il checker: entra in `max(per_giorno, consumo_giorno)`, cioè clampa
+un tetto la cui somma è fatta dei letterali del **builder**, uno per ogni
+coppia **ordinata** di sedi diverse fra due fasce adiacenti.
+
+⚠ Le due grandezze divergono esattamente dove questo ADR ha spostato la
+semantica: a capienza cumulativa. `{A, B}` alla fascia 0 e `{C}` alla fascia 1
+valgono **1** cambio per il checker e **due** letterali per il builder, quindi
+il consumo calcolato alla maniera del checker è **più basso** di quello che le
+sole congelate forzano a 1, e il clamp non clampa abbastanza. Misurato:
+`check_schedule` non ha **niente** da ridire su quell'orario e `solve()`
+risponde `INFEASIBLE` — la metà vietata del criterio di
+[ADR-018](#adr-018--linput-sporco-non-blocca-il-solver-capacità-residua-e-oracolo-differenziale), quella
+in cui l'infattibilità nasce dal **pretendere una riparazione** del passato.
+
+🔑 **La regola che ne esce, e che vale per ogni residuo futuro:** il consumo
+delle congelate si conta nell'**unità del vincolo che lo riceve**, non in
+quella del checker che lo ispira. Sono due letture diverse dello stesso
+orario, e coincidono solo dove builder e checker contano la stessa cosa.
+
+⚠ Il che **non riabilita l'appiattimento**, che resta l'errore corretto sopra:
+appiattire `by_cell` conta anche le coppie *dentro* una fascia — dove non si
+viaggia, che è la decisione 1 — e per giunta in un ordine deciso dal queryset.
+L'unità del builder è un'altra cosa: solo coppie fra fasce **diverse**, e
+indipendente dall'ordine d'inserimento.
+
+**Conseguenze.** A capienza 1 ogni insieme è un singoletto e i due conteggi
+tornano a coincidere riga per riga: nessuna istanza esistente si muove, e il
+Fermi — che non ha sedi — è invariato per costruzione. Il caso è tenuto fermo
+da `test_adr018_due_sedi_sulla_stessa_fascia_non_bloccano_max_site_changes`
+(`tests/test_solver_sites.py`), verificato per mutazione: ripristinando il
+conteggio a insiemi, `solve()` torna `INFEASIBLE`.

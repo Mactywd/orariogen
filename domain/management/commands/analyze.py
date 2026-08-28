@@ -76,7 +76,19 @@ class Command(BaseCommand):
             if not findings:
                 self.stdout.write("Nessuna violazione.")
             for f in findings:
-                hard += f.severity == Severity.HARD
+                # ⚠ `room_unassigned` si stampa ma **non conta**, per la stessa
+                # ragione con cui `solve` e `assign_rooms` lo escludono dalle
+                # «violazioni residue»: descrive un orario **incompleto**, non
+                # illegale. Le aule le assegna la seconda fase, quindi subito
+                # dopo il piazzamento ogni attività che ne chiede una è ancora
+                # senza — contarlo qui farebbe uscire `analyze` con exit code
+                # ≠ 0 su un orario impeccabile, e questo comando è dichiarato
+                # usabile in CI.
+                # ⚠ `activity_unplaced` invece **conta**, e non è
+                # un'incoerenza: là ciò che manca lo deve produrre `solve`, che
+                # è la fase che `analyze` sorveglia.
+                hard += (f.severity == Severity.HARD
+                         and f.code != "room_unassigned")
                 details = ", ".join(f"{k}={v}" for k, v in sorted(f.quantities.items()))
                 self.stdout.write(f"  [{f.severity}] {f.message}  ({details})")
             if selected is not None:

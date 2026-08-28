@@ -35,17 +35,30 @@ from dataclasses import dataclass
 from domain.analysis.domain_size import trial_placements
 from domain.analysis.state import ScheduleState, resource_sort_key
 from domain.analysis import causali
+from domain.models import Activity
 from domain.solver.model import solve
+
+_IMMOBILE = (Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE)
 
 
 CAUSALI_DI_PREFILTRO = frozenset({
     # ⚠ I soli due builder che implementano `restrict()` sono `GridBuilder` e
-    # `UnavailabilityBuilder`: un pin fuori dominio può venire **solo** di lì.
-    # Filtrare su queste causali non è prudenza, è precisione — la lettura di
-    # `trial_placements` valuta tutti i checker contro lo stato corrente, e
-    # includerebbe l'occupazione da parte di attività che `Piazza e sistema`
-    # saprebbe spostare: incolparle sarebbe una diagnosi falsa.
-    # `test_solo_due_builder_prefiltrano` tiene ferma la premessa.
+    # `UnavailabilityBuilder`. Filtrare su queste causali non è prudenza, è
+    # precisione — la lettura di `trial_placements` valuta tutti i checker
+    # contro lo stato corrente, e includerebbe l'occupazione da parte di
+    # attività che `Piazza e sistema` saprebbe spostare: incolparle sarebbe una
+    # diagnosi falsa. `test_solo_due_builder_prefiltrano` tiene ferma la
+    # premessa.
+    #
+    # ⚠ Ma «i pre-filtri sono due» **non** vuol dire «un pin fuori dominio può
+    # venire solo di lì», e qui c'era scritto il contrario. Il dominio lo
+    # restringe anche `SolverContext.build`, *prima* di qualunque `restrict()`:
+    # a un'attività immobile e già piazzata dà un dominio di **cardinalità
+    # uno** (la sua collocazione attuale), e lo stesso a tutto ciò che sta
+    # fuori dall'estrazione. Sono le tre ragioni di `_fuori_dal_modello`, che
+    # vanno riconosciute **prima** di consultare il catalogo delle causali —
+    # o si finisce a rispondere «la collocazione non è ammissibile» su una
+    # cella perfettamente libera.
     "slot_out_of_grid", "break_straddled", "holiday",
     "unavailability", "unavailability_optional",
 })
@@ -91,13 +104,53 @@ def place_and_fix(schedule, activity_id, day, start, *, extraction=None,
             and aid in prima and prima[aid] != cella))
         dropped = tuple(sorted(aid for aid in solution.unplaced if aid in prima))
     else:
-        obstruction = _perche_no(schedule, activity_id, day, start, solution)
+        obstruction = _perche_no(schedule, activity_id, day, start, solution,
+                                 extraction)
     return PlaceAndFix(solution=solution, activity_id=activity_id,
                        cell=(day, start), moved=moved, dropped=dropped,
                        obstruction=obstruction)
 
 
-def _perche_no(schedule, activity_id, day, start, solution):
+def _fuori_dal_modello(schedule, activity_id, extraction):
+    """Le tre ragioni per cui il dominio è già un singoletto (o è vuoto)
+    **prima** che un pre-filtro tocchi qualcosa, e quindi le tre risposte che
+    il catalogo delle causali non può dare.
+
+    🔑 Sono decisioni di `SolverContext.build`, non di un `restrict()`:
+    l'immobile piazzata ha per dominio la sua sola collocazione attuale
+    (`cells[aid] = {placed[aid]}`, la premessa di ADR-018), l'immobile mai
+    piazzata è fuori dal modello del tutto, e ciò che sta fuori
+    dall'estrazione è congelato dov'è. In tutti e tre i casi la cella
+    richiesta può essere **perfettamente libera** — e infatti di solito lo è.
+
+    ⚠ Senza questa lettura la risposta era «La collocazione non è ammissibile
+    per l'attività» su una griglia vuota: non solo inutile, ma falsa, e falsa
+    proprio nella direzione che manda l'utente a cercare un vincolo che non
+    esiste. Il rimedio è invece sempre lo stesso e non è un vincolo: sbloccare
+    l'attività, o allargare l'estrazione."""
+    act = Activity.objects.filter(pk=activity_id).first()
+    if act is None:
+        return "L'attività non esiste."
+    if act.immobility == Activity.Immobility.SUSPENDED:
+        return ("L'attività è sospesa: non entra nell'orario, e sospesa non "
+                "la si può collocare da nessuna parte.")
+    if act.immobility in _IMMOBILE:
+        piazzata = schedule.placements.filter(activity_id=activity_id).first()
+        dove = (f"è bloccata su giorno {piazzata.day}, fascia "
+                f"{piazzata.start_slot}" if piazzata is not None
+                else "è bloccata e non è mai stata piazzata")
+        return (f"L'attività {dove}: il suo blocco la tiene ferma, e nessun "
+                "vincolo dell'orario c'entra. Va sbloccata prima di spostarla.")
+    if extraction is not None and not extraction.activities.filter(
+            pk=activity_id).exists():
+        return (f"L'attività non fa parte dell'estrazione "
+                f"«{extraction.name}»: fuori dal perimetro resta dov'è, "
+                "esattamente come una congelata. Va estratta prima di "
+                "spostarla.")
+    return None
+
+
+def _perche_no(schedule, activity_id, day, start, solution, extraction=None):
     """La diagnosi nominata, e sono **due domande diverse**.
 
     Se il pin è finito fuori dominio (`pin_fuori_dominio`), la cella è
@@ -118,6 +171,9 @@ def _perche_no(schedule, activity_id, day, start, solution):
         return ("La collocazione è ammissibile per l'attività, ma "
                 "l'orario non si ricompone attorno: le altre attività non "
                 "hanno dove andare.",)
+    fuori = _fuori_dal_modello(schedule, activity_id, extraction)
+    if fuori is not None:
+        return (fuori,)
     state = ScheduleState.build(schedule)
     activity = state.activities.get(activity_id)
     if activity is None:

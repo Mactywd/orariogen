@@ -191,14 +191,31 @@ def _frozen_site_changes(ctx, key, day, rep, sedi):
     `time_presence.py`, qui sulla sequenza di sede invece che sui minuti di
     buco/presenza.
 
-    ⚠ **Conta come conta il checker, o il residuo di ADR-018 e' sbagliato.**
-    Una fascia contribuisce l'**insieme** delle sue sedi e un cambio e' una
-    transizione fra insiemi diversi: dentro una fascia non si viaggia
-    (`MaxSiteChangesChecker`). Appiattire `by_cell` in una sequenza — come
-    faceva questa funzione — rimetterebbe qui l'artefatto dell'ordine
-    d'inserimento appena tolto dall'analisi, e per giunta nel punto in cui
-    serve un numero **fedele**: un consumo sovrastimato alza il tetto
-    clampato e allenta il vincolo per tutti."""
+    ⚠ **Il residuo si misura nell'unita' del builder, non in quella del
+    checker**, e confonderle e' costato un `INFEASIBLE` per colpa del solo
+    passato. Il tetto qui sotto non parla di «cambi» in astratto: parla della
+    somma dei letterali `c` che *questo* builder crea, uno per ogni coppia
+    **ordinata** di sedi diverse fra due fasce adiacenti. Il checker invece
+    conta le transizioni fra **insiemi** (dentro una fascia non si viaggia,
+    `MaxSiteChangesChecker`), e le due grandezze coincidono solo a capienza 1.
+    A capienza cumulativa il builder e' deliberatamente piu' stretto — vedi la
+    sovra-approssimazione dichiarata in testa al modulo — quindi un residuo
+    contato alla maniera del checker e' **piu' basso** del numero di letterali
+    che le sole congelate forzano a 1, e il clamp `max(cap, consumo)` non
+    clampa abbastanza: il modello diventa infattibile per uno stato che il
+    checker giudica legale. Misurato: `{A,B}` alla fascia s e `{C}` alla
+    fascia t valgono 1 cambio per il checker e **due** letterali per il
+    builder.
+
+    Quindi si contano i letterali. A capienza 1 ogni insieme e' un singoletto
+    e la somma torna a valere 0 o 1 per coppia, cioe' riga per riga il
+    conteggio del checker: la correzione non muove di un bit nessuna istanza
+    in cui una fascia ha una sola sede.
+
+    ⚠ Le fasce adiacenti sono quelle della sottosequenza **delle sole
+    congelate**, ed e' il caso peggiore giusto: se una libera atterra in mezzo
+    spezza l'antecedente di quei letterali, ma cio' che nasce al loro posto e'
+    una decisione del presente, non un debito del passato."""
     active = ctx.states[rep].activities
     sequenza = []
     for slot in range(ctx.grid.slots_per_day):
@@ -208,7 +225,8 @@ def _frozen_site_changes(ctx, key, day, rep, sedi):
                     and ctx.activities[aid].site_id is not None}
         if sedi_qui:
             sequenza.append(sedi_qui)
-    return sum(a != b for a, b in zip(sequenza, sequenza[1:]))
+    return sum(sum(1 for sa in prima for sb in dopo if sa != sb)
+               for prima, dopo in zip(sequenza, sequenza[1:]))
 
 
 @register(T.MAX_SITE_CHANGES)
