@@ -24,6 +24,14 @@ from ortools.sat.python import cp_model
 
 from domain.solver.quality import livelli_di_qualita
 
+STATUS_NAME = {
+    cp_model.OPTIMAL: "OPTIMAL",
+    cp_model.FEASIBLE: "FEASIBLE",
+    cp_model.INFEASIBLE: "INFEASIBLE",
+    cp_model.MODEL_INVALID: "MODEL_INVALID",
+    cp_model.UNKNOWN: "UNKNOWN",
+}
+
 
 @dataclass(frozen=True)
 class Level:

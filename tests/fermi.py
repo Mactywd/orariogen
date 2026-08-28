@@ -54,6 +54,19 @@ ROOMS = (
        ("AUL-DIS", 30, 1), ("PALESTRA", 60, 2), ("AULA-MAGNA", 100, 1)]
 )
 
+SPECIAL_ROOMS = {  # materia → aule candidate, per le materie che ne chiedono una
+    # ⚠ Le candidate sono **due** dove la materia ne ha davvero due, ed e'
+    # deliberato: a candidata unica l'occupazione se la prende gia' il
+    # piazzamento (`domain/analysis/state.py`, `_activity_tokens`), quindi la
+    # seconda fase non deciderebbe niente. `LAB-INF` e' il laboratorio
+    # condiviso — acquisizione dati per FIS e SCI, CAD per DIS — ed e' l'unica
+    # riga del dataset che mette in concorrenza materie e docenti diversi.
+    "FIS": ("LAB-FIS", "LAB-INF"),
+    "SCI": ("LAB-SCI", "LAB-INF"),
+    "DIS": ("AUL-DIS", "LAB-INF"),
+    "MOT": ("PALESTRA",),
+}
+
 ALL = CLASSES
 TEACHERS = [  # (id, nome, abbr, [(materia, [classi])], ore Mh/s, materia preferenziale)
     ("D01", "Rossi Anna", "ROSSI", [("ITA", ["1A", "2A", "3A"]), ("LAT", ["1A", "2A", "3A"])], 21, "ITA"),
@@ -162,6 +175,8 @@ def build():
                     )
                     activity.teachers.add(t)
                     activity.classes.add(classes[class_name])
+                    for room_name in SPECIAL_ROOMS.get(subject_code, ()):
+                        activity.rooms.add(rooms[room_name])
         teachers[tid] = t
 
     year = SchoolYear.objects.create(

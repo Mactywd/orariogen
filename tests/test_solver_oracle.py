@@ -59,7 +59,7 @@ CODICI = {
 # qualcosa che era piazzato e non lo e' piu' — deve vedersi.
 LEGALITA = CODICI - {"activity_unplaced"}
 
-# Le tre causali del catalogo che restano **deliberatamente** fuori.
+# Le causali del catalogo che restano **deliberatamente** fuori.
 FUORI = {
     # nessun builder: PLACEMENT_INDEPENDENT, il solver non crea ne' distrugge
     # attivita' (vedi tests/test_solver_registry_completo.py)
@@ -67,6 +67,12 @@ FUORI = {
     # non sono HARD: violazioni() le filtrerebbe comunque per severita', ma
     # elencarle qui rende la scelta leggibile invece che implicita
     "unavailability_optional", "preference",
+    # l'assegnazione delle aule e' una **seconda fase**, un modello separato
+    # che gira sui piazzamenti gia' scritti (`domain/solver/rooms.py`).
+    # `solve()` qui e' il primo modello, che non tocca mai `assigned_room`:
+    # non e' questo oracolo a doverlo vedere, ed e' l'oracolo della seconda
+    # fase (`tests/test_rooms_oracle.py`) a sorvegliarlo.
+    "room_unassigned",
 }
 
 
@@ -532,7 +538,14 @@ def test_fermi_intero_misurato():
         # comparisse uno scarto qui, sarebbe la notizia — non un dettaglio.
         assert soluzione.stats["scartate"] == 0, soluzione.stats
         assert soluzione.stats["variabili"] == 8426
-        assert soluzione.stats["constraint"] == 1086
+        # ⚠ 1086 → 1116 da quando il Fermi chiede le aule. I +30 sono
+        # l'occupazione di `PALESTRA` sulle 30 celle della griglia: MOT e' la
+        # sola materia a **candidata unica**, e a candidata unica l'aula entra
+        # gia' nei token del piazzamento (`_activity_tokens`), quindi diventa
+        # una risorsa come il docente e la classe. FIS, SCI e DIS ne hanno due,
+        # e le due candidate non occupano niente qui: la scelta e' della
+        # seconda fase.
+        assert soluzione.stats["constraint"] == 1116
         # i due livelli hanno concluso, e con l'ottimo dimostrato
         assert [l["nome"] for l in soluzione.stats["livelli"]] == [
             "minuti_scartati", "attivita_scartate"]

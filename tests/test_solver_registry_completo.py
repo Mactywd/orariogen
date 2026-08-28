@@ -57,13 +57,26 @@ def test_structural_placement_non_ha_un_builder_ed_e_voluto():
     assert "structural:placement" not in BUILDERS
 
 
+def test_structural_room_assignment_non_ha_un_builder_ed_e_voluto():
+    """`RoomAssignmentChecker` ha una traduzione, ma vive in un **altro
+    modello**: la seconda fase (`domain/solver/rooms.py`), che gira sui
+    piazzamenti gia' scritti. I builder di questo registro postano sul modello
+    del **piazzamento**, dove l'aula non e' ancora una decisione.
+
+    Come per `structural:coverage` e `structural:placement`, l'assenza e'
+    dichiarata qui perche' non sembri una dimenticanza."""
+    assert "structural:room_assignment" in CHECKERS
+    assert "structural:room_assignment" not in BUILDERS
+
+
 def test_il_registro_dei_builder_e_completo():
-    """Ventisei chiavi su ventotto. I numeri sono scritti qui apposta: se
+    """Ventisei chiavi su ventinove. I numeri sono scritti qui apposta: se
     un checker nuovo entra in `domain/analysis` senza il builder
     corrispondente, questo test lo dice per nome."""
-    senza_builder = {"structural:coverage", "structural:placement"}
+    senza_builder = {"structural:coverage", "structural:placement",
+                     "structural:room_assignment"}
     mancanti = sorted(str(k) for k in CHECKERS
                       if k not in BUILDERS and k not in senza_builder)
     assert mancanti == []
-    assert len(CHECKERS) == 28
+    assert len(CHECKERS) == 29
     assert len(BUILDERS) == 26

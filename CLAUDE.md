@@ -61,15 +61,18 @@ requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
-                        il violatore di Hall (fase 5, hall.py) e lo scarto come
-                        stato nominato (checkers/placement.py)
+                        il violatore di Hall (fase 5, hall.py), lo scarto come
+                        stato nominato (checkers/placement.py) e la richiesta
+                        d'aula insoddisfatta (checkers/room_assignment.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette,
                         la catena lessicografica (objective.py), le quote
                         di alleggerimento (relaxation.py), i criteri di
-                        qualità (quality.py + criteria.py) e la separazione
+                        qualità (quality.py + criteria.py), la separazione
                         per popolazione con la perdita tollerata (Arbitrato)
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve)
+                        e la **seconda fase** — l'assegnazione delle aule
+                        (rooms.py), modello a sé con due livelli propri
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -211,8 +214,28 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > misurato e non migliorato; con l'arbitrato **0**, al prezzo di 231 attività
 > spostate su 284.
 >
-> Resta **un solo pezzo dichiarato fuori** — l'assegnazione delle aule — più i
-> punti aperti elencati sotto.
+> Dal 2026-08-28 anche l'ultimo pezzo dichiarato fuori — **l'assegnazione delle
+> aule** — è implementato (`domain/solver/rooms.py`,
+> [spec](docs/superpowers/specs/2026-08-27-assegnazione-aule-design.md),
+> [piano](docs/superpowers/plans/2026-08-27-assegnazione-aule.md)). È una
+> **seconda fase**, non un pezzo del piazzamento, ed è la forma del prodotto:
+> in EDT l'assegnazione ha criteri propri, un ottimizzatore dedicato e una
+> `ripartizione delle aule` distinta dal calcolo. I vincoli veri sono tre più
+> la capienza — la finestra `Aule disponibili` dichiara `Sedi distaccate`,
+> `Indisponibilità opzionali`, `Indisponibilità` e nient'altro: **capienza in
+> alunni, categoria e tipologie non vincolano**. Due livelli propri (minuti
+> senza aula, poi i cambi rispetto alla ripartizione precedente), la
+> **rinuncia** ammessa come lo scarto, e `manage.py assign_rooms`.
+>
+> ⚠ **E la seconda fase ha un prezzo, ora misurato invece che previsto.** Il
+> piazzamento è cieco alle aule con più di una candidata, e §6 dichiara fuori
+> scope il ritorno indietro: la fase 1 può quindi accatastare su una cella più
+> richieste di quante aule esistano, e la fase 2 non ha altra risposta che
+> rinunciare. Sul Fermi con le aule: 92 richieste, **84 assegnate, 8 rinunce**,
+> 39 celle contese, fino a 5 richieste su una sola cella. Non è un difetto del
+> modello: è la conseguenza dichiarata di assegnare le aule *dopo*.
+>
+> Restano i punti aperti elencati sotto.
 
 ### Prototipo solver — parcheggiato
 
@@ -351,6 +374,18 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
 
 - [ ] ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`):
       `data/liceo-fermi/aule.md` è progetto, non osservazione. → `docs/edt/aule.md`
+      ⚠ Dal 2026-08-28 il **nostro** dataset le ha, e ha le attività che le
+      chiedono (`tests/fermi.py`, `SPECIAL_ROOMS`), perché senza la seconda
+      fase avrebbe un problema vuoto. Resta che *quali* aule chieda ogni
+      materia è nostra scelta di dimensionamento, mai osservata in EDT.
+- [ ] ⚠ **`TypeIncompatibiliteSalle` (11 valori) e `TypeChoixOptimSalle`**: di
+      entrambi conosciamo il **nome** dalle stringhe (📦) e non i valori.
+      Il primo è la famiglia delle incompatibilità fra aule, il secondo i
+      criteri con cui EDT sceglie *quale* aula fra le ammissibili. La nostra
+      seconda fase non ne implementa nessuno dei due (§6 della spec li dichiara
+      fuori): l'assegnazione sceglie una candidata qualunque fra quelle legali,
+      con la sola preferenza per la ripartizione precedente. **Da osservare in
+      UI** prima di decidere se entrano.
 - [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
       `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
       CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
@@ -462,6 +497,82 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (assegnazione delle aule)** — **L'ultimo pezzo dichiarato fuori
+  è dentro, e non è un vincolo in più: è una seconda fase.**
+  `domain/solver/rooms.py` più `manage.py assign_rooms`, sei task
+  ([spec](docs/superpowers/specs/2026-08-27-assegnazione-aule-design.md),
+  [piano](docs/superpowers/plans/2026-08-27-assegnazione-aule.md)). Assegnare
+  le aule *dopo* aver piazzato non è una scorciatoia: è la forma del prodotto,
+  che ha per le aule criteri propri (`TypeChoixOptimSalle`), un ottimizzatore
+  dedicato (`FicheEdt_OptimiseurSalles`) e una `ripartizione delle aule`
+  distinta dal calcolo.
+
+  🔑 **I vincoli veri sono tre più la capienza, ed è meno di quanto sembri.**
+  La finestra `Aule disponibili` dichiara `Sedi distaccate`, `Indisponibilità
+  opzionali`, `Indisponibilità` e nient'altro: **capienza in alunni, categoria
+  e tipologie non vincolano** — verificato in UI il 2026-07-26, e la tentazione
+  di aggiungerle era esattamente ciò che il piano vietava. Sopra ci sono due
+  livelli, nella forma della catena della prima fase: L1 i **minuti** senza
+  aula (un laboratorio da 3h che resta fuori fa più danno di uno da 1h), L2 i
+  cambi rispetto alla ripartizione precedente — che è il criterio che EDT
+  dichiara alla lettera, *«se possibile mantenendo le assegnazioni della
+  precedente ripartizione»*. L'ordine è provato da un test: conservare l'aula
+  di prima non vale una rinuncia.
+
+  ⚠ **E la seconda fase ha un prezzo, che il Fermi ha misurato invece di
+  prevederlo.** Il piazzamento è cieco alle aule con più di una candidata, e
+  §6 dichiara fuori scope il ritorno indietro: la fase 1 può accatastare su una
+  cella più richieste di quante aule esistano, e la fase 2 non ha altra
+  risposta che **rinunciare**. Sul Fermi: 92 richieste, **84 assegnate, 8
+  rinunce**, 39 celle contese, fino a 5 richieste su una cella; 258 variabili,
+  135 constraint, 0,44 s. Non è un difetto del modello — è la conseguenza
+  dichiarata di assegnare le aule dopo — ma è la prima volta che il progetto
+  porta un numero invece di un «si potrebbe».
+
+  🔑 **Il dataset è stato scelto contro la propria comodità, ed è il punto del
+  pezzo.** Il Fermi non ha aule (`NBSALLES = 0`), quindi il Task 6 le inventa;
+  la versione ovvia — una materia, una sua aula — dà `OPTIMAL` con zero
+  rinunce e sembra un successo. **Non lo è**: a candidata unica l'aula entra
+  già nei token del piazzamento (`_activity_tokens`), quindi zero celle
+  contese, la capienza non morde mai, e la seconda fase si limita a confermare
+  una scelta già fatta — una misura su un problema **senza gradi di libertà**,
+  cioè il verde incapace di fallire che questo repository ha già pagato otto
+  volte. Da qui `LAB-INF` **condiviso** fra FIS, SCI e DIS: è l'unica riga che
+  mette in concorrenza materie e docenti diversi, e le 8 rinunce sono il prezzo
+  di avere un dataset che può dire di no.
+
+  ⚠ **E l'arricchimento ha trovato un difetto vero, in codice scritto il giorno
+  prima.** `structural:room_assignment` nomina le attività **piazzate** che
+  chiedono un'aula senza averla: in `admissible_starts` la baseline è lo stato
+  con l'attività sospesa, dove il finding non c'è, quindi ogni cella di prova
+  lo fa comparire e il dominio si svuota **ovunque**. Misurato: **92 falsi
+  positivi** sul Fermi con le aule — uno per ogni attività che ne chiede una —
+  mentre `solve` risponde `OPTIMAL` con zero scarti. È il difetto che la fase 5
+  non ha il diritto di produrre, mandare l'utente a smontare vincoli sani, già
+  pagato nella review del violatore di Hall; qui in una forma **nuova**: non
+  monotono **per il verso opposto**. Nelle sei famiglie note piazzare *ripara*
+  la violazione, qui piazzare la **crea**, perché la richiesta d'aula la
+  soddisfa la seconda fase e non il piazzamento. Marcato
+  `PLACEMENT_MONOTONE = False`; la mutazione rende rossi due test indipendenti.
+  ⚠ **Nessuna review l'avrebbe trovato**: il Fermi senza aule non ha
+  un'attività che ne chieda una, quindi il checker girava a vuoto sull'unico
+  dataset di scala. È la forma di sempre — una proprietà del dataset scambiata
+  per una proprietà del codice — e stavolta a ventiquattr'ore di distanza.
+
+  Nello stesso giro `manage.py solve` smette di elencare `room_unassigned` fra
+  le «violazioni residue», per la ragione con cui già escludeva
+  `activity_unplaced`: descrive un orario **incompleto**, non illegale.
+
+  Il banco a testimone della fase (`tests/rooms_harness.py`) genera **prima**
+  un'assegnazione valida e solo dopo chiede di ricostruirla; con la capienza
+  spenta **9 test su 20** diventano rossi, quindi il banco esercita davvero ciò
+  che sorveglia. Suite: **674 test verdi**, 16 skip.
+
+  Restano fuori, dichiarati: `TypeIncompatibiliteSalle` (11 valori) e
+  `TypeChoixOptimSalle`, di cui conosciamo il nome e non i valori — la nostra
+  fase sceglie una candidata qualunque fra quelle legali, con la sola
+  preferenza per la ripartizione precedente.
 
 - **2026-08-27 (separazione per popolazione)** — **EDT non cerca mai un ottimo
   congiunto, e adesso nemmeno noi.** I comandi del prodotto sono due —

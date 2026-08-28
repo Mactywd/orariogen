@@ -17,6 +17,20 @@ aula magna.
 > **Il meccanismo però è ormai osservato in UI**, sulla base di esempio fornita
 > con il prodotto (18 aule, 3 sedi, gruppi, tipologie): tutto ciò che segue senza
 > marcatore è visto a schermo il 2026-07-26.
+>
+> **Aggiornamento 2026-08-28.** Il *nostro* dataset ha ora le aule e le
+> attività che le chiedono (`tests/fermi.py`, `SPECIAL_ROOMS`): laboratori per
+> FIS e SCI, aula di disegno per DIS, palestra per MOT, più `LAB-INF`
+> **condiviso** fra le tre materie di laboratorio. Serve alla seconda fase
+> (`domain/solver/rooms.py`), che senza attività richiedenti avrebbe un
+> problema vuoto. ⚠ Resta **progetto e non osservazione**: in EDT le aule del
+> Fermi non sono mai state inserite (`NBSALLES = 0`), quindi le candidate per
+> materia sono una nostra scelta di dimensionamento, plausibile ma non vista a
+> schermo. ⚠ E la condivisione di `LAB-INF` è deliberata: a **candidata unica**
+> l'aula entra già nei token del piazzamento
+> (`domain/analysis/state.py`, `_activity_tokens`), quindi la ripartizione si
+> limiterebbe a confermare una scelta già fatta — zero gradi di libertà, e una
+> misura incapace di fallire.
 
 ## La vista Aule, com'è
 

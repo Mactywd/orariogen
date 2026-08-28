@@ -94,7 +94,14 @@ def activity_tokens(activity, assigned_room_id=None, atoms=None):
     if assigned_room_id is not None:
         keys.add(assigned_room_id)
     else:
-        keys.update(r.pk for r in activity.rooms.all())
+        # ⚠ Solo a **candidata unica**: le aule dichiarate sono l'insieme fra
+        # cui la seconda fase sceglie (spec §1). Con due o piu' candidate
+        # occuparle tutte inventerebbe conflitti che l'assegnazione
+        # risolverebbe da sola; con una sola la scelta e' determinata, quindi
+        # occupare non e' una stima, e' esatto.
+        rooms = list(activity.rooms.all())
+        if len(rooms) == 1:
+            keys.add(rooms[0].pk)
     for s in activity.staff.all():
         keys.add(s.pk)
     for req in activity.material_requirements.all():
@@ -132,6 +139,7 @@ class ScheduleState:
         self.settings = settings
         self.activities = {}          # id → Activity (attive nella settimana)
         self.placed = {}              # id → Placed
+        self.assigned_room = {}       # id → room_id assegnata (solo se piazzata)
         self.occupancy = defaultdict(list)  # (chiave, giorno, fascia) → [activity_id]
         self.tokens = {}              # id → frozenset di chiavi
         self.material_quantity = {}   # (activity_id, chiave) → quantità
@@ -186,6 +194,8 @@ class ScheduleState:
                 state.material_quantity[(a.id, k)] = q
             if pl is not None:
                 state.place(a, pl.day, pl.start_slot)
+                if pl.assigned_room_id is not None:
+                    state.assigned_room[a.id] = pl.assigned_room_id
 
         year = schedule.period.school_year
         state.n_weeks = ((year.end_date - year.first_week_monday).days // 7) + 1
