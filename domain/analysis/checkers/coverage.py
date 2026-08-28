@@ -1,6 +1,25 @@
 """Copertura del monte ore per (unità-studente × materia): il predicato
 anti-inversione STO/SCI. Confronta le attività (piazzate o no) con i servizi
-del piano effettivo. È un predicato sui dati, non sull'orario."""
+del piano effettivo. È un predicato sui dati, non sull'orario.
+
+🔑 **Ma è un predicato su una settimana**, e non è la stessa cosa. Il monte ore
+di un `Service` è **settimanale**, e `check_schedule` valuta ogni checker una
+volta per firma di settimana su `state.activities`, che la maschera filtra:
+un'ora di Q1 conta nelle settimane di Q1 e non nelle altre. È la lettura
+giusta, e l'alternativa apparentemente più naturale — sommare le durate di
+tutte le attività, la maschera ignorata — è **sbagliata sul caso più comune
+della scuola italiana**: una coppia Q1/Q2 della stessa materia darebbe 120
+minuti contro i 60 del piano, cioè segnalerebbe come scostamento il
+quadrimestre. Misurato, e tenuto fermo da
+`test_le_ore_di_quadrimestre_non_raddoppiano`.
+
+⚠ La conseguenza è che due firme possono dare due verdetti diversi sulla
+**stessa** coppia (unità, materia), con `Finding.key` distinte perché le
+quantità differiscono. Non è una contraddizione: sono due settimane diverse, e
+una materia che sparisce in Q2 *è* uno scostamento in Q2. Ma un dataset le cui
+maschere non compongono un monte ore costante — per esempio maschere casuali —
+produce `coverage_mismatch` ovunque, ed è una proprietà di quel dataset e non
+del checker."""
 
 from collections import defaultdict
 

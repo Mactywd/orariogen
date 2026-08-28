@@ -12,7 +12,7 @@ from domain import weeks
 from domain.analysis.conformity import check_schedule, week_signatures
 from domain.analysis.findings import Severity
 from domain.models import (
-    Break, ClassPart, ClassPartition, Discipline, Extraction, Period,
+    Activity, Break, ClassPart, ClassPartition, Discipline, Extraction, Period,
     Placement, ResourceTimeConstraint, ResourceUnavailability, Schedule,
     SchoolClass, SchoolYear, StudyPlan, Subject, SubjectConstraint, Teacher,
     TimeGrid,
@@ -85,6 +85,55 @@ def test_codici_copre_tutto_il_catalogo():
     assert set(causali.CAUSALI) == CODICI | FUORI
 
 
+# 🔑 Le famiglie che nominano il **secchio** invece del violatore, e per cui
+# quindi la `Finding.key` cambia per il solo fatto che una libera e' stata
+# piazzata. Sono esattamente i checker `PLACEMENT_MONOTONE = False` di
+# `domain/analysis`, meno due esclusi con la loro ragione (vedi sotto), e
+# `test_le_famiglie_grossolane_seguono_il_registro` tiene ferma la
+# corrispondenza — una famiglia marcata non monotona domani deve passare di
+# qui invece di rendere l'oracolo rosso senza spiegazione.
+NON_MONOTONE = {
+    "structural:didactic_weight": ("weight_day", "weight_morning",
+                                   "weight_afternoon", "weight_week"),
+    "free_guaranteed": ("free_guaranteed",),
+    "max_gap_hours": ("max_gap",),
+    "min_distribution": ("min_distribution",),
+    "imposed_succession": ("subject_imposed_succession",),
+    "weekly_order": ("subject_weekly_order",),
+    "parts_after_class": ("subject_parts_order",),
+    "parts_before_class": ("subject_parts_order",),
+    "parts_before_or_after_class_ab": ("subject_parts_order",),
+    "parts_before_or_after_class_h": ("subject_parts_order",),
+    # ⚠ Esclusi apposta, entrambi non monotoni e nessuno dei due «a secchio»:
+    # `structural:placement` nomina **una** attivita', e uno scarto nuovo e'
+    # precisamente cio' che questo oracolo esiste per vedere — sgrossarlo lo
+    # renderebbe cieco sull'unica cosa che il solver decide da se';
+    # `structural:room_assignment` sta in FUORI, e' la seconda fase.
+    "structural:placement": (),
+    "structural:room_assignment": (),
+}
+CAUSALI_GROSSOLANE = {c for codes in NON_MONOTONE.values() for c in codes}
+
+
+def test_le_famiglie_grossolane_seguono_il_registro():
+    """La guardia contro la deriva, nella forma di `test_codici_copre_tutto_il
+    _catalogo`: se un checker viene marcato non monotono, deve comparire qui
+    con le sue causali — o con la tupla vuota e il perche'."""
+    from domain.analysis.registry import REGISTRY, all_checkers
+
+    all_checkers()
+    non_monotoni = {str(k) for k, cls in REGISTRY.items()
+                    if not cls.PLACEMENT_MONOTONE}
+    assert non_monotoni == set(NON_MONOTONE)
+
+
+def _grossolana(chiave_settimana):
+    """(causale, risorse, settimana): la chiave **senza** l'identita' delle
+    attivita' e senza le quantita'."""
+    (code, resources, _activities, _quantities), week = chiave_settimana
+    return (code, resources, week)
+
+
 def violazioni(schedule, codici=CODICI):
     """L'insieme delle (chiave, settimana) dei finding HARD nelle famiglie
     modellate. Un insieme, non una lista: il criterio di riuscita e' il
@@ -105,8 +154,34 @@ def nuove(schedule, prima, codici=CODICI):
     """I finding HARD comparsi **dopo** il solve. Il solver puo' anche
     riparare una violazione preesistente spostando un'attivita' libera: quello
     e' un successo, non una discrepanza, ed e' per questo che il criterio e'
-    il contenimento e non l'uguaglianza."""
-    return violazioni(schedule, codici) - prima
+    il contenimento e non l'uguaglianza.
+
+    🔑 **E su una famiglia «a secchio» gia' violata, la chiave si sgrossa.** Il
+    debito §9.5 del modello hard, ora chiuso da una misura invece che previsto:
+    con due congelate oltre il tetto settimanale di peso didattico e una libera
+    da piazzare, la libera **va collocata e ovunque vada pesa**, quindi il
+    finding `weight_week` torna con `activities (1,2) → (1,2,3)` e `weight
+    6 → 9`. `Finding.key` diversa, violazione la stessa: l'oracolo dichiarava
+    rotto un solve che non aveva fatto niente di male. Il builder non puo'
+    rimediare — il tetto e' inevadibile per costruzione — quindi la
+    riparazione sta qui.
+
+    ⚠ **L'esenzione e' stretta, e va detto quanto.** Vale solo se la coppia
+    (causale, risorsa, settimana) era **gia'** violata nella baseline: una
+    risorsa pulita resta protetta dalla chiave intera. Cio' che si perde e' il
+    **peggioramento** di una violazione che c'era gia' — su `max_gap`, per
+    esempio, una libera piazzata in mezzo alla giornata di un docente gia'
+    fuori budget non fa scattare nulla. E' il prezzo di ADR-018 sulle famiglie
+    che nominano il secchio invece del violatore, ed e' un prezzo dichiarato:
+    l'alternativa sarebbe confrontare la *quantita'* violata famiglia per
+    famiglia, cioe' riscrivere fuori dai checker la nozione di «quale numero e'
+    quello cattivo» — il difetto che questo progetto ha gia' intercettato due
+    volte."""
+    dopo = violazioni(schedule, codici)
+    gia_rotte = {_grossolana(k) for k in prima}
+    return {k for k in dopo - prima
+            if not (k[0][0] in CAUSALI_GROSSOLANE
+                    and _grossolana(k) in gia_rotte)}
 
 
 def _scuola_media():
@@ -553,3 +628,111 @@ def test_fermi_intero_misurato():
                    for l in soluzione.stats["livelli"])
         apply(soluzione, dataset["schedule"])
         assert violazioni(dataset["schedule"], LEGALITA) == set()
+
+
+def test_il_tetto_inevadibile_non_e_una_violazione_nuova():
+    """🔑 §9.5 del modello hard, chiuso da una misura invece che previsto.
+
+    Due congelate gia' oltre il tetto settimanale di peso didattico, e una
+    libera. Il `DidacticWeightBuilder` non posta il tetto — a sforarlo sono le
+    congelate da sole, e pretenderne la riparazione e' la meta' vietata di
+    ADR-018 — quindi la libera si piazza, e **ovunque si piazzi pesa**.
+    Misurato: `activities (1, 2) → (1, 2, 3)`, `weight 6 → 9`, quattro
+    settimane. `Finding.key` diversa in tutte e quattro, violazione la stessa.
+
+    Senza la chiave grossolana l'oracolo dichiara rotto un solve impeccabile;
+    con essa tace, perche' la coppia (causale, risorsa, settimana) era gia'
+    rotta prima. ⚠ E una risorsa **pulita** resta protetta dalla chiave
+    intera: lo prova la seconda meta' del test."""
+    env = mini_school(days=2, slots=3)
+    env["subject"].didactic_weight = 3
+    env["subject"].save()
+    env["klass"].max_weekly_weight_per_student = 3
+    env["klass"].save()
+    for day, slot in ((0, 0), (0, 1)):
+        congelata = make_activity(
+            env["subject"], classes=[env["klass"]],
+            immobility=Activity.Immobility.LOCKED_IN_PLACE)
+        place(env["schedule"], congelata, day, slot)
+    make_activity(env["subject"], classes=[env["klass"]])
+
+    prima = violazioni(env["schedule"])
+    assert {k[0][0] for k in prima} == {"weight_week", "activity_unplaced"}
+
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.status == "OPTIMAL"
+    apply(soluzione, env["schedule"])
+
+    # La chiave intera vede quattro violazioni nuove; la grossolana nessuna.
+    assert violazioni(env["schedule"]) - prima
+    assert nuove(env["schedule"], prima) == set()
+
+
+def test_la_chiave_grossolana_non_perdona_una_risorsa_pulita():
+    """⚠ L'esenzione vale **solo** dove la coppia (causale, risorsa, settimana)
+    era gia' rotta: altrimenti sarebbe un'amnistia per **famiglia**, cioe' un
+    oracolo cieco su dieci causali su ventisei.
+
+    Si asserisce la regola di `nuove()` invece di farla scattare da un solve, e
+    non e' una scorciatoia: su `weight_week` una violazione nuova su una
+    risorsa pulita **non e' costruibile**, perche' il builder il tetto lo posta
+    esattamente quando le congelate non lo sforano — e allora il solver lo
+    rispetta. La proprieta' da tenere ferma e' quindi quella dell'oracolo, e va
+    interrogata dove vive."""
+    env = mini_school(days=2, slots=3)
+    env["subject"].didactic_weight = 3
+    env["subject"].save()
+    altra = SchoolClass.objects.create(name="1B", study_plan=env["plan"], year=1)
+    for klass in (env["klass"], altra):
+        klass.max_weekly_weight_per_student = 3
+        klass.save()
+        for day, slot in ((0, 0), (0, 1)):
+            act = make_activity(env["subject"], classes=[klass],
+                                immobility=Activity.Immobility.LOCKED_IN_PLACE)
+            place(env["schedule"], act, day, slot)
+
+    tutte = violazioni(env["schedule"])
+    pesi = {k for k in tutte if k[0][0] == "weight_week"}
+    assert len({k[0][1] for k in pesi}) == 2, "le due classi violano entrambe"
+
+    # `prima` conosce una sola delle due risorse: l'altra e' pulita, e la sua
+    # violazione dev'essere **nuova** anche se la famiglia e' grossolana.
+    risorsa_nota = sorted({k[0][1] for k in pesi})[0]
+    prima = {k for k in tutte
+             if k[0][0] != "weight_week" or k[0][1] == risorsa_nota}
+    residue = nuove(env["schedule"], prima)
+    assert residue
+    assert {k[0][0] for k in residue} == {"weight_week"}
+    assert {k[0][1] for k in residue} == {sorted({k[0][1] for k in pesi})[1]}
+
+
+def test_uno_scarto_nuovo_si_vede_anche_se_la_risorsa_era_gia_scoperta():
+    """⚠ `activity_unplaced` è escluso dalle famiglie grossolane, e il perché
+    va **asserito**, non solo scritto: sgrossarlo renderebbe l'oracolo cieco
+    sull'unica cosa che il solver decide da sé.
+
+    Le sue `resources` sono i token dell'attività, quindi due attività della
+    stessa classe condividono la chiave grossolana. Qui la baseline ha già una
+    non piazzata di quella classe, e il solve — che preferisce scartare
+    un'ora invece di due (L1) — ne butta fuori un'**altra**: stessa causale,
+    stesse risorse, stessa settimana. Con la chiave grossolana lo scarto nuovo
+    sparirebbe dentro quello vecchio.
+
+    ⚠ Trovato per mutazione: coprire `activity_unplaced` lasciava la suite
+    verde in tutti e undici i test."""
+    env = mini_school(days=1, slots=2)
+    lunga = make_activity(env["subject"], classes=[env["klass"]], slots=2)
+    corta = make_activity(env["subject"], classes=[env["klass"]])
+    place(env["schedule"], corta, 0, 0)
+
+    prima = violazioni(env["schedule"])
+    assert {k[0][0] for k in prima} == {"activity_unplaced"}
+    assert {k[0][2] for k in prima} == {(lunga.pk,)}
+
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.unplaced == (corta.pk,), (
+        "L1 conta le ore: scartare la corta costa 60', la lunga 120'")
+    apply(soluzione, env["schedule"])
+
+    residue = nuove(env["schedule"], prima)
+    assert {k[0][2] for k in residue} == {(corta.pk,)}

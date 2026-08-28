@@ -73,6 +73,27 @@ def test_copertura_monte_ore():
     assert findings[0].quantities == {"expected_minutes": 120, "actual_minutes": 60}
 
 
+def test_le_ore_di_quadrimestre_non_raddoppiano():
+    """🔑 Il monte ore di un `Service` è **settimanale**, quindi la copertura si
+    misura per firma di settimana e non sommando le durate.
+
+    Q1 + Q2 della stessa materia sono un'ora *alla settimana*, non due
+    all'anno: sommare le durate a maschera ignorata darebbe 120 contro 60 e
+    segnalerebbe come scostamento il quadrimestre — cioè la forma più comune
+    della scuola italiana. ⚠ Nessun test lo teneva fermo: la variante annuale è
+    stata scritta, misurata e lasciava **733 test verdi**."""
+    env = mini_school()
+    q1, q2 = 0b0011, 0b1100          # l'anno della fixture è di 4 settimane
+    for mask in (q1, q2):
+        make_activity(env["subject"], classes=[env["klass"]], mask=mask)
+    service = Service.objects.get(study_plan=env["plan"], subject=env["subject"])
+    service.class_minutes = 60       # `make_activity` ne ha sommate due
+    service.save()
+
+    assert [f for f in check_schedule(env["schedule"])
+            if f.code != "activity_unplaced"] == []
+
+
 def test_copertura_quadrata_nessun_finding():
     env = mini_school()
     make_activity(env["subject"], classes=[env["klass"]], slots=2)

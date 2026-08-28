@@ -11,9 +11,22 @@ Sui **tetti**: `costante + libere <= tetto` equivale a
 in cui le congelate sono gia' in violazione. ADR-018 impone di clamparlo a
 zero invece di lasciare il modello infattibile per colpa del passato.
 
-Sui **minimi garantiti**: `costante + libere >= soglia` equivale a
-`libere >= soglia - costante`, che non e' mai infattibile per colpa del
-passato — se le congelate gia' bastano, il requisito e' vacuo. Nessun clamp."""
+Sui **minimi garantiti** la stessa algebra direbbe: `costante + libere >=
+soglia` equivale a `libere >= soglia - costante`, mai infattibile per colpa del
+passato, nessun clamp. ⚠ **E non serve a niente**, perche' nessun minimo di
+questo modello e' una somma di contributi per attivita'. `MIN_DISTRIBUTION`,
+`FREE_GUARANTEED` e `ARRIVAL_DEPARTURE` contano giorni qualificanti, giorni
+liberi, mezze giornate: una congelata non «consuma una quota», toglie gradi di
+liberta', e la sottrazione non e' definita. Tutti e tre usano invece
+`frozen_occupies` o la disgiunzione reificata «ripara **oppure** non
+peggiorare» (vedi la nota in testa a `builders/time_counting.py`).
+
+Qui c'e' stata fino al 2026-08-28 una `residual_floor(ctx, terms, floor)` che
+faceva `floor - frozen`: nessun builder l'ha mai chiamata, e l'unico
+riferimento era il suo stesso test. Rimossa. La simmetria che suggeriva —
+«due casi, uno clampato e uno no» — **non esiste nel modello**, e leggerla nel
+codice faceva credere il contrario. Se un minimo davvero additivo comparira',
+e' una riga: `free, frozen = split(...); soglia = floor - frozen`."""
 
 
 def split(ctx, terms):
@@ -32,14 +45,6 @@ def residual_cap(ctx, terms, cap):
     """Per un vincolo «<= cap». Il tetto residuo e' clampato a zero."""
     free, frozen = split(ctx, terms)
     return free, max(0, cap - frozen)
-
-
-def residual_floor(ctx, terms, floor):
-    """Per un vincolo «>= floor». Nessun clamp: una soglia residua <= 0
-    significa che le congelate gia' bastano, ed e' corretto che il vincolo
-    risulti vacuo."""
-    free, frozen = split(ctx, terms)
-    return free, floor - frozen
 
 
 def any_free(ctx, activity_ids):

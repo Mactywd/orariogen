@@ -496,9 +496,23 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
       41, 45, 52), e l'esenzione che lo perdonava è stata **rimossa** insieme
       al suo test. Il banco è ora più severo: se tornasse, sarebbe rosso.
 
-- [~] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
+- [x] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
       piazzamento**, e il tetto **settimanale** del peso didattico è il primo
-      caso incontrato. ⚠ **Metà chiuso il 2026-08-26 (pezzo 3, ondata 1)**: la
+      caso incontrato.
+      ✅ **Chiuso il 2026-08-28 (sera)**, l'altra metà: l'oracolo differenziale
+      confronta sulla chiave **grossolana** `(causale, risorsa, settimana)` per
+      le famiglie che nominano il secchio invece del violatore — cioè i
+      checker `PLACEMENT_MONOTONE = False`, letti dal registro — e solo dove
+      quella coppia era **già** rotta nella baseline. Misurato invece che
+      previsto: due congelate oltre il tetto, una libera, e il finding torna
+      con `activities (1,2) → (1,2,3)` e `weight 6 → 9`. ⚠ Il prezzo è
+      dichiarato: si perde il **peggioramento** di una violazione già presente
+      (su `max_gap`, una libera piazzata dentro un buco già fuori budget non
+      fa scattare nulla). L'alternativa — confrontare la quantità violata
+      famiglia per famiglia — vorrebbe dire riscrivere fuori dai checker la
+      nozione di «quale numero è quello cattivo». Il testo che segue è
+      l'originale.
+      ⚠ **Metà chiuso il 2026-08-26 (pezzo 3, ondata 1)**: la
       «somma costante» che rendeva il vincolo vero-sempre o falso-sempre era
       `AddExactlyOne`. Con lo scarto ammesso il tetto torna evadibile come lo
       evade EDT — scartando — e la chiave grossolana diventa una scelta invece
@@ -546,6 +560,101 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (i debiti del banco)** — **Tre debiti dichiarati, e due erano
+  dichiarati male.** Il piano del modello hard ne aveva lasciati tre in
+  eredità; questa passata li ha misurati uno per uno invece di ripararli sulla
+  fiducia, e due si sono rivelati diversi da come erano scritti.
+
+  ⛔ **`coverage_mismatch` sul testimone non veniva da dove il banco diceva.**
+  L'intestazione di `tests/solver_harness.py` attribuiva il fenomeno ai
+  `Service` per (piano, materia) contro `student_units` che attribuisce il
+  monte ore alle **parti**. Vero — ed è stato corretto, ogni parte ha ora il
+  suo piano di studi — ma **misurato**, spiega un ottavo del fenomeno: su
+  dieci semi i finding passano da 122 a 111. Il resto lo fanno le **maschere
+  di settimana**, e si vede su `1B`, che di parti non ne ha nessuna e sporca
+  ogni seme lo stesso. Il monte ore di un `Service` è settimanale e
+  `check_schedule` valuta ogni firma separatamente: un dataset a maschere
+  casuali non ha nessun monte ore costante da settimana a settimana.
+
+  🔑 **E la riparazione ovvia è quella sbagliata.** Sommare le durate a
+  maschera ignorata — la «vista annuale» — rende il testimone pulito su tutti
+  e venti i semi provati, e **raddoppia una coppia Q1/Q2**: 120 minuti contro
+  i 60 del piano, cioè segnala come scostamento il quadrimestre, che è la
+  forma più comune della scuola italiana. Scritta, misurata, buttata. ⚠ E
+  mentre era in piedi la suite era **verde in tutti e 733 i test**: niente
+  proteggeva la lettura per settimana. Ora la protegge
+  `test_le_ore_di_quadrimestre_non_raddoppiano`, e la semantica è scritta nel
+  docstring del checker invece di essere implicita nel modo in cui
+  `check_schedule` lo chiama.
+
+  ⚠ **Il debito non era comunque bloccante, ed era la parte peggiore
+  dell'errore.** Si diceva «da riparare nella fixture prima di qualunque
+  oracolo differenziale a tutto campo». Falso: `coverage_mismatch` è
+  `PLACEMENT_INDEPENDENT`, quindi è identico prima e dopo il solve e la
+  differenza è vuota per costruzione. Ciò che andava formulato con cura non
+  era la fixture ma la **chiave**.
+
+  🔑 **Ed è il secondo debito, ora chiuso: la chiave grossolana di §9.5.**
+  L'oracolo confronta su `Finding.key`, che include attività e quantità. Per
+  le famiglie che nominano il **secchio** invece del violatore quella chiave
+  cambia per il solo fatto che una libera è stata piazzata — misurato con due
+  congelate oltre il tetto settimanale di peso didattico e una libera:
+  `activities (1,2) → (1,2,3)`, `weight 6 → 9`, quattro settimane, e l'oracolo
+  dichiarava rotto un solve impeccabile. Il builder non può rimediare (il
+  tetto è inevadibile per costruzione), quindi la riparazione sta
+  nell'oracolo: `nuove()` confronta su `(causale, risorsa, settimana)` per
+  quelle famiglie, **lette dal registro** (`PLACEMENT_MONOTONE = False`) e non
+  elencate a mano, con un test che tiene ferma la corrispondenza.
+
+  ⚠ **L'esenzione è stretta due volte, e la seconda l'ha imposta la
+  mutazione.** Vale solo dove la coppia (causale, risorsa, settimana) era
+  **già** rotta nella baseline — altrimenti sarebbe un'amnistia per famiglia,
+  cioè un oracolo cieco su dieci causali su ventisei. E `activity_unplaced`
+  ne resta **fuori**, perché le sue `resources` sono i token dell'attività:
+  due attività della stessa classe condividono la chiave grossolana, e uno
+  scarto nuovo sparirebbe dentro uno vecchio — cioè l'oracolo diventerebbe
+  cieco sull'unica cosa che il solver decide da sé. ⚠ Quell'esclusione era
+  **dichiarata e non asserita**: coprirla lasciava verdi tutti e undici i
+  test. Ora c'è il caso che la uccide — L1 preferisce scartare un'ora invece
+  di due, quindi il solve butta fuori un'attività *diversa* da quella già
+  fuori, sulla stessa classe. **Quattro mutazioni, quattro esiti distinti.**
+
+  ⚠ Il prezzo della chiave grossolana è dichiarato: si perde il
+  **peggioramento** di una violazione già presente — su `max_gap`, una libera
+  piazzata dentro un buco già fuori budget non fa scattare nulla.
+  L'alternativa sarebbe confrontare la quantità violata famiglia per famiglia,
+  cioè riscrivere fuori dai checker la nozione di «quale numero è quello
+  cattivo»: il difetto che questo progetto ha già intercettato due volte.
+
+  🔑 **Terzo debito: `residual_floor` non era codice morto per distrazione, era
+  una simmetria che non esiste.** L'intestazione di `domain/solver/residual.py`
+  presentava due casi — tetti clampati, minimi no — e il secondo aveva una
+  funzione che nessun builder ha mai chiamato, con l'unico riferimento nel suo
+  stesso test. La ragione, che il codice già sapeva altrove: **nessun minimo di
+  questo modello è additivo**. `MIN_DISTRIBUTION`, `FREE_GUARANTEED` e
+  `ARRIVAL_DEPARTURE` contano giorni e mezze giornate, dove una congelata non
+  consuma una quota ma toglie gradi di libertà, e la sottrazione non è
+  definita: tutti e tre usano `frozen_occupies` o la disgiunzione reificata.
+  Rimossa, con l'assenza tenuta ferma da un test perché rimetterla sia una
+  decisione. Se un minimo davvero additivo comparirà, è una riga.
+
+  ⚠ **E il gemello di `residual_floor` stava nel banco.** `_causale_risorsa`
+  calcolava esattamente la chiave grossolana che l'oracolo ha appena adottato,
+  e **nessuno la chiamava**. Prima di cablarla, la misura: strumentando
+  `_classifica_nuove` per contare quante violazioni salverebbe, sui dieci semi
+  appuntati della suite il conto è **zero**. Non si aggiunge un'esenzione che
+  non scatta — è la regola con cui il ramo pigro era stato tolto nell'ondata 5
+  — quindi l'helper è rimosso e la misura sta nel docstring. Se un giorno
+  scatterà, il banco diventerà rosso e la decisione si prenderà guardando quel
+  rosso.
+
+  **738 test verdi**, 16 skip. Il testimone del banco resta sporco su
+  `coverage_mismatch`, ora per la ragione giusta e con la riparazione
+  quantificata: comprendere le maschere in coppie complementari, cioè
+  riscrivere `_make_activities` e spostare il testimone di ogni famiglia e
+  ogni seme appuntato. Non fatto, e dichiarato: non serve a niente che sia
+  fatto.
 
 - **2026-08-28 (estrai)** — **La voce con più dipendenze in entrata
   dell'inventario esisteva come tabella e non come funzione.** `Extraction` era
