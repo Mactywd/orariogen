@@ -62,8 +62,10 @@ config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
                         il violatore di Hall (fase 5, hall.py), lo scarto come
-                        stato nominato (checkers/placement.py) e la richiesta
-                        d'aula insoddisfatta (checkers/room_assignment.py)
+                        stato nominato (checkers/placement.py), la richiesta
+                        d'aula insoddisfatta (checkers/room_assignment.py) e la
+                        **classifica dei vincoli** per fallimenti causati
+                        (blame.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette,
                         la catena lessicografica (objective.py), le quote
@@ -72,7 +74,7 @@ domain/                l'app Django del modello di dominio v1
                         per popolazione con la perdita tollerata (Arbitrato)
                         e la **seconda fase** — l'assegnazione delle aule
                         (rooms.py), modello a sé con due livelli propri
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -234,6 +236,16 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > rinunciare. Sul Fermi con le aule: 92 richieste, **84 assegnate, 8 rinunce**,
 > 39 celle contese, fino a 5 richieste su una sola cella. Non è un difetto del
 > modello: è la conseguenza dichiarata di assegnare le aule *dopo*.
+>
+> Dal 2026-08-28 c'è anche la **classifica dei vincoli per fallimenti
+> causati** (`domain/analysis/blame.py`, in `manage.py analyze`): la seconda
+> delle «due lacune di EDT» di `scope-v1.md`, il ponte fra «il calcolo è
+> fallito» e «quale vincolo allento». Ordina le coppie **(causale, risorsa)**
+> per quante attività tornerebbero piazzabili allentandole — non per quante
+> celle escludono, che è pressione e non azione. ⚠ Le famiglie **non
+> monotone** ne restano fuori, il D.T.B. compreso: il criterio del dominio
+> residuo su di loro è falso, e contarle le metterebbe in cima a qualunque
+> classifica per un artefatto. La rinuncia la dichiara il comando.
 >
 > Restano i punti aperti elencati sotto.
 
@@ -509,6 +521,79 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (quale vincolo allento)** — **La seconda delle due lacune di
+  EDT è colmata: `domain/analysis/blame.py`.** `scope-v1.md` le chiama «la
+  nostra occasione» — il riepilogo navigabile (già in `analyze`) e
+  **l'ordinamento dei vincoli per numero di fallimenti causati**, «il ponte
+  mancante fra *il calcolo è fallito* e *quale vincolo allento*». EDT elenca
+  cosa si **può** alleggerire e non dice mai cosa **serve** alleggerire.
+
+  🔑 **Il pezzo è economico perché il numero esisteva già e veniva buttato
+  via.** `admissible_starts` prova ogni cella e calcola l'insieme delle
+  violazioni nuove — cioè *perché* quella cella è esclusa — e poi ne guardava
+  solo se fosse vuoto. Ora c'è `trial_placements`, che restituisce le causali
+  cella per cella; `admissible_starts` ne è il filtro, e la classifica le
+  legge. **Zero giri di checker in più.**
+
+  🔑 **L'unità di misura non è la riga di vincolo, ed è una decisione.** Un
+  `Finding` non porta il pk della riga che l'ha generato, e
+  `ResourceTimeConstraint` non ha unicità su `(resource, type)`: risalire alla
+  riga sarebbe una deduzione. La classifica è quindi sulla coppia **(causale,
+  risorsa)** — la stessa chiave grossolana che il progetto usa già altrove, ed
+  esattamente ciò che l'utente va a toccare («il D.T.B. del prof. Rossi»).
+  Dove due righe condividono la coppia sono indistinguibili dall'orario, e
+  nominarle insieme è il verdetto corretto.
+
+  🔑 **Il numero che conta è `activities_freed`, non le celle escluse.** Un
+  dominio si svuota per **congiunzione** — la cella 1 la esclude un vincolo,
+  la cella 2 un altro — quindi «questo vincolo esclude quattrocento celle» non
+  implica che allentarlo serva. `activities_freed` conta le attività a dominio
+  vuoto per cui esiste una cella la cui **unica** causale è questa: *se
+  allento questo, quante attività tornano ad avere dove andare?* Ordinare per
+  pressione metterebbe in cima, su ogni scuola vera, l'indisponibilità più
+  larga — che è quasi sempre quella che non si può togliere. Un test tiene
+  fermo l'ordine: sedici celle escluse senza chiudere una porta stanno sotto a
+  cinque che ne chiudono una.
+
+  ⚠ **Le famiglie non monotone non compaiono, ed è una rinuncia dichiarata dal
+  comando, non solo dal docstring.** Il criterio «chiave nuova ⇒ cella
+  esclusa» è falso per i checker `PLACEMENT_MONOTONE = False` — là piazzare
+  può *riparare* — quindi ogni cella produrrebbe una chiave nuova e quelle
+  famiglie starebbero in cima a **qualunque** classifica su **qualunque**
+  dataset, per un artefatto del criterio. Si passa `relaxed=True` come la fase
+  5: si perde **richiamo**, mai precisione. Fra le silenziose c'è il D.T.B.,
+  che è uno dei vincoli che le scuole allentano più spesso, e per questo
+  `famiglie_silenziose()` le legge **dal registro** invece di elencarle, e
+  `analyze` le stampa: un vincolo che tace e un vincolo innocuo si leggono
+  uguali.
+
+  ⚠ **Le firme di settimana si uniscono, non si sommano.** Un'attività va
+  collocata in **una** cella valida in **tutte** le settimane in cui è attiva:
+  le causali di una stessa cella si uniscono fra le firme, e la cella è
+  ammissibile solo se l'unione è vuota. Sommare le firme raddoppierebbe ogni
+  numero dove le firme sono trentacinque.
+
+  ⚠ **E la mutazione ha trovato un test vacuo, nella forma di sempre.** Sei
+  mutazioni, e la terza — spegnere il rilassamento — **non rendeva rosso
+  niente**: le due attività che dovevano creare il buco del D.T.B. erano
+  *mobili*, quindi `free_candidates` le spiazzava e il buco spariva prima di
+  essere misurato. È la trappola §4.1 del violatore di Hall, questa volta
+  dentro il caso di prova. Congelate: sei mutazioni, **sei esiti distinti** —
+  cinque con un rosso solo, e spegnere il rilassamento ne fa due, perché
+  trascina anche la misura sul Fermi.
+
+  Nello stesso giro `_split` esce da `hall.py` e diventa
+  `domain_size.free_candidates`: i due lettori di `trial_placements` hanno
+  bisogno della **stessa** preparazione dello stato, e la §4.1 è precisamente
+  il tipo di precauzione che si perde in una copia.
+
+  Fermi: **0,25 s** su 284 attività, tre righe — le tre giornate intere di
+  `vincoli-attesi.md` — zero impiazzabili, zero liberabili. ⚠ Come sempre su
+  questo dataset la misura è del **costo**, mai della **copertura**: senza
+  righe di vincolo le uniche causali possibili sono le indisponibilità. E il
+  costo è lineare nelle firme, quindi il numero da portarsi dietro è «~0,25 s
+  per firma», non un assoluto. **693 test verdi**, 16 skip.
 
 - **2026-08-28 (l'ordine d'inserimento)** — **Due artefatti dichiarati erano
   tre, e il terzo rompeva l'oracolo.** I due punti aperti da luglio —

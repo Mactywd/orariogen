@@ -5,6 +5,7 @@ restano incoerenze: usabile in CI."""
 
 from django.core.management.base import BaseCommand, CommandError
 
+from domain.analysis.blame import famiglie_silenziose, rank_constraints
 from domain.analysis.capacity import analyze_capacity
 from domain.analysis.conformity import check_schedule
 from domain.analysis.domain_size import residual_domain
@@ -26,6 +27,10 @@ class Command(BaseCommand):
                             help="pk dello Schedule di cui verificare la conformità")
         parser.add_argument("--no-hall", action="store_true",
                             help="salta la fase 5 (insiemi non piazzabili)")
+        parser.add_argument("--no-blame", action="store_true",
+                            help="salta la classifica dei vincoli da allentare")
+        parser.add_argument("--blame-top", type=int, default=10,
+                            help="quante righe di classifica mostrare (default 10)")
 
     def handle(self, *args, **options):
         capacity = analyze_capacity()
@@ -94,9 +99,17 @@ class Command(BaseCommand):
                     self.stdout.write("    Azioni:")
                     for remedy in f.remedies:
                         self.stdout.write(f"      - {remedy}")
+
+            if not options["no_blame"]:
+                self._blame(schedule, options["blame_top"])
         elif not options["no_hall"]:
             self.stdout.write(
                 "\n== Insiemi non piazzabili (fase 5) ==\n"
+                "Saltata: richiede --schedule (legge lo stato, non solo l'anagrafica).")
+
+        if not options["schedule"] and not options["no_blame"]:
+            self.stdout.write(
+                "\n== Vincoli da allentare ==\n"
                 "Saltata: richiede --schedule (legge lo stato, non solo l'anagrafica).")
 
         self.stdout.write("\n== Riepilogo ==")
@@ -106,3 +119,37 @@ class Command(BaseCommand):
         if capacity or hall or hard:
             raise CommandError("Rimangono delle incoerenze.")
         self.stdout.write("Verifica terminata: nessuna incoerenza.")
+
+    def _blame(self, schedule, top):
+        """La classifica dei vincoli per fallimenti causati — la seconda delle
+        due lacune di EDT che scope-v1 dichiara nostra occasione: il prodotto
+        elenca cosa si può alleggerire, ma non quale alleggerimento serva.
+
+        ⚠ Non contribuisce all'exit code, ed è deliberato: la classifica è un
+        consiglio su un orario che può essere sanissimo — ordina la pressione
+        anche quando tutto si piazza — mentre l'exit code dice «ci sono
+        incoerenze». Confonderli renderebbe rosso ogni orario stretto."""
+        report = rank_constraints(schedule)
+        self.stdout.write("\n== Vincoli da allentare (per fallimenti causati) ==")
+        self.stdout.write(
+            f"  {report.considered} attività esaminate, "
+            f"{len(report.unplaceable)} senza nessuna collocazione ammissibile.")
+        if not report.rows:
+            self.stdout.write("  Nessun vincolo esclude collocazioni.")
+        for i, r in enumerate(report.rows[:top], 1):
+            self.stdout.write(f"\n  [{i}] {r.statement}")
+            self.stdout.write(
+                f"      Attività che tornerebbero piazzabili: {r.activities_freed}"
+                f"   bloccate da questo solo vincolo: {r.activities_blocked}")
+            self.stdout.write(
+                f"      Celle escluse: {r.cells_blocked}"
+                f" (di cui {r.cells_alone} da questo solo vincolo)")
+        if len(report.rows) > top:
+            self.stdout.write(f"\n  … e altre {len(report.rows) - top} righe "
+                              f"(--blame-top per vederne di più).")
+        self.stdout.write(
+            "\n  Non entrano in classifica, per costruzione: "
+            + ", ".join(famiglie_silenziose()) + "."
+            "\n  Sono le famiglie in cui piazzare può *riparare* la violazione: "
+            "contarle\n  le metterebbe in cima sempre, per un artefatto del "
+            "criterio (blame.py).")

@@ -16,10 +16,10 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from domain.analysis.conformity import week_signatures
-from domain.analysis.domain_size import admissible_starts
+from domain.analysis.domain_size import admissible_starts, free_candidates
 from domain.analysis.flow import INF, MaxFlow
 from domain.analysis.state import ScheduleState, resource_sort_key
-from domain.models import Activity, TimeGrid
+from domain.models import TimeGrid
 
 STATEMENT = ("La fascia di disponibilità comune delle attività e delle "
              "rispettive risorse non permette di piazzare tutte le attività.")
@@ -29,7 +29,6 @@ REMEDIES = (
     "Diminuire le indisponibilità delle risorse",
     "Diminuire le indisponibilità delle risorse comuni",
 )
-FROZEN = {Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE}
 
 
 @dataclass(frozen=True)
@@ -62,27 +61,6 @@ def analyze_hall(schedule):
         state = ScheduleState.build(schedule, week=representative)
         findings += _analyze_state(state, seen)
     return findings
-
-
-def _split(state):
-    """Le immobili gia' piazzate consumano capienza; tutte le altre sono
-    candidate — incluse le piazzate mobili, perche' la fase 5 chiede «entra
-    tutto?», non «l'orario di adesso e' valido».
-
-    ⚠ Le candidate si spiazzano TUTTE prima di calcolare i domini: se restano
-    piazzate si tolgono il dominio a vicenda, la capienza risulta piu' bassa
-    del vero ed escono falsi positivi (§4.1 della spec). Questo difetto non si
-    vedrebbe da nessun caso positivo."""
-    free = []
-    for aid in sorted(state.activities):
-        a = state.activities[aid]
-        if a.immobility in FROZEN and aid in state.placed:
-            continue
-        free.append(a)
-    for a in free:
-        if a.id in state.placed:
-            state.unplace(a.id)
-    return free
 
 
 def _footprint(activity, starts):
@@ -228,7 +206,7 @@ def _labels(state, group):
 
 def _analyze_state(state, seen):
     grid = state.grid
-    free = _split(state)
+    free = free_candidates(state)
     starts = {a.id: admissible_starts(a, state, relaxed=True) for a in free}
     cells_of = {a.id: _footprint(a, starts[a.id]) for a in free}
 
