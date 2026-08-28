@@ -28,7 +28,8 @@ from domain.analysis.findings import Severity
 from domain.analysis.hall import analyze_hall
 from domain.models import (
     Activity, ClassPart, ClassPartition, InstituteSettings,
-    ResourceTimeConstraint, ResourceUnavailability, Subject, SubjectConstraint,
+    ResourceTimeConstraint, ResourceUnavailability, Room, Subject,
+    SubjectConstraint,
 )
 from domain.solver.model import solve
 from tests.analysis_helpers import make_activity, mini_school, place
@@ -260,6 +261,33 @@ def test_parts_order_non_inventa_una_deficienza():
     # nessuna coppia (causale, risorsa) che non ci fosse gia'.
     place(env["schedule"], libera, day=0, slot=0)
     assert {(f.code, f.resources) for f in _violazioni(env["schedule"])} == prima
+
+
+def test_room_assignment_non_inventa_una_deficienza():
+    """La **terza** forma, e va per il verso opposto a tutte le altre: qui
+    piazzare non ripara la violazione, la **crea**.
+
+    `structural:room_assignment` nomina le attivita' **piazzate** che chiedono
+    un'aula e non ne hanno ancora una. A stato vuoto l'attivita' e' sospesa,
+    quindi il finding non c'e'; ogni cella di prova la piazza, e in ogni cella
+    il finding compare. Chiave nuova ovunque, dominio vuoto, e la fase 5
+    dichiara impiazzabile un'attivita' che il solver colloca senza fatica.
+
+    ⚠ L'orario di partenza non e' **muto** come nelle altre riproduzioni, ed e'
+    corretto che non lo sia: `room_unassigned` e' li' per definizione finche' la
+    seconda fase non ha girato. Cio' che si asserisce e' che non ci sia nessuna
+    violazione di **vincolo**, e che la fase 5 taccia lo stesso."""
+    env = mini_school()
+    lab = Room.objects.create(name="LAB", simultaneous_capacity=1)
+    for day in range(3):
+        a = make_activity(env["subject"], teachers=[env["teacher"]],
+                          rooms=[lab], slots=1)
+        place(env["schedule"], a, day=day, slot=0)
+
+    codici = {f.code for f in _hard(env["schedule"])}
+    assert codici == {"room_unassigned"}, codici
+    assert solve(env["schedule"], time_limit=30).status in ("OPTIMAL", "FEASIBLE")
+    assert analyze_hall(env["schedule"]) == []
 
 
 def test_il_rilassamento_non_ha_spento_la_fase_5():

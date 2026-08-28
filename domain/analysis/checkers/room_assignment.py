@@ -22,6 +22,22 @@ from domain.analysis.state import resource_sort_key
 
 @register("structural:room_assignment")
 class RoomAssignmentChecker(Checker):
+    # ⚠ Non monotono, e per il verso **opposto** a `structural:placement`: la'
+    # piazzare *ripara* la violazione, qui piazzare la **crea**. Il finding
+    # esiste solo per le attivita' piazzate, quindi ogni cella di prova
+    # produce una chiave che la baseline (attivita' sospesa) non ha: sotto il
+    # criterio «chiave nuova ⇒ cella inammissibile» il dominio si svuota
+    # ovunque, e la fase 5 dichiara impiazzabile un'attivita' che il solver
+    # colloca senza fatica.
+    #
+    # Misurato sul Fermi arricchito con le aule: **92 falsi positivi**, uno per
+    # ogni attivita' che chiede un'aula, mentre `solve` risponde OPTIMAL con
+    # zero scarti. Non e' una violazione causata dal piazzamento: e' la
+    # richiesta che la **seconda fase** deve ancora soddisfare, e domandare
+    # all'analisi del piazzamento di trattarla come un ostacolo significa
+    # mandare l'utente a smontare vincoli sani.
+    PLACEMENT_MONOTONE = False
+
     def check(self, state, resources=None):
         for aid, act in state.activities.items():
             if aid not in state.placed or aid in state.assigned_room:

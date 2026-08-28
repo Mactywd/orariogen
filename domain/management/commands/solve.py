@@ -155,9 +155,16 @@ class Command(BaseCommand):
                               "`--applica` per salvare i piazzamenti.")
         else:
             apply(soluzione, schedule)
+            # ⚠ `room_unassigned` si esclude per la stessa ragione di
+            # `activity_unplaced`: descrive un orario **incompleto**, non
+            # illegale. Le aule le assegna la seconda fase (`assign_rooms`), e
+            # dopo il solo piazzamento ogni attivita' che ne chiede una e'
+            # ancora senza — elencarle qui come «violazioni residue» direbbe a
+            # chi lancia il comando che l'orario e' sbagliato quando invece non
+            # e' ancora finito.
             hard = [f for f in check_schedule(schedule)
                     if f.severity == Severity.HARD
-                    and f.code != "activity_unplaced"]
+                    and f.code not in ("activity_unplaced", "room_unassigned")]
             self.stdout.write("\nPiazzamenti scritti.")
             if hard:
                 self.stdout.write("\n== Violazioni residue ==")
