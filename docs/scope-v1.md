@@ -216,33 +216,12 @@ Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto 
 
 ## Cosa resta davvero aperto
 
-Non sono decisioni di scope, ma condizionano il lavoro che segue.
-
-- ⚠ **La configurazione della griglia oraria non è mai stata osservata in UI** —
-  durata delle fasce, ciclo, linea di mezza giornata. È la base su cui poggia tutto
-  il resto, ed è l'unica parte del modello del tempo che conosciamo solo per via
-  documentale.
-- ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`): il dataset di
-  prova non consente ancora di esercitare l'assegnazione delle aule, che è metà
-  della difficoltà.
-- **La via d'ingresso dei dati anagrafici** resta da scegliere, ora che
-  `Partenaire_Index` è escluso ([ADR-012](decisioni.md)).
-- ⛔ **L'unità del monte ore: la parte o l'atomo?** (2026-08-28) È una decisione
-  di modello, non di scope, ma va presa prima di qualunque import: cambia i
-  dati che una scuola deve inserire. `structural:coverage` misura **ogni parte**
-  contro il piano **intero** della parte — lettura *per alunno*, che è quella
-  giusta — ma un alunno sta in una **combinazione** di parti, l'atomo di
-  ADR-017. Su una classe con IRC la copertura dichiara che chi fa religione
-  deve l'ora di alternativa, e viceversa: **due scostamenti inesistenti su ogni
-  classe italiana**. Tre strade, nessuna da indovinare:
-  **(a)** portare la copertura sull'atomo — il modello gli atomi li costruisce
-  già, per l'occupazione, ma non hanno un piano di studi e derivarlo
-  dall'unione dei piani delle parti sarebbe inventare un campo;
-  **(b)** materializzare un `StudyPlan` per combinazione — misurato: funziona e
-  azzera i finding, al prezzo di quattro piani per una 3A articolata con IRC,
-  cioè gli atomi come anagrafica, che ADR-017 ha deciso di **non** fare;
-  **(c)** leggere il monte ore **tripartito** del servizio (`reduced_minutes`,
-  `split_minutes`), che è la risposta di EDT alla stessa domanda — ⚠ sono nello
-  schema dal primo giorno e **letti da nessuno**, e la loro semantica non è mai
-  stata osservata in UI ([piani-di-studi.md](edt/piani-di-studi.md) la elenca
-  fra le cose da osservare).
+Non sono decisioni di scope, ma condizionano il lavoro che segue, e stanno
+tutte in **[todo.md](todo.md)** — l'unico elenco, per non averne due che
+divergono. In sintesi: ⛔ **D1**, l'unità del monte ore (la parte o l'atomo:
+**due scostamenti inesistenti su ogni classe italiana**, e cambia i dati che una
+scuola deve inserire); **D2**, la via d'ingresso dei dati anagrafici; **D3**, se
+la fase 1 debba smettere di essere cieca alle aule; **D4**, se serva
+un'interfaccia. Più cinque osservazioni da fare in EDT, fra cui la
+**configurazione della griglia oraria**, che non è mai stata vista in UI ed è la
+base su cui poggia tutto il modello del tempo.

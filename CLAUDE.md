@@ -40,6 +40,7 @@ docs/
     formato-file.md    📦 il formato binario .edt, per validare la semantica sui dati reali
     glossario-it-fr.md 📦 IT ↔ FR ↔ EN — ⚠ contiene l'inversione gruppo/raggruppamento
     estratti/          materiale grezzo di estrazione (NON documentazione — vedi il suo README)
+  todo.md              📌 **l'unico elenco di cose da fare** — decisioni, osservazioni, debiti
   decisioni.md         ADR leggeri: decisione, alternative, motivo, data
   scope-v1.md          cosa entra in v1 e cosa no — proposta da rivedere
   modello-dominio.md   il design del modello di dominio v1 — approvato, pre-codice
@@ -109,6 +110,10 @@ file in `data/liceo-fermi/` contiene **i dati concreti** della scuola di esempio
 - **Niente accumulo di versioni**: se una scoperta contraddice qualcosa di già
   scritto, si corregge esplicitamente il file dell'entità, non si aggiunge una
   variante accanto.
+- **Le cose da fare stanno in [docs/todo.md](docs/todo.md), e solo lì.** Quando
+  una voce si apre o si chiude si aggiorna quel file; il *racconto* di come è
+  stata chiusa va nel changelog qui sotto, alla data. Due elenchi paralleli
+  divergono sempre, ed è come questo file si era riempito di voci stantie.
 - **Non inventare campi**: si documentano solo i campi effettivamente osservati
   nella UI di EDT. Ciò che è nostra estensione (es. mappatura classe di concorso) va
   segnalato come tale, non spacciato per campo EDT.
@@ -431,40 +436,14 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
 - [x] L'**intervallo è un separatore**, non una `Place`; lo **spostamento fra sedi**
       è per **coppia orientata**. → `docs/edt/tempo-e-calendario.md`
 
-**Ancora aperto:**
+**Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
+Quattro decisioni, cinque osservazioni da fare in EDT, sei debiti dichiarati.
+La prima è ⛔ **D1, l'unità del monte ore: la parte o l'atomo** — blocca
+l'import, perché cambia i dati che una scuola deve inserire.
 
-- [ ] ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`):
-      `data/liceo-fermi/aule.md` è progetto, non osservazione. → `docs/edt/aule.md`
-      ⚠ Dal 2026-08-28 il **nostro** dataset le ha, e ha le attività che le
-      chiedono (`tests/fermi.py`, `SPECIAL_ROOMS`), perché senza la seconda
-      fase avrebbe un problema vuoto. Resta che *quali* aule chieda ogni
-      materia è nostra scelta di dimensionamento, mai osservata in EDT.
-- [ ] ⚠ **`TypeIncompatibiliteSalle` (11 valori) e `TypeChoixOptimSalle`**: di
-      entrambi conosciamo il **nome** dalle stringhe (📦) e non i valori.
-      Il primo è la famiglia delle incompatibilità fra aule, il secondo i
-      criteri con cui EDT sceglie *quale* aula fra le ammissibili. La nostra
-      seconda fase non ne implementa nessuno dei due (§6 della spec li dichiara
-      fuori): l'assegnazione sceglie una candidata qualunque fra quelle legali,
-      con la sola preferenza per la ripartizione precedente. **Da osservare in
-      UI** prima di decidere se entrano.
-- [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
-      `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
-      CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
-- [ ] ⛔ **L'unità del monte ore è la parte, dove dovrebbe essere l'atomo**
-      (2026-08-28). `structural:coverage` misura ogni **parte** contro il piano
-      **intero** della parte: lettura *per alunno*, che è quella giusta, ma un
-      alunno sta in una **combinazione** di parti — una per partizione — cioè
-      l'**atomo** di ADR-017. Con una sola partizione parte e atomo coincidono
-      e tutto quadra; con due, o con una sola le cui parti ricevono materie
-      diverse — **IRC e alternativa, cioè ogni classe italiana** — la copertura
-      dichiara che chi fa religione deve l'ora di alternativa e viceversa.
-      ⚠ Non l'aveva visto nessuno perché il **Fermi non ha nessuna partizione**
-      e `test_beyond_fermi.py` le costruisce senza mai chiamare
-      `check_schedule`: la forma di sempre. Tenuto fermo da
-      `test_l_unita_della_copertura_e_la_parte_dove_dovrebbe_essere_l_atomo`.
-      Le tre strade e i loro prezzi misurati sono in
-      [scope-v1.md](docs/scope-v1.md); **è una decisione di modello**, cambia i
-      dati che una scuola deve inserire, e va presa prima dell'import.
+Quello che segue è la **storia delle voci chiuse**, con il perché: si legge, non
+si aggiorna.
+
 - [x] **Come si comporta un builder quando un constraint mescola attività
       congelate già in violazione e attività libere?** Deciso con
       [ADR-018](docs/decisioni.md): **capacità residua** clampata sui soli
