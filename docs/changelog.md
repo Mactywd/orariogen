@@ -37,6 +37,18 @@ quelle già fatte.
   del checker che lo ispira.** A capienza 1 i due conteggi coincidono riga per
   riga, ed è per questo che nessuna istanza esistente si è mossa.
 
+  ⚠ **E [ADR-019](decisioni.md) prescriveva la regola sbagliata**, perché è
+  da lì che il conteggio a insiemi era venuto: le sue *Conseguenze* dicevano
+  che «il residuo di ADR-018 va calcolato con **la stessa** regola» del
+  checker. Corretto in loco più un emendamento datato, nella forma di ADR-003:
+  lasciarlo com'era avrebbe mandato chi cerca il perché di una decisione a
+  leggere prescritta proprio la regola che questo giro ha misurato come causa
+  di un `INFEASIBLE` per colpa del solo passato — «niente accumulo di
+  versioni» dentro il file delle decisioni. ⚠ L'emendamento dichiara anche ciò
+  che **non** riabilita: appiattire `by_cell` resta l'errore che ADR-019 aveva
+  corretto, perché conta anche le coppie *dentro* una fascia e in un ordine
+  deciso dal queryset.
+
   ⛔ **La seconda fase rubava l'aula a chi stava fuori dal perimetro.**
   `activity_tokens` mette l'aula fra le chiavi di occupazione anche **senza
   assegnazione**, quando le candidate dichiarate sono una sola — regola scritta
