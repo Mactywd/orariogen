@@ -3,7 +3,7 @@
 **Questo è l'unico elenco.** Ogni volta che una voce si apre o si chiude, si
 aggiorna qui — non si aprono liste parallele in `CLAUDE.md` o in `scope-v1.md`,
 che rimandano a questo file. Il *racconto* di come una voce è stata chiusa
-resta nel changelog di `CLAUDE.md`; qui resta una riga con la data.
+resta in [changelog.md](changelog.md); qui resta una riga con la data.
 
 **Come si legge una voce.** Ogni riga porta il tipo di risposta che aspetta,
 perché è ciò che decide chi può muoverla:
@@ -187,7 +187,7 @@ perché nessuno debba ricostruire *perché*.
 
 ## Chiuse
 
-Il racconto è nel changelog di [CLAUDE.md](../CLAUDE.md), alla data.
+Il racconto è in [changelog.md](changelog.md), alla data.
 
 - [x] **2026-08-28** — La classe articolata regge (condizione 3 di ADR-015): la
       parte porta un piano proprio, la copertura lo legge, le due articolazioni
