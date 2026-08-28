@@ -103,7 +103,7 @@ Qui il criterio 2 pesa più che altrove.
 | ✅ | **Ottimizzazione lessicografica, senza pesi** | dentro | quote di violazione + criteri ordinati + perdita tollerata. **Non** `minimize(w1*a + w2*b)`: è un'architettura diversa, e quella che funziona da trent'anni in questo dominio |
 | ✅ | **Alleggerimenti a quota** | dentro | un vincolo rilassabile non diventa soft: resta hard con **un numero massimo di violazioni** attribuito per risorsa. In CP-SAT sono variabili di violazione vincolate in somma, non penalità nell'obiettivo |
 | ✅ | **Ottimizza docenti *oppure* classi** | dentro | EDT non cerca mai l'ottimo congiunto. Vale la pena copiare la rinuncia: l'ottimo congiunto è più costoso e meno spiegabile |
-| ✅ | **`Estrai`** — selezione di lavoro persistente | dentro | **la voce con più dipendenze in entrata di tutto l'inventario**. È la risposta a *«rigenera solo il biennio»*, *«ripiazza solo quelle tre»* — e in EDT il motore opera **esclusivamente** sull'estrazione |
+| ✅ | **`Estrai`** — selezione di lavoro persistente | **implementata il 2026-08-28** (`domain/extraction.py`, `manage.py extract`) | **la voce con più dipendenze in entrata di tutto l'inventario**. È la risposta a *«rigenera solo il biennio»*, *«ripiazza solo quelle tre»* — e in EDT il motore opera **esclusivamente** sull'estrazione.<br>La regola con cui è stata implementata: un'estrazione **restringe ciò su cui si agisce, mai ciò che si conta** — fuori dal perimetro le attività restano dove sono e continuano a occupare. Onorata da `solve`, `analyze` e `assign_rooms` |
 | ✅ | 🔑 **Analisi di capienza separata dal solver** | dentro | *«non serve un solver per dirlo: è un conteggio di capienza, si calcola in millisecondi»*. È **la funzione più preziosa trovata nel reverse engineering**, e va progettata come componente a sé fin dall'inizio — non come interpretazione a posteriori dell'output del solver |
 | ✅ | **Causali nominate** | dentro | ~170 frasi intere invece di `INFEASIBLE`, riusabili quasi così come sono. Implica che **ogni vincolo del modello porti un'etichetta e una spiegazione** |
 | ✅ | **Un orario invalido è uno stato ammesso** | dentro | la base demo ha 984/984 piazzate e **21 attività che violano i vincoli**. Implica: nessun vincolo di integrità sul DB, e **ogni vincolo esiste due volte** — come constraint del solver e come predicato valutabile su una soluzione data |
@@ -144,7 +144,12 @@ famiglia. Elenco quelle in cui la scelta non è ovvia.
   fra «il calcolo è fallito» e «quale vincolo allento».
 - **La colonna `S.P.`** (dimensione del dominio residuo): il solver la calcola
   comunque durante la propagazione. Diagnostica preventiva **a costo zero**.
-- **Export iCal**: i docenti vogliono il proprio orario nel telefono.
+- **Export iCal** — **implementato il 2026-08-28** (`domain/ical.py`,
+  `manage.py export_ical`): i docenti vogliono il proprio orario nel telefono.
+  🔑 Ed è il punto in cui la **fascia di calcolo smette di essere l'ora**: un
+  calendario legge l'**etichetta oraria** (`SlotLabel`, il `Place` dello XSD con
+  `@LibelleHeureDebut`/`@LibelleHeureFin`), non `slot_minutes`. Senza etichette
+  l'export **rifiuta** invece di indovinare le 8:00.
 - I dati anagrafici e le loro conseguenze già decise: disciplina come tabella
   ([ADR-001](decisioni.md)), mappatura alle classi di concorso
   ([ADR-002](decisioni.md)), capacità ≠ assegnazione ([ADR-006](decisioni.md)),
@@ -182,27 +187,41 @@ Decise il **2026-07-26**, registrate in [ADR-015](decisioni.md).
 
 Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto ora.
 
-1. **`Piazza e sistema` richiede comunque** la domanda *«qual è l'insieme minimo di
-   attività da spostare perché A stia qui?»*. È lo stesso motore del risolutore
-   passo-passo escluso: prevederlo tiene quella porta aperta.
+1. ✅ **Sciolta il 2026-08-28.** **`Piazza e sistema` richiede comunque** la
+   domanda *«qual è l'insieme minimo di attività da spostare perché A stia
+   qui?»*. È lo stesso motore del risolutore passo-passo escluso: prevederlo
+   tiene quella porta aperta. → `domain/solver/place_and_fix.py`: la
+   collocazione è un vincolo hard (`pinned`), il minimo è **L4** della catena
+   lessicografica, e la risposta alla domanda è `PlaceAndFix.moved`. Sul Fermi
+   pieno, **una** attività su 284. ⚠ Fuori, dichiarata: la casella «Ignora i
+   vincoli dell'attività selezionata», che da noi non è separabile per
+   attività.
 2. **Rimandare Hall funziona solo se l'analisi di capienza è un componente a sé**,
    non un'interpretazione a posteriori dell'output del solver.
-3. **La classe articolata retta dalle parti** presuppone che una **parte** possa
-   portare un **piano di studi proprio**. Da verificare presto: se il quadro orario
-   resta agganciato alla sola classe, questa decisione decade.
+3. ⚠ **Verificata il 2026-08-28, e regge a metà.** **La classe articolata retta
+   dalle parti** presuppone che una **parte** possa portare un **piano di studi
+   proprio**. → `tests/test_classe_articolata.py`. La prima metà tiene, misurata:
+   il piano proprio esiste, la **copertura lo legge**, le due articolazioni
+   stanno **nella stessa fascia** (è ciò che la scorciatoia compra) e l'ora
+   comune a classe intera **occupa** entrambe le parti. La decisione 4 non
+   decade.
+   ⛔ Ma l'unità della copertura è la **parte** dove dovrebbe essere l'**atomo**
+   di ADR-017: un alunno non sta in una parte, sta in una **combinazione** di
+   parti, una per partizione. Appena una classe ha due partizioni — o una sola
+   con parti che ricevono materie diverse, cioè **IRC e alternativa: ogni
+   classe italiana** — `structural:coverage` produce scostamenti che non
+   esistono. Vedi «Cosa resta davvero aperto».
 
 ---
 
 ## Cosa resta davvero aperto
 
-Non sono decisioni di scope, ma condizionano il lavoro che segue.
-
-- ⚠ **La configurazione della griglia oraria non è mai stata osservata in UI** —
-  durata delle fasce, ciclo, linea di mezza giornata. È la base su cui poggia tutto
-  il resto, ed è l'unica parte del modello del tempo che conosciamo solo per via
-  documentale.
-- ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`): il dataset di
-  prova non consente ancora di esercitare l'assegnazione delle aule, che è metà
-  della difficoltà.
-- **La via d'ingresso dei dati anagrafici** resta da scegliere, ora che
-  `Partenaire_Index` è escluso ([ADR-012](decisioni.md)).
+Non sono decisioni di scope, ma condizionano il lavoro che segue, e stanno
+tutte in **[todo.md](todo.md)** — l'unico elenco, per non averne due che
+divergono. In sintesi: ⛔ **D1**, l'unità del monte ore (la parte o l'atomo:
+**due scostamenti inesistenti su ogni classe italiana**, e cambia i dati che una
+scuola deve inserire); **D2**, la via d'ingresso dei dati anagrafici; **D3**, se
+la fase 1 debba smettere di essere cieca alle aule; **D4**, se serva
+un'interfaccia. Più cinque osservazioni da fare in EDT, fra cui la
+**configurazione della griglia oraria**, che non è mai stata vista in UI ed è la
+base su cui poggia tutto il modello del tempo.

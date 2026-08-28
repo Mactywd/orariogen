@@ -33,10 +33,31 @@ STATUS_NAME = {
 }
 
 
+#: Il budget predefinito di un livello di **qualità**, in secondi.
+#:
+#: 🔑 È l'unico posto della catena dove serve un default, e la ragione è
+#: misurata: i livelli che contano un **fallimento** (ore scartate, attività,
+#: violazioni nuove, spostamenti) chiudono dimostrando l'ottimo — sul Fermi in
+#: 1,7 s e 0,7 s — perché il loro ottimo è zero e zero è anche il limite
+#: inferiore banale, quindi valore e limite si toccano subito. I criteri di
+#: qualità hanno ottimi **non nulli** con limiti inferiori inutili (misurato
+#: sul Fermi: `free_half_days` 202 con limite 6, `regularity` 236 con limite
+#: 18), quindi non concludono mai e senza budget `manage.py solve` **non
+#: torna**: nove minuti senza risposta, misurati.
+#:
+#: ⚠ Un comando la cui configurazione predefinita non termina è un difetto, e
+#: metterci un budget globale sarebbe stato il rimedio sbagliato — punirebbe
+#: proprio i livelli che l'ottimo lo dimostrano. Il valore viene dalla curva:
+#: dopo ~15 s il guadagno è marginale (`free_half_days` 202 a 15 s, 199 a 60 s;
+#: `regularity` 236 e 226). `--limite` lo sovrascrive in entrambi i versi.
+BUDGET_QUALITA = 15.0
+
+
 @dataclass(frozen=True)
 class Level:
     nome: str
     var: object     # IntVar: il valore da minimizzare
+    limite: float | None = None   # budget proprio, se il livello ne ha uno
 
 
 @dataclass(frozen=True)
@@ -45,10 +66,25 @@ class Esito:
     valore: int | None   # None se il livello non ha concluso
     ottimo: bool         # False se ha restituito una soluzione senza dimostrarla
     secondi: float
+    limite: int | None = None   # il limite inferiore dimostrato
+
+    @property
+    def divario(self):
+        """Quanto manca, al peggio, all'ottimo di questo livello.
+
+        🔑 **«Ottimo non dimostrato» da solo non è un'informazione.** Un
+        livello che si ferma a 66 con un limite inferiore di 64 ha finito il
+        lavoro; uno che si ferma a 66 con un limite di 10 non ha ancora
+        cominciato, e i due si leggevano identici. CP-SAT il numero ce l'ha
+        (`BestObjectiveBound`) e lo buttavamo via."""
+        if self.valore is None or self.limite is None:
+            return None
+        return self.valore - self.limite
 
     def as_dict(self):
         return {"nome": self.nome, "valore": self.valore,
-                "ottimo": self.ottimo, "secondi": self.secondi}
+                "ottimo": self.ottimo, "secondi": self.secondi,
+                "limite": self.limite, "divario": self.divario}
 
 
 def livelli(ctx, model, arbitrato=None):
@@ -120,7 +156,7 @@ def livelli(ctx, model, arbitrato=None):
     # è la catena di prima di quel pezzo, byte per byte. Con un `Arbitrato`, i
     # criteri della popolazione sacrificata non arrivano fin qui: restano nel
     # modello come tetti di non-regressione.
-    qualita = [Level(nome, var)
+    qualita = [Level(nome, var, BUDGET_QUALITA)
                for nome, var in livelli_di_qualita(ctx, model, arbitrato)]
 
     # 🔑 **L'ordine fra stabilità e qualità dipende da che corsa è questa, e la
@@ -198,6 +234,11 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
     quattro livelli con `time_limit=60` può spendere quattro minuti. Un livello
     che scade lascia il proprio fissaggio all'ultimo valore trovato invece che
     all'ottimo: la catena resta corretta, diventa meno ambiziosa.
+
+    ⚠ E `time_limit=None` non significa «nessun limite»: significa «vale il
+    budget proprio di ogni livello», che è `None` per i livelli che dimostrano
+    l'ottimo e `BUDGET_QUALITA` per i criteri di qualità, che non lo dimostrano
+    mai. Vedi la misura in testa a quella costante.
     """
     # `solver` iniettabile: e' la cucitura con cui un test puo' far mancare un
     # livello **deterministicamente**, invece di sperare che un limite di tempo
@@ -206,9 +247,18 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
     solver = solver if solver is not None else cp_model.CpSolver()
     if workers is not None:
         solver.parameters.num_workers = int(workers)
-    if time_limit is not None:
-        solver.parameters.max_time_in_seconds = float(time_limit)
+
+    def budget(level):
+        """`time_limit` esplicito vince su tutto — in entrambi i versi, anche
+        allungando il budget di un livello di qualità: chi passa un numero sta
+        rispondendo alla domanda «quanto tempo mi costa», e non gli si mette
+        davanti un default. Senza, vale il budget proprio del livello, e per i
+        livelli che dimostrano l'ottimo quel budget è `None`."""
+        return time_limit if time_limit is not None else level.limite
+
     if not levels:
+        if time_limit is not None:
+            solver.parameters.max_time_in_seconds = float(time_limit)
         stato = solver.Solve(model)
         ammesso = stato in (cp_model.OPTIMAL, cp_model.FEASIBLE)
         return stato, (estrai(solver) if ammesso else None), ()
@@ -226,6 +276,9 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
 
     esiti, soluzione, stato_buono = [], None, None
     for level in levels:
+        limite = budget(level)
+        solver.parameters.max_time_in_seconds = (
+            float(limite) if limite is not None else 1e9)
         model.Minimize(level.var)
         inizio = time.monotonic()
         stato = solver.Solve(model)
@@ -236,7 +289,8 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
                 return stato, None, tuple(esiti)
             break
         valore = solver.Value(level.var)
-        esiti.append(Esito(level.nome, valore, stato == cp_model.OPTIMAL, secondi))
+        esiti.append(Esito(level.nome, valore, stato == cp_model.OPTIMAL,
+                           secondi, int(solver.BestObjectiveBound())))
         soluzione, stato_buono = estrai(solver), stato
         if suggerisci is not None:
             suggerisci(model, solver)

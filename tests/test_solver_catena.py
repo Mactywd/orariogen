@@ -148,6 +148,9 @@ def test_un_livello_che_non_conclude_non_annulla_i_precedenti():
         def Value(self, var):
             return self._vero.Value(var)
 
+        def BestObjectiveBound(self):
+            return self._vero.BestObjectiveBound()
+
     finto = _SolverCheCadeAlSecondo()
     stato, soluzione, esiti = solve_chain(
         model, [Level("primo", primo), Level("secondo", secondo)],
@@ -193,6 +196,9 @@ def test_un_livello_che_non_dimostra_l_ottimo_lo_dichiara():
         def Value(self, var):
             return self._vero.Value(var)
 
+        def BestObjectiveBound(self):
+            return self._vero.BestObjectiveBound()
+
     stato, soluzione, esiti = solve_chain(
         model, [Level("primo", primo)],
         estrai=lambda s: {i: s.Value(v) for i, v in enumerate(x)},
@@ -202,6 +208,12 @@ def test_un_livello_che_non_dimostra_l_ottimo_lo_dichiara():
     assert soluzione is not None
     assert esiti[0].valore == 2, "il valore trovato si legge comunque"
     assert not esiti[0].ottimo, "un livello non dimostrato non puo' dirsi ottimo"
+    # 🔑 E il **divario** dice quanto vale quel dubbio. Qui il solver vero ha
+    # dimostrato il limite inferiore anche se il finto dichiara FEASIBLE:
+    # divario zero, cioe' «e' l'ottimo, non l'ho dimostrato» — che e' il caso
+    # in cui alzare il limite di tempo non serve a niente, e senza il limite
+    # inferiore si legge identico a un divario di quattrocento.
+    assert esiti[0].limite == 2 and esiti[0].divario == 0
 
 
 def test_l3_conta_le_quote_consumate_e_le_riparazioni_mancate():

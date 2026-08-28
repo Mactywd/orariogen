@@ -40,6 +40,7 @@ docs/
     formato-file.md    📦 il formato binario .edt, per validare la semantica sui dati reali
     glossario-it-fr.md 📦 IT ↔ FR ↔ EN — ⚠ contiene l'inversione gruppo/raggruppamento
     estratti/          materiale grezzo di estrazione (NON documentazione — vedi il suo README)
+  todo.md              📌 **l'unico elenco di cose da fare** — decisioni, osservazioni, debiti
   decisioni.md         ADR leggeri: decisione, alternative, motivo, data
   scope-v1.md          cosa entra in v1 e cosa no — proposta da rivedere
   modello-dominio.md   il design del modello di dominio v1 — approvato, pre-codice
@@ -62,17 +63,27 @@ config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
                         il violatore di Hall (fase 5, hall.py), lo scarto come
-                        stato nominato (checkers/placement.py) e la richiesta
-                        d'aula insoddisfatta (checkers/room_assignment.py)
+                        stato nominato (checkers/placement.py), la richiesta
+                        d'aula insoddisfatta (checkers/room_assignment.py) e la
+                        **classifica dei vincoli** per fallimenti causati
+                        (blame.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventisei builder su ventisette,
                         la catena lessicografica (objective.py), le quote
                         di alleggerimento (relaxation.py), i criteri di
                         qualità (quality.py + criteria.py), la separazione
-                        per popolazione con la perdita tollerata (Arbitrato)
-                        e la **seconda fase** — l'assegnazione delle aule
-                        (rooms.py), modello a sé con due livelli propri
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+                        per popolazione con la perdita tollerata (Arbitrato),
+                        `Piazza e sistema` (place_and_fix.py) e la **seconda
+                        fase** — l'assegnazione delle aule (rooms.py), modello
+                        a sé con due livelli propri
+  ical.py               l'export iCalendar: l'orario nel telefono — l'unico
+                        pezzo che *consegna* invece di calcolare, e il punto in
+                        cui la fascia di calcolo smette di essere l'ora
+  extraction.py         `Estrai`: la selezione di lavoro come operazione —
+                        criteri, i sei rilevatori di problemi, le quattro
+                        operazioni insiemistiche, e il perimetro che restringe
+                        l'azione mai il conteggio
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, il parallelismo che compra, e il limite dell'unità di copertura), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -99,6 +110,10 @@ file in `data/liceo-fermi/` contiene **i dati concreti** della scuola di esempio
 - **Niente accumulo di versioni**: se una scoperta contraddice qualcosa di già
   scritto, si corregge esplicitamente il file dell'entità, non si aggiunge una
   variante accanto.
+- **Le cose da fare stanno in [docs/todo.md](docs/todo.md), e solo lì.** Quando
+  una voce si apre o si chiude si aggiorna quel file; il *racconto* di come è
+  stata chiusa va nel changelog qui sotto, alla data. Due elenchi paralleli
+  divergono sempre, ed è come questo file si era riempito di voci stantie.
 - **Non inventare campi**: si documentano solo i campi effettivamente osservati
   nella UI di EDT. Ciò che è nostra estensione (es. mappatura classe di concorso) va
   segnalato come tale, non spacciato per campo EDT.
@@ -190,9 +205,21 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > quattro valori di `Ottimizzazione degli orari` — buchi, attività isolate,
 > mezze giornate libere, equilibrio didattico — più il pennello **verde**, come
 > livelli in coda alla catena, con l'**ordine dichiarato dai dati**
-> (`QualityCriterion`) e non dal codice. ⚠ E costano: sul Fermi cinque criteri
-> senza limite di tempo non tornano in nove minuti, con `--limite 15` chiudono
-> in 39,5 s lasciando due livelli su sei con l'ottimo non dimostrato.
+> (`QualityCriterion`) e non dal codice.
+>
+> ⚠ **E costano — ma non per la ragione che era scritta qui.** Fino al
+> 2026-08-28 questa nota diceva «senza limite di tempo non tornano in nove
+> minuti, con `--limite 15` chiudono in 39,5 s lasciando due livelli su sei con
+> l'ottimo non dimostrato», e la misura era a **un lavoratore**, che non è come
+> il comando gira. 🔑 Il fenomeno vero: un livello di qualità non è lento
+> perché difficile da ottimizzare, è lento perché **impossibile da
+> dimostrare** — `gaps` chiude in un secondo perché zero è anche il suo limite
+> inferiore banale, `free_half_days` si ferma a 202 con limite **6** e
+> `regularity` a 236 con **18**. Da qui il **budget dei soli livelli di
+> qualità** (`BUDGET_QUALITA`, 15 s): senza, `manage.py solve` non tornava, e
+> un budget globale avrebbe punito proprio i livelli che l'ottimo lo
+> dimostrano. E il rendiconto porta ora il **divario**, che distingue
+> `isolated 0` (è l'ottimo, non dimostrato) da `regularity 236` (non sotto 18).
 >
 > Dal 2026-08-27 (sera) c'è anche la **separazione per popolazione**
 > (`Arbitrato` in `domain/solver/quality.py`,
@@ -234,6 +261,45 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > rinunciare. Sul Fermi con le aule: 92 richieste, **84 assegnate, 8 rinunce**,
 > 39 celle contese, fino a 5 richieste su una sola cella. Non è un difetto del
 > modello: è la conseguenza dichiarata di assegnare le aule *dopo*.
+>
+> Dal 2026-08-28 c'è anche la **classifica dei vincoli per fallimenti
+> causati** (`domain/analysis/blame.py`, in `manage.py analyze`): la seconda
+> delle «due lacune di EDT» di `scope-v1.md`, il ponte fra «il calcolo è
+> fallito» e «quale vincolo allento». Ordina le coppie **(causale, risorsa)**
+> per quante attività tornerebbero piazzabili allentandole — non per quante
+> celle escludono, che è pressione e non azione. ⚠ Le famiglie **non
+> monotone** ne restano fuori, il D.T.B. compreso: il criterio del dominio
+> residuo su di loro è falso, e contarle le metterebbe in cima a qualunque
+> classifica per un artefatto. La rinuncia la dichiara il comando.
+>
+> Dallo stesso giorno c'è **`Piazza e sistema`** (`domain/solver/place_and_fix.py`,
+> `manage.py place_and_fix`): imporre una collocazione e lasciare che l'orario
+> si ricomponga. Con esso è sciolta la **condizione 1** delle tre di ADR-015 —
+> *«qual è l'insieme minimo di attività da spostare perché A stia qui?»* — che
+> è ciò che tiene riapribile l'esclusione del risolutore passo-passo. Sul
+> Fermi pieno: **una** attività spostata su 284, in ~4 s. ⚠ Resta fuori,
+> dichiarata, la casella «Ignora i vincoli dell'attività selezionata»: da noi
+> non è separabile per attività.
+>
+> Dal 2026-08-28 (sera) **`Estrai` è un'operazione** (`domain/extraction.py`,
+> `manage.py extract`): la tabella c'era dal giorno dello schema e il solver la
+> onorava già, ma **niente la popolava** e le due fasi diagnostiche la
+> ignoravano. Ora ci sono i criteri (stato, risorsa, materia, finestra oraria),
+> i **sei rilevatori** che il nostro modello sa davvero rispondere, le quattro
+> operazioni insiemistiche del menu di EDT — `Limita la ricerca alle attività
+> già estratte` compresa — e il perimetro su `analyze`, `assign_rooms` e
+> `solve`. 🔑 La regola: **un'estrazione restringe ciò su cui si agisce, mai
+> ciò che si conta.** Fermi, `--estrazione biennio`: 104 attività libere su
+> 284, **3243 variabili contro 8426**, e 32 richieste d'aula contro 92.
+>
+> Dal 2026-08-28 (notte) c'è l'**export iCal** (`domain/ical.py`,
+> `manage.py export_ical`), la sola voce ✅ di `scope-v1.md` che non riguarda il
+> calcolo: tutto il resto produce un orario, questo lo **consegna**.
+> 🔑 Ed è il punto in cui la **fascia di calcolo smette di essere l'ora**:
+> `SlotLabel` (📦, il `Place` dello XSD con `@LibelleHeureDebut` /
+> `@LibelleHeureFin`) porta l'orologio, e `slot_minutes` non compare nel file.
+> Un'attività non è sempre **un** evento — dove l'orologio salta, il blocco si
+> spezza in corse contigue. Fermi: 9372 eventi, 1,8 MiB, 0,6 s; un docente 693.
 >
 > Restano i punti aperti elencati sotto.
 
@@ -370,25 +436,14 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
 - [x] L'**intervallo è un separatore**, non una `Place`; lo **spostamento fra sedi**
       è per **coppia orientata**. → `docs/edt/tempo-e-calendario.md`
 
-**Ancora aperto:**
+**Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
+Quattro decisioni, cinque osservazioni da fare in EDT, sei debiti dichiarati.
+La prima è ⛔ **D1, l'unità del monte ore: la parte o l'atomo** — blocca
+l'import, perché cambia i dati che una scuola deve inserire.
 
-- [ ] ⚠ **Le aule non esistono nella base del Fermi** (`NBSALLES = 0`):
-      `data/liceo-fermi/aule.md` è progetto, non osservazione. → `docs/edt/aule.md`
-      ⚠ Dal 2026-08-28 il **nostro** dataset le ha, e ha le attività che le
-      chiedono (`tests/fermi.py`, `SPECIAL_ROOMS`), perché senza la seconda
-      fase avrebbe un problema vuoto. Resta che *quali* aule chieda ogni
-      materia è nostra scelta di dimensionamento, mai osservata in EDT.
-- [ ] ⚠ **`TypeIncompatibiliteSalle` (11 valori) e `TypeChoixOptimSalle`**: di
-      entrambi conosciamo il **nome** dalle stringhe (📦) e non i valori.
-      Il primo è la famiglia delle incompatibilità fra aule, il secondo i
-      criteri con cui EDT sceglie *quale* aula fra le ammissibili. La nostra
-      seconda fase non ne implementa nessuno dei due (§6 della spec li dichiara
-      fuori): l'assegnazione sceglie una candidata qualunque fra quelle legali,
-      con la sola preferenza per la ripartizione precedente. **Da osservare in
-      UI** prima di decidere se entrano.
-- [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
-      `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
-      CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
+Quello che segue è la **storia delle voci chiuse**, con il perché: si legge, non
+si aggiorna.
+
 - [x] **Come si comporta un builder quando un constraint mescola attività
       congelate già in violazione e attività libere?** Deciso con
       [ADR-018](docs/decisioni.md): **capacità residua** clampata sui soli
@@ -459,9 +514,23 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
       41, 45, 52), e l'esenzione che lo perdonava è stata **rimossa** insieme
       al suo test. Il banco è ora più severo: se tornasse, sarebbe rosso.
 
-- [~] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
+- [x] ⚠ **ADR-018 non è applicabile ai vincoli indipendenti dal
       piazzamento**, e il tetto **settimanale** del peso didattico è il primo
-      caso incontrato. ⚠ **Metà chiuso il 2026-08-26 (pezzo 3, ondata 1)**: la
+      caso incontrato.
+      ✅ **Chiuso il 2026-08-28 (sera)**, l'altra metà: l'oracolo differenziale
+      confronta sulla chiave **grossolana** `(causale, risorsa, settimana)` per
+      le famiglie che nominano il secchio invece del violatore — cioè i
+      checker `PLACEMENT_MONOTONE = False`, letti dal registro — e solo dove
+      quella coppia era **già** rotta nella baseline. Misurato invece che
+      previsto: due congelate oltre il tetto, una libera, e il finding torna
+      con `activities (1,2) → (1,2,3)` e `weight 6 → 9`. ⚠ Il prezzo è
+      dichiarato: si perde il **peggioramento** di una violazione già presente
+      (su `max_gap`, una libera piazzata dentro un buco già fuori budget non
+      fa scattare nulla). L'alternativa — confrontare la quantità violata
+      famiglia per famiglia — vorrebbe dire riscrivere fuori dai checker la
+      nozione di «quale numero è quello cattivo». Il testo che segue è
+      l'originale.
+      ⚠ **Metà chiuso il 2026-08-26 (pezzo 3, ondata 1)**: la
       «somma costante» che rendeva il vincolo vero-sempre o falso-sempre era
       `AddExactlyOne`. Con lo scarto ammesso il tetto torna evadibile come lo
       evade EDT — scartando — e la chiave grossolana diventa una scelta invece
@@ -509,6 +578,536 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (la classe articolata, e l'unità del monte ore)** — **L'ultima
+  delle «tre condizioni da non perdere» di ADR-015 ancora non verificata è
+  stata verificata, e regge a metà.** `scope-v1.md` copre la classe articolata
+  — la 3A con 12 alunni di Manutenzione e 10 di Elettronica — senza entità
+  dedicata: *«la parte A segue un piano, la parte B un altro, le ore comuni si
+  insegnano a classe intera»*, con la condizione scritta accanto, *«da
+  verificare presto, non a modello finito»*. Non era mai stata esercitata:
+  `test_classes.py` asserisce che una parte **può** portare un piano proprio,
+  che è la metà anagrafica, e nient'altro.
+
+  🔑 **La prima metà tiene, ed è misurata invece che dichiarata.** La copertura
+  legge davvero il piano della parte; le due articolazioni **stanno nella
+  stessa fascia** — che è ciò che la scorciatoia compra, perché parti della
+  stessa partizione sono insiemi disgiunti di alunni — e l'ora comune a classe
+  intera **occupa** entrambe le parti, quindi nessuno fa laboratorio mentre la
+  sua classe fa italiano. La decisione 4 di ADR-015 non decade.
+  **Tre mutazioni, tre esiti distinti**: la parte che perde il piano proprio
+  uccide un test solo, la classe intera che smette di occupare le sue parti ne
+  uccide quattro su cinque, la parte che occupa anche la classe uccide solo
+  quello del parallelismo.
+
+  ⛔ **La seconda metà no, e non riguarda solo la classe articolata.**
+  `structural:coverage` misura ogni **parte** contro il piano **intero** della
+  parte: è una lettura *per alunno*, ed è quella giusta. Ma un alunno non sta
+  in una parte, sta in una **combinazione** di parti — una per partizione — e
+  quella combinazione è l'**atomo** di ADR-017, che il modello costruisce già
+  per l'occupazione e non per il curriculum. Con una sola partizione parte e
+  atomo coincidono; con due, o con una sola le cui parti ricevono materie
+  diverse — **IRC e alternativa, cioè ogni classe italiana** — la copertura
+  dichiara che chi fa religione deve l'ora di alternativa, e viceversa.
+  Misurato: due scostamenti inesistenti sulla classe più ordinaria che ci sia,
+  quattro su una 3A articolata con IRC.
+  ⚠ **Non l'aveva visto nessuno perché il Fermi non ha nessuna partizione**, e
+  `test_beyond_fermi.py` le costruisce senza mai chiamare `check_schedule` — la
+  forma di sempre, una proprietà del dataset scambiata per una proprietà del
+  codice. La scappatoia esiste ed è misurata (un `StudyPlan` gemello per
+  combinazione: funziona, e costa quattro piani per una classe), ma sceglierla
+  è **una decisione di modello**, non una correzione: cambia i dati che una
+  scuola deve inserire. Le tre strade sono in `scope-v1.md`, e la terza — il
+  monte ore **tripartito** del servizio, che è la risposta di EDT alla stessa
+  domanda — poggia su due campi (`reduced_minutes`, `split_minutes`) che sono
+  nello schema dal primo giorno, **letti da nessuno**, e la cui semantica non è
+  mai stata osservata in UI.
+
+  🔑 **E la mutazione ha trovato un difetto vero, in un punto che nessuno
+  guardava: `Finding.key` perdeva la materia.** Mutando i token della classe
+  intera, due scostamenti diversi si presentavano come **uno**: la chiave
+  esclude il messaggio per scelta, e per `coverage_mismatch` la materia vive
+  solo lì — quindi un'unità a cui mancano due materie per lo stesso numero di
+  minuti (`atteso 60 / osservato 0` su ciascuna, il caso normale) produceva un
+  finding solo, e *quale* delle due venisse nominata dipendeva dall'ordine di
+  iterazione. In uno strumento il cui valore è nominare la causa, questo è il
+  difetto peggiore della famiglia. Corretto con il campo `subject`, e
+  `subject_constraints` **non** ne ha bisogno: là la frase porta `subject_a`,
+  uguale per tutte le righe che potrebbero collidere.
+
+  ⚠ **E il campo in più ha rotto i due lettori che spacchettavano la chiave per
+  posizione** — l'oracolo differenziale e il banco, insieme, con quindici test
+  rossi. `Finding.key` è ora una **tupla nominata**: un campo in più diventa
+  additivo invece di essere una trappola per chi lo aggiunge. La regola resta
+  scritta dove serve: **tutto ciò che distingue due verdetti dev'essere un
+  campo**, perché il messaggio è fuori dalla chiave.
+
+  ⚠ Nello stesso giro, `test_fermi_i_criteri_di_qualita_misurati` — scritto il
+  giorno prima — si è rivelato **sensibile al carico**: verde da solo, rosso
+  nella suite intera, perché a 3 s per livello un criterio di qualità può non
+  restituire alcuna soluzione e la catena si ferma, che è il comportamento
+  dichiarato di `solve_chain`. Pretendeva la coda esatta dei livelli; ora
+  pretende che i livelli girati siano un **prefisso** dell'ordine dichiarato e
+  che almeno uno dei criteri dopo `gaps` abbia divario positivo — il fenomeno
+  che il test misura, senza dipendere da quale livello faccia in tempo.
+
+  **Quattro mutazioni in tutto, quattro esiti distinti.** **772 test verdi**,
+  16 skip. Il Fermi è invariato per costruzione: non ha partizioni.
+
+- **2026-08-28 (il costo dei criteri di qualità)** — **Il numero che questo
+  file dichiarava da un giorno era misurato male, e la diagnosi che ne
+  discendeva era l'opposto di quella giusta.** La nota di stato diceva «cinque
+  criteri senza limite non tornano in nove minuti, con `--limite 15` chiudono
+  in 39,5 s lasciando due livelli su sei con l'ottimo non dimostrato», e da lì
+  il docstring di `manage.py solve` concludeva che *«`--limite` non è
+  opzionale»*. Entrambe le frasi vengono da una misura a **un lavoratore**, che
+  non è come il comando gira.
+
+  🔑 **Il fenomeno vero: un livello non è lento perché sia difficile da
+  ottimizzare, è lento perché è impossibile da dimostrare.** `gaps` arriva a 0
+  e chiude in un secondo, e la ragione non è che sia un criterio facile — è che
+  **zero è anche il suo limite inferiore banale**, quindi valore e limite si
+  toccano subito. `free_half_days` si ferma a 202 con limite inferiore **6**,
+  `regularity` a 236 con **18**: il divario non è un residuo di ricerca, è
+  tutto il valore. Il tempo se ne va in una dimostrazione che non arriverà.
+
+  🔑 **E i livelli che contano un fallimento non hanno il problema**, per la
+  stessa ragione e al contrario: scarti, violazioni nuove e spostamenti hanno
+  ottimo zero, cioè il limite banale, e sul Fermi chiudono in 1,7 s e 0,7 s.
+  Da qui il **budget dei soli livelli di qualità** (`BUDGET_QUALITA`, 15 s dal
+  ginocchio della curva: `free_half_days` 202 a 15 s e 199 a 60 s). ⚠ Un
+  comando la cui configurazione predefinita non termina è un difetto, e un
+  budget globale sarebbe stato il rimedio sbagliato — punirebbe proprio i
+  livelli che l'ottimo lo dimostrano. `--limite` sovrascrive in **entrambi** i
+  versi, anche allungando.
+
+  🔑 **Il rendiconto porta il divario, e CP-SAT quel numero ce l'aveva già.**
+  «Ottimo non dimostrato» da solo non distingue chi ha finito da chi non ha
+  cominciato: `isolated 0` con limite 0 è *l'ottimo*, e mandare a alzare
+  `--limite` è un consiglio a vuoto; `regularity 236` con limite 18 è un'altra
+  cosa. `BestObjectiveBound` costava zero e lo buttavamo via.
+
+  ⚠ **E i lavoratori pesano più del limite.** A 15 s per livello, misurato: con
+  **1** lavoratore `regularity 359`, `free_half_days 243`, `isolated 37`; con
+  **4**, `236`, `202` e **0** — l'ottimo, raggiunto in 7 s e non dimostrato.
+  Il tracciato dell'incumbent lo spiega: a un lavoratore `isolated` resta
+  fermo a 37 dal secondo 1 al secondo 36 e poi **crolla a 0** entro il 50°.
+  ⛔ Da cui una contromisura che sembrava ovvia e sarebbe stata esattamente
+  sbagliata: un limite «fermati dopo N secondi senza miglioramenti» avrebbe
+  tagliato al quinto secondo e fissato 37 invece di 0. Il plateau non era il
+  fondo. `manage.py solve` dichiara ora quanti lavoratori ha usato, perché un
+  numero di qualità senza quel dato non è confrontabile con nessun altro.
+
+  ⛔ **E la riparazione modellistica ovvia peggiora le cose.** Un limite
+  inferiore *implicato* per `free_half_days` — `somma_h attiva(g,h)·len(span_h)
+  >= somma_s occupata(g,s)` per chiave e giorno, valido sempre — non chiude il
+  divario: misurato a 15 s, il valore passa da 202 a **209** e il limite da 6 a
+  **4**. La presolve di CP-SAT ne deriva già almeno altrettanto, e le 140 righe
+  in più costano ricerca. Scritta, misurata, buttata — e non riprovata, perché
+  romperebbe anche l'invariante «un criterio posta **solo definizioni**», da
+  cui dipende `_valori_di_base` dell'arbitrato.
+
+  **Sei mutazioni, sei esiti distinti**, e il fenomeno entra nella suite invece
+  di restare in una sessione: `test_fermi_i_criteri_di_qualita_misurati` gira a
+  `--limite 3` (14 s) e pretende che `gaps` abbia divario zero e `regularity`
+  no — se il limite inferiore smettesse di essere inutile, quel test
+  diventerebbe rosso e la decisione si riprenderebbe guardando quel rosso.
+  **766 test verdi**, 16 skip.
+
+- **2026-08-28 (l'orario nel telefono)** — **Il primo pezzo che consegna
+  invece di calcolare.** `domain/ical.py` più `manage.py export_ical`: è
+  l'unica voce ✅ di `scope-v1.md` che non riguarda il motore, e la sua riga là
+  era una frase sola — *«i docenti vogliono il proprio orario nel telefono»*.
+  In EDT il canale esiste ed è dichiarato per quello che è
+  (`UtilitaireSco_ExportICal`, `ImpEDT_ExportICALRencontre`,
+  `ImpEDT_ExportICALConseil`): il verso **esterno**, distinto da
+  `Partenaire_Index` che è il verso verso gli altri gestionali.
+
+  🔑 **Ed è il punto in cui la fascia di calcolo smette di essere l'ora.**
+  `tempo-e-calendario.md` distingue per nome due grandezze che tutto il resto
+  del progetto ha potuto confondere impunemente, perché il motore ne usa una
+  sola: la **fascia di calcolo** (l'unità del piazzamento *e* dell'ora di
+  servizio del docente) e l'**etichetta oraria** (*«ad esempio 55 minuti»*,
+  orari sfalsati). Un calendario legge la seconda. Da qui `SlotLabel`
+  (migrazione `0011`), che non è un campo nostro: è il `Place` dello XSD
+  `Partenaire_Index` V4.6 (📦, livello 1) con i suoi `@LibelleHeureDebut` e
+  `@LibelleHeureFin` — cioè l'orologio sta **per fascia**, non sulla griglia,
+  ed è per questo che gli orari sfalsati sono rappresentabili. Nel file
+  `slot_minutes` non compare.
+
+  ⚠ **E senza etichette si rifiuta.** È la funzionalità, non una mancanza: il
+  fallimento alternativo — «si comincia alle 8» — non fa rumore e mette le
+  lezioni di tutta la scuola all'ora sbagliata. Il rifiuto nomina le fasce
+  scoperte.
+
+  🔑 **Un'attività non è sempre *un* evento.** Se l'orologio salta fra due
+  fasce consecutive — la pausa di mezza giornata è il caso normale, le 12 che
+  riprendono alle 14 — un blocco da due fasce a cavallo della linea non è una
+  lezione di quattro ore: sono due lezioni. Le fasce si spezzano quindi in
+  **corse contigue** nel tempo dell'orologio. Sommare `duration_minutes`
+  all'ora d'inizio avrebbe dato la risposta giusta su ogni scuola senza pausa
+  e sbagliata su tutte le altre, senza mai fallire rumorosamente.
+
+  ⚠ **E il Fermi non lo esercita, contro la previsione scritta nel test.** Il
+  suo orologio ha la pausa, ma i blocchi da due fasce sono **quattro** su 284 e
+  nessuno è atterrato a cavallo — per caso, non per regola: nel modello
+  *niente vieta* a un blocco di scavalcare la mezza giornata. Il divieto
+  esiste ed è `Break` + `respects_breaks` (`structural:grid`), che questo
+  dataset non usa. Il conto è quindi esatto — **9372 = 284 × 33** — e la metà
+  interessante la misura il test spostando a mano un blocco dove il solver non
+  l'ha messo: **33 eventi in più**, non 33 eventi più lunghi.
+
+  ⚠ **Niente `RRULE`, ed è una decisione.** «Ogni lunedì» sarebbe più compatto,
+  ma la maschera di settimane **non è una ricorrenza**: annuale e quadrimestre
+  lo sono, la sostituzione di ADR-014 (un bit solo) e l'`Amenagement` no, e
+  festivi e confini di periodo andrebbero elencati in `EXDATE` uno per uno. Un
+  `VEVENT` per occorrenza è corretto per **qualunque** maschera, e il prezzo è
+  misurato invece che temuto: 1,8 MiB per la scuola intera, **0,6 s**, e il
+  file che finisce davvero su un telefono è quello di un docente — **693
+  eventi**, 21 ore per 33 settimane.
+
+  ⚠ **Ora locale fluttuante**, senza `TZID` e senza `VTIMEZONE`: le 08:00 di
+  una scuola sono le 08:00 dell'orologio alla parete, ed è l'unica forma che
+  attraversa il cambio d'ora senza spostare le lezioni per metà anno.
+
+  🔑 **`Estrai` guadagna un dipendente, e con una deroga alla sua regola.**
+  `--risorsa` è `per_risorsa`, che ha già i tre versi che ai token non servono
+  (parte → classe, raggruppamento → classi, tutte le aule). Ma il perimetro
+  qui **restringe davvero l'uscita**, cioè l'unico posto in cui un'estrazione
+  tocca ciò che si «conta» — e la ragione è che qui non si conta niente:
+  pubblicare è agire, e un calendario non è una diagnosi.
+
+  ⚠ Fuori, dichiarato: la **sostituzione non oscura l'originale**. Per ADR-014
+  il sostituto è una riga di `Activity` con un bit solo e compare da sé, ma
+  l'originale è annuale e continua a comparire nella stessa settimana — il
+  modello non ha la relazione fra i due (`RELATIONCOURSSUBSTITUT` di EDT).
+
+  Le etichette del Fermi sono **nostra scelta di dimensionamento**, come le
+  aule: `tempo-e-calendario.md` dichiara che la configurazione oraria di EDT
+  non è mai stata osservata in UI. **Quindici mutazioni, quindici esiti
+  distinti** — e l'oracolo del pezzo non è il solver ma il **formato**:
+  `_srotola` rifà a ritroso la piegatura di RFC 5545, così un test che guarda
+  `DTEND` guarda ciò che un telefono leggerebbe. **761 test verdi**, 16 skip.
+
+- **2026-08-28 (i debiti del banco)** — **Tre debiti dichiarati, e due erano
+  dichiarati male.** Il piano del modello hard ne aveva lasciati tre in
+  eredità; questa passata li ha misurati uno per uno invece di ripararli sulla
+  fiducia, e due si sono rivelati diversi da come erano scritti.
+
+  ⛔ **`coverage_mismatch` sul testimone non veniva da dove il banco diceva.**
+  L'intestazione di `tests/solver_harness.py` attribuiva il fenomeno ai
+  `Service` per (piano, materia) contro `student_units` che attribuisce il
+  monte ore alle **parti**. Vero — ed è stato corretto, ogni parte ha ora il
+  suo piano di studi — ma **misurato**, spiega un ottavo del fenomeno: su
+  dieci semi i finding passano da 122 a 111. Il resto lo fanno le **maschere
+  di settimana**, e si vede su `1B`, che di parti non ne ha nessuna e sporca
+  ogni seme lo stesso. Il monte ore di un `Service` è settimanale e
+  `check_schedule` valuta ogni firma separatamente: un dataset a maschere
+  casuali non ha nessun monte ore costante da settimana a settimana.
+
+  🔑 **E la riparazione ovvia è quella sbagliata.** Sommare le durate a
+  maschera ignorata — la «vista annuale» — rende il testimone pulito su tutti
+  e venti i semi provati, e **raddoppia una coppia Q1/Q2**: 120 minuti contro
+  i 60 del piano, cioè segnala come scostamento il quadrimestre, che è la
+  forma più comune della scuola italiana. Scritta, misurata, buttata. ⚠ E
+  mentre era in piedi la suite era **verde in tutti e 733 i test**: niente
+  proteggeva la lettura per settimana. Ora la protegge
+  `test_le_ore_di_quadrimestre_non_raddoppiano`, e la semantica è scritta nel
+  docstring del checker invece di essere implicita nel modo in cui
+  `check_schedule` lo chiama.
+
+  ⚠ **Il debito non era comunque bloccante, ed era la parte peggiore
+  dell'errore.** Si diceva «da riparare nella fixture prima di qualunque
+  oracolo differenziale a tutto campo». Falso: `coverage_mismatch` è
+  `PLACEMENT_INDEPENDENT`, quindi è identico prima e dopo il solve e la
+  differenza è vuota per costruzione. Ciò che andava formulato con cura non
+  era la fixture ma la **chiave**.
+
+  🔑 **Ed è il secondo debito, ora chiuso: la chiave grossolana di §9.5.**
+  L'oracolo confronta su `Finding.key`, che include attività e quantità. Per
+  le famiglie che nominano il **secchio** invece del violatore quella chiave
+  cambia per il solo fatto che una libera è stata piazzata — misurato con due
+  congelate oltre il tetto settimanale di peso didattico e una libera:
+  `activities (1,2) → (1,2,3)`, `weight 6 → 9`, quattro settimane, e l'oracolo
+  dichiarava rotto un solve impeccabile. Il builder non può rimediare (il
+  tetto è inevadibile per costruzione), quindi la riparazione sta
+  nell'oracolo: `nuove()` confronta su `(causale, risorsa, settimana)` per
+  quelle famiglie, **lette dal registro** (`PLACEMENT_MONOTONE = False`) e non
+  elencate a mano, con un test che tiene ferma la corrispondenza.
+
+  ⚠ **L'esenzione è stretta due volte, e la seconda l'ha imposta la
+  mutazione.** Vale solo dove la coppia (causale, risorsa, settimana) era
+  **già** rotta nella baseline — altrimenti sarebbe un'amnistia per famiglia,
+  cioè un oracolo cieco su dieci causali su ventisei. E `activity_unplaced`
+  ne resta **fuori**, perché le sue `resources` sono i token dell'attività:
+  due attività della stessa classe condividono la chiave grossolana, e uno
+  scarto nuovo sparirebbe dentro uno vecchio — cioè l'oracolo diventerebbe
+  cieco sull'unica cosa che il solver decide da sé. ⚠ Quell'esclusione era
+  **dichiarata e non asserita**: coprirla lasciava verdi tutti e undici i
+  test. Ora c'è il caso che la uccide — L1 preferisce scartare un'ora invece
+  di due, quindi il solve butta fuori un'attività *diversa* da quella già
+  fuori, sulla stessa classe. **Quattro mutazioni, quattro esiti distinti.**
+
+  ⚠ Il prezzo della chiave grossolana è dichiarato: si perde il
+  **peggioramento** di una violazione già presente — su `max_gap`, una libera
+  piazzata dentro un buco già fuori budget non fa scattare nulla.
+  L'alternativa sarebbe confrontare la quantità violata famiglia per famiglia,
+  cioè riscrivere fuori dai checker la nozione di «quale numero è quello
+  cattivo»: il difetto che questo progetto ha già intercettato due volte.
+
+  🔑 **Terzo debito: `residual_floor` non era codice morto per distrazione, era
+  una simmetria che non esiste.** L'intestazione di `domain/solver/residual.py`
+  presentava due casi — tetti clampati, minimi no — e il secondo aveva una
+  funzione che nessun builder ha mai chiamato, con l'unico riferimento nel suo
+  stesso test. La ragione, che il codice già sapeva altrove: **nessun minimo di
+  questo modello è additivo**. `MIN_DISTRIBUTION`, `FREE_GUARANTEED` e
+  `ARRIVAL_DEPARTURE` contano giorni e mezze giornate, dove una congelata non
+  consuma una quota ma toglie gradi di libertà, e la sottrazione non è
+  definita: tutti e tre usano `frozen_occupies` o la disgiunzione reificata.
+  Rimossa, con l'assenza tenuta ferma da un test perché rimetterla sia una
+  decisione. Se un minimo davvero additivo comparirà, è una riga.
+
+  ⚠ **E il gemello di `residual_floor` stava nel banco.** `_causale_risorsa`
+  calcolava esattamente la chiave grossolana che l'oracolo ha appena adottato,
+  e **nessuno la chiamava**. Prima di cablarla, la misura: strumentando
+  `_classifica_nuove` per contare quante violazioni salverebbe, sui dieci semi
+  appuntati della suite il conto è **zero**. Non si aggiunge un'esenzione che
+  non scatta — è la regola con cui il ramo pigro era stato tolto nell'ondata 5
+  — quindi l'helper è rimosso e la misura sta nel docstring. Se un giorno
+  scatterà, il banco diventerà rosso e la decisione si prenderà guardando quel
+  rosso.
+
+  **738 test verdi**, 16 skip. Il testimone del banco resta sporco su
+  `coverage_mismatch`, ora per la ragione giusta e con la riparazione
+  quantificata: comprendere le maschere in coppie complementari, cioè
+  riscrivere `_make_activities` e spostare il testimone di ogni famiglia e
+  ogni seme appuntato. Non fatto, e dichiarato: non serve a niente che sia
+  fatto.
+
+- **2026-08-28 (estrai)** — **La voce con più dipendenze in entrata
+  dell'inventario esisteva come tabella e non come funzione.** `Extraction` era
+  nello schema dal primo giorno e `SolverContext.build` la onorava già, ma
+  **niente la popolava**, e `analyze` e `assign_rooms` la ignoravano — cioè la
+  risposta a *«rigenera solo il biennio»* era scritta a metà, e la metà
+  mancante era tutta quella che l'utente tocca. `domain/extraction.py` più
+  `manage.py extract`, e il perimetro sulle due fasi diagnostiche.
+
+  🔑 **La regola che tiene insieme il pezzo: un'estrazione restringe ciò su cui
+  si *agisce*, mai ciò che si *conta*.** Fuori dal perimetro le attività
+  restano dove sono e continuano a occupare le loro risorse — è la ragione per
+  cui il solver le **congela** invece di escluderle, ed è la stessa ragione per
+  cui `ScheduleState` si costruisce sempre intero. Filtrare lo stato sarebbe
+  stato il difetto silenzioso di questo pezzo: l'occupazione risulterebbe più
+  bassa del vero e il motore piazzerebbe sopra a lezioni che esistono, mentre
+  ogni test di «l'estrazione restringe» resterebbe verde, perché restringere
+  lo farebbe comunque. Nell'analisi il perimetro entra come una **immobilità di
+  esecuzione** (`free_candidates(state, selected)`), che è letteralmente la
+  semantica che il solver già aveva.
+
+  🔑 **I token dicono chi confligge, non chi appartiene, e i due verbi non
+  coincidono.** `activity_tokens` è asimmetrico apposta: la classe intera
+  occupa **tutte** le sue parti, la parte **non** occupa la classe. Estrarre
+  «le attività della 2A» leggendo i token darebbe le ore a classe intera e
+  perderebbe gli sdoppiamenti — cioè proprio quelle che si cercano per prime.
+  Da qui `_appartenenze`, che percorre i tre versi che ai token non servono:
+  parte → classe, raggruppamento → classi dei membri (ADR-013: non esiste «la»
+  classe di un raggruppamento, ci sono tutte), e **tutte** le aule dichiarate
+  invece della sola candidata unica. Tre mutazioni, tre rossi distinti: era la
+  scorciatoia disponibile, ed è quella sbagliata.
+
+  ⚠ **I rilevatori nominano chi i finding nominano, e un'intera famiglia non
+  nomina nessuno.** Gli otto vincoli orari sulla risorsa — D.T.B., giorni
+  liberi, massimi — producono finding che nominano la **risorsa** e zero
+  attività, ed è corretto: un buco tollerato è una proprietà della *giornata*
+  di un docente, non di una delle sue cinque lezioni. `Estrai le attività che
+  non rispettano i vincoli` preso alla lettera restituirebbe quindi un insieme
+  vuoto su una scuola che viola il D.T.B. ovunque. Il rilevatore **dichiara** i
+  finding rimasti senza nome, con la stessa regola di `famiglie_silenziose()`:
+  un vincolo che tace e un vincolo innocuo non devono leggersi uguali, e
+  `Rilevamento.muto` distingue «vuoto perché sano» da «vuoto perché nessuno era
+  attribuibile».
+
+  ⚠ **E `coverage_mismatch` non nominava nessuno affatto**: il checker più
+  vecchio del registro confrontava monte ore e servizi senza mai popolare
+  `activities`, quindi `Estrai le attività non conformi ai piani di studi`
+  sarebbe stato muto per costruzione. Ora nomina le attività che **ci sono** —
+  ed è metà del verdetto, dichiarata come tale: con `got < want` il colpevole è
+  un'attività che **non esiste**, e nessuna estrazione può nominarla.
+
+  ⛔ **La misura ha smentito la previsione, di un fattore sei.** Restringere
+  alla 1A doveva costare un undicesimo (26 attività su 284) e costa il **62%**:
+  `0,263s` contro `0,422s`. La decomposizione dice perché — `~0,25s` di
+  `ScheduleState.build`, che il perimetro non tocca perché lo stato si
+  costruisce sempre intero, più `~0,6ms` per attività esaminata. Il perimetro
+  taglia il 90% della parte **variabile** e il 38% del totale. 🔑 Il che vale
+  più del numero: sul Fermi la classifica dei vincoli è **dominata dalla
+  costruzione dello stato**, non dal conteggio delle attività — ed è la
+  conferma dal verso opposto che «restringe l'azione, mai il conteggio» non è
+  solo una regola di correttezza, è anche il modello di costo. La frase è stata
+  riscritta nel test invece che nel changelog.
+
+  ⚠ **Un test non poteva fallire, e l'ha detto la mutazione.**
+  `apply_rooms_non_tocca_chi_sta_fuori` era verde sotto tutte e undici le
+  mutazioni: chi stava fuori teneva la sua aula anche **senza** perimetro,
+  perché nessuno gliela contendeva. Riscritto su un'istanza dove il perimetro è
+  l'unica cosa che la salva — l'aula è diventata indisponibile dopo
+  l'assegnazione a mano, quindi come *richiesta* rinuncerebbe, e `apply_rooms`
+  cancella l'aula di chi rinuncia — e ora una dodicesima mutazione lo uccide.
+  **Quattordici mutazioni, quattordici esiti distinti.**
+
+  ⚠ **E una nota di metodo, pagata:** lo script di mutazione ripristinava con
+  `git checkout -- domain/`, che su un pezzo con file **non tracciati** e
+  modifiche **non committate** fa il contrario di ciò che serve — lascia il file
+  nuovo mutato e butta via il lavoro degli altri. Da qui in avanti le mutazioni
+  si ripristinano da una **copia**, mai dall'indice.
+
+  I numeri sul Fermi, `--estrazione biennio` (104 attività su 284): `solve`
+  passa da **8426 a 3243 variabili** e da 1086 a 800 constraint, 0,53 s;
+  `assign_rooms` da 92 a **32 richieste d'aula**, 90 variabili contro 258.
+  Nessuna attività fuori dal biennio si muove, che è garantito per costruzione
+  — il loro dominio è un singoletto. **733 test verdi**, 16 skip.
+
+  Restano fuori, dichiarati: sei delle dodici voci del menu `Estrai` di EDT,
+  ognuna per una ragione scritta accanto al registro — `non costanti durante
+  l'anno`, `sezionate asincrone` e `spostate` riguardano la fascia variabile e
+  il sezionamento (ADR-010, fuori scope); `raggruppamenti ad alunni variabili` è
+  la formazione classi, che non abbiamo; `complesse` e `di compresenza` sono
+  filtri di forma, non problemi. E gli stati `Scartate` e `In attesa`, che sono
+  sfumature di «non piazzata» che il modello non distingue.
+
+- **2026-08-28 (piazza e sistema)** — **L'ultima voce strutturale ✅ di
+  scope-v1 rimasta assente è dentro**, e con lei la **condizione 1** delle tre
+  «da non perdere» di ADR-015: *«qual è l'insieme minimo di attività da
+  spostare perché A stia qui?»*. È lo stesso motore del risolutore passo-passo
+  escluso da v1, e averlo tiene quella porta aperta invece di richiederne la
+  riscrittura. `domain/solver/place_and_fix.py` più `manage.py place_and_fix`.
+
+  🔑 **Il pezzo costa poco perché la catena lessicografica lo era già.**
+  Imporre una cella è un vincolo hard — `pinned` su `build_model` —; «disturbare
+  il meno possibile» è **L4**, la stabilità, scritta per ADR-010 e per il
+  secondo quadrimestre da non stravolgere. L'ordine della catena era già
+  quello giusto e non si tocca: **non scartare** viene prima di **non
+  spostare**, perché ricollocare è meno grave che buttare fuori. Il minimo di
+  `moved` è quindi lessicografico *dopo* L1-L3, ed è la nozione corretta, non
+  un'approssimazione. Un test lo prova invece di dichiararlo.
+
+  🔑 **E la diagnosi del «perché no» è la `blame` scritta poche ore prima.**
+  Quando la cella non è nel dominio dell'attività, `trial_placements` sa già
+  *quali* causali la escludono: il rifiuto è una frase del catalogo con dentro
+  il nome del docente, non un `INFEASIBLE`. Le due risposte restano
+  **distinte**, ed è il punto: «la cella è vietata all'attività dai suoi
+  stessi vincoli» (nessuno spostamento aiuterebbe — una dimostrazione) e
+  «l'orario non si ricompone attorno» (la cella andrebbe bene, ma chi c'è non
+  ha dove andare — il caso in cui servirebbe il risolutore passo-passo).
+
+  ⚠ **La diagnosi va filtrata alle sole causali dei pre-filtri, o incolpa chi
+  si potrebbe spostare.** `trial_placements` valuta tutti i checker contro lo
+  stato corrente, quindi sulla cella contesa vede anche l'occupazione da parte
+  di chi ci sta — che è precisamente ciò che `Piazza e sistema` sposterebbe.
+  I builder che implementano `restrict()` sono **due**, griglia e
+  indisponibilità, e un test lo tiene fermo: se ne comparisse un terzo, la
+  diagnosi diventerebbe muta sul suo caso.
+
+  ⚠ **`moved` da solo mentirebbe, e serve `dropped`.** Un'attività che era
+  piazzata e che il modello ha dovuto **scartare** non si è spostata: ha perso
+  il posto. «Zero spostamenti» su un orario che ha perso un'ora sarebbe il
+  rendiconto peggiore possibile. Il buco l'ha trovato la mutazione: nessuno
+  dei test iniziali forzava uno scarto, quindi `dropped` era affermato solo da
+  un `== ()` che una costante vuota soddisfa.
+
+  ⚠ **Resta fuori, dichiarata: «Ignora i vincoli dell'attività selezionata».**
+  In EDT è una casella; da noi non è separabile per attività, perché i vincoli
+  di A non sono *di* A — una riga di materia sulla classe lega A alle sue
+  sorelle, e spegnerli vorrebbe dire attraversare ventisei builder. Una
+  versione parziale (riaprire i soli pre-filtri) lascerebbe forzare oltre
+  un'indisponibilità rossa ma non oltre un'incompatibilità di materia: un
+  modello mentale incoerente, peggiore dell'assenza.
+
+  **Otto mutazioni, otto esiti distinti**, e l'oracolo del file è verificato a
+  parte — spegnendo `OccupationBuilder` diventa rosso, quindi può fallire.
+
+  🔑 **La misura, e stavolta il Fermi la può dare.** Su un orario **pieno**
+  (284 attività piazzate, zero scarti) forzare una lezione dove ne sta
+  un'altra della stessa classe costa **uno** spostamento: l'insieme minimo è
+  uno scambio. ⚠ Il costo è ~4 s contro il secondo scarso del `solve` che ha
+  generato l'orario, e la differenza è **L4**, che prima non aveva niente da
+  conservare e ora confronta 284 collocazioni — è il prezzo di disturbare
+  poco, non un difetto. Come sempre sul Fermi la copertura resta fuori: senza
+  righe di vincolo la ricomposizione incontra la sola occupazione.
+  **707 test verdi**, 16 skip.
+
+- **2026-08-28 (quale vincolo allento)** — **La seconda delle due lacune di
+  EDT è colmata: `domain/analysis/blame.py`.** `scope-v1.md` le chiama «la
+  nostra occasione» — il riepilogo navigabile (già in `analyze`) e
+  **l'ordinamento dei vincoli per numero di fallimenti causati**, «il ponte
+  mancante fra *il calcolo è fallito* e *quale vincolo allento*». EDT elenca
+  cosa si **può** alleggerire e non dice mai cosa **serve** alleggerire.
+
+  🔑 **Il pezzo è economico perché il numero esisteva già e veniva buttato
+  via.** `admissible_starts` prova ogni cella e calcola l'insieme delle
+  violazioni nuove — cioè *perché* quella cella è esclusa — e poi ne guardava
+  solo se fosse vuoto. Ora c'è `trial_placements`, che restituisce le causali
+  cella per cella; `admissible_starts` ne è il filtro, e la classifica le
+  legge. **Zero giri di checker in più.**
+
+  🔑 **L'unità di misura non è la riga di vincolo, ed è una decisione.** Un
+  `Finding` non porta il pk della riga che l'ha generato, e
+  `ResourceTimeConstraint` non ha unicità su `(resource, type)`: risalire alla
+  riga sarebbe una deduzione. La classifica è quindi sulla coppia **(causale,
+  risorsa)** — la stessa chiave grossolana che il progetto usa già altrove, ed
+  esattamente ciò che l'utente va a toccare («il D.T.B. del prof. Rossi»).
+  Dove due righe condividono la coppia sono indistinguibili dall'orario, e
+  nominarle insieme è il verdetto corretto.
+
+  🔑 **Il numero che conta è `activities_freed`, non le celle escluse.** Un
+  dominio si svuota per **congiunzione** — la cella 1 la esclude un vincolo,
+  la cella 2 un altro — quindi «questo vincolo esclude quattrocento celle» non
+  implica che allentarlo serva. `activities_freed` conta le attività a dominio
+  vuoto per cui esiste una cella la cui **unica** causale è questa: *se
+  allento questo, quante attività tornano ad avere dove andare?* Ordinare per
+  pressione metterebbe in cima, su ogni scuola vera, l'indisponibilità più
+  larga — che è quasi sempre quella che non si può togliere. Un test tiene
+  fermo l'ordine: sedici celle escluse senza chiudere una porta stanno sotto a
+  cinque che ne chiudono una.
+
+  ⚠ **Le famiglie non monotone non compaiono, ed è una rinuncia dichiarata dal
+  comando, non solo dal docstring.** Il criterio «chiave nuova ⇒ cella
+  esclusa» è falso per i checker `PLACEMENT_MONOTONE = False` — là piazzare
+  può *riparare* — quindi ogni cella produrrebbe una chiave nuova e quelle
+  famiglie starebbero in cima a **qualunque** classifica su **qualunque**
+  dataset, per un artefatto del criterio. Si passa `relaxed=True` come la fase
+  5: si perde **richiamo**, mai precisione. Fra le silenziose c'è il D.T.B.,
+  che è uno dei vincoli che le scuole allentano più spesso, e per questo
+  `famiglie_silenziose()` le legge **dal registro** invece di elencarle, e
+  `analyze` le stampa: un vincolo che tace e un vincolo innocuo si leggono
+  uguali.
+
+  ⚠ **Le firme di settimana si uniscono, non si sommano.** Un'attività va
+  collocata in **una** cella valida in **tutte** le settimane in cui è attiva:
+  le causali di una stessa cella si uniscono fra le firme, e la cella è
+  ammissibile solo se l'unione è vuota. Sommare le firme raddoppierebbe ogni
+  numero dove le firme sono trentacinque.
+
+  ⚠ **E la mutazione ha trovato un test vacuo, nella forma di sempre.** Sei
+  mutazioni, e la terza — spegnere il rilassamento — **non rendeva rosso
+  niente**: le due attività che dovevano creare il buco del D.T.B. erano
+  *mobili*, quindi `free_candidates` le spiazzava e il buco spariva prima di
+  essere misurato. È la trappola §4.1 del violatore di Hall, questa volta
+  dentro il caso di prova. Congelate: sei mutazioni, **sei esiti distinti** —
+  cinque con un rosso solo, e spegnere il rilassamento ne fa due, perché
+  trascina anche la misura sul Fermi.
+
+  Nello stesso giro `_split` esce da `hall.py` e diventa
+  `domain_size.free_candidates`: i due lettori di `trial_placements` hanno
+  bisogno della **stessa** preparazione dello stato, e la §4.1 è precisamente
+  il tipo di precauzione che si perde in una copia.
+
+  Fermi: **0,25 s** su 284 attività, tre righe — le tre giornate intere di
+  `vincoli-attesi.md` — zero impiazzabili, zero liberabili. ⚠ Come sempre su
+  questo dataset la misura è del **costo**, mai della **copertura**: senza
+  righe di vincolo le uniche causali possibili sono le indisponibilità. E il
+  costo è lineare nelle firme, quindi il numero da portarsi dietro è «~0,25 s
+  per firma», non un assoluto. **693 test verdi**, 16 skip.
 
 - **2026-08-28 (l'ordine d'inserimento)** — **Due artefatti dichiarati erano
   tre, e il terzo rompeva l'oracolo.** I due punti aperti da luglio —

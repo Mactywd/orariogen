@@ -84,3 +84,72 @@ def test_no_hall_spegne_la_fase_5():
 def test_senza_schedule_la_fase_5_si_dichiara_saltata():
     mini_school()
     assert "richiede --schedule" in _run()
+
+
+def test_la_classifica_dei_vincoli_nomina_il_colpevole_e_le_silenziose():
+    """La seconda lacuna di EDT: non «il calcolo è fallito», ma *quale*
+    vincolo allentare. Qui c'è una sola risposta possibile — l'unica attività
+    non ha nessuna cella, e l'unica causale è l'indisponibilità del docente."""
+    env = mini_school(slots=2, days=1)
+    make_activity(env["subject"], classes=[env["klass"]], teachers=[env["teacher"]])
+    for slot in (0, 1):
+        ResourceUnavailability.objects.create(
+            resource=env["teacher"], day=0, slot=slot, level="hard")
+
+    out = StringIO()
+    with pytest.raises(CommandError):
+        call_command("analyze", "--schedule", str(env["schedule"].pk), stdout=out)
+    testo = out.getvalue()
+    assert "Vincoli da allentare" in testo
+    assert "1 senza nessuna collocazione ammissibile" in testo
+    assert "Rossi Anna ha una indisponibilità" in testo
+    assert "Attività che tornerebbero piazzabili: 1" in testo
+    # ⚠ La rinuncia va dichiarata dal comando, non solo dal docstring: un
+    # vincolo che tace e un vincolo innocuo si leggono uguali.
+    assert "Non entrano in classifica" in testo and "max_gap_hours" in testo
+
+
+def test_no_blame_spegne_la_classifica():
+    env = mini_school()
+    out = _run("--schedule", str(env["schedule"].pk), "--no-blame")
+    assert "Vincoli da allentare" not in out
+
+
+def test_senza_schedule_la_classifica_si_dichiara_saltata():
+    mini_school()
+    testo = _run()
+    assert "== Vincoli da allentare ==" in testo and "richiede --schedule" in testo
+
+
+def test_l_estrazione_restringe_le_tre_fasi_e_non_la_conformita():
+    """🔑 La regola del perimetro, vista da chi legge il rapporto: S.P. e
+    classifica guardano solo le estratte, l'elenco delle violazioni resta
+    intero. Un perimetro di lavoro non è la pretesa che il resto sia legale."""
+    from domain.models import Extraction
+
+    env = mini_school(days=1, slots=2)
+    dentro = make_activity(env["subject"], classes=[env["klass"]])
+    fuori = make_activity(env["subject"], classes=[env["klass"]],
+                          teachers=[env["teacher"]])
+    place(env["schedule"], fuori, 0, 0)
+    ResourceUnavailability.objects.create(
+        resource=env["teacher"], day=0, slot=0,
+        level=ResourceUnavailability.Level.HARD)
+    estrazione = Extraction.objects.create(name="solo-dentro")
+    estrazione.activities.add(dentro)
+
+    with pytest.raises(CommandError):
+        _run("--schedule", str(env["schedule"].pk), "--estrazione", "solo-dentro")
+    out = StringIO()
+    try:
+        call_command("analyze", "--schedule", str(env["schedule"].pk),
+                     "--estrazione", "solo-dentro", stdout=out)
+    except CommandError:
+        pass
+    testo = out.getvalue()
+
+    assert "perimetro: estrazione «solo-dentro», 1 attività" in testo
+    # La violazione di chi sta fuori si legge lo stesso...
+    assert "Rossi Anna ha una indisponibilità" in testo
+    # ...ma la classifica ha esaminato una sola attività.
+    assert "1 attività esaminate" in testo

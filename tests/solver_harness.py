@@ -15,15 +15,34 @@ orario che il checker boccia.
 costruito valido per la **griglia** (festivi, intervalli, durate) e per
 l'**occupazione** delle risorse; `run_family` ne verifica poi la validita'
 sulle sole causali della famiglia sotto esame. Non e' invece pulito a tutto
-campo: `structural:coverage` produce `coverage_mismatch` su tutti i seed del
-banco, perche' i `Service` della fixture sono per (piano, materia) mentre
-`student_units` attribuisce il monte ore alle **parti** quando la classe ne
-ha. Non tocca la premessa del passo 2 — `structural:coverage` e' l'unico
+campo: `structural:coverage` produce `coverage_mismatch` su tutti i seed.
+
+⚠ **E la causa dichiarata qui fino al 2026-08-28 era quella sbagliata**, o
+quasi. Si diceva: i `Service` della fixture sono per (piano, materia) mentre
+`student_units` attribuisce il monte ore alle **parti**. Vero, ed e' stato
+corretto — ogni parte ha ora il suo piano — ma **misurato**, spiega un ottavo
+del fenomeno: su dieci seed i finding passano da 122 a 111. Il resto lo fanno
+le **maschere di settimana**. Il monte ore di un `Service` e' settimanale e
+`check_schedule` valuta ogni firma separatamente, quindi un dataset le cui
+maschere sono casuali non ha nessun monte ore costante da settimana a
+settimana: le attivita' attive in una firma non fanno mai il totale del piano.
+Si vede su `1B`, che di parti non ne ha nessuna, e produce comunque
+`coverage_mismatch` su ogni seed. **Non e' un difetto del checker** (vedi il
+docstring di `checkers/coverage.py`: la lettura per settimana e' quella
+giusta, e la variante annuale raddoppierebbe una coppia Q1/Q2), ed e'
+riparabile solo comprendendo le maschere in coppie complementari — cioe'
+riscrivendo `_make_activities`, che spostrebbe il testimone di ogni famiglia
+e ogni seme appuntato. Non fatto, e per una ragione: non serve.
+
+Non tocca la premessa del passo 2 — `structural:coverage` e' l'unico
 checker senza builder, deliberatamente (e' `PLACEMENT_INDEPENDENT`: il solver
 non crea ne' distrugge attivita'), quindi non compare mai nel modello e non
-puo' rendere infattibile nulla. Ma un oracolo differenziale a tutto campo su
-questo testimone lo incontrerebbe: si riparerebbe **nella fixture**, non in
-`domain/analysis/`.
+puo' rendere infattibile nulla. E **nemmeno un oracolo differenziale a tutto
+campo lo incontra**, che era la ragione per cui la riparazione sembrava
+bloccante: essendo indipendente dal piazzamento, `coverage_mismatch` e'
+identico prima e dopo il solve, quindi la differenza e' vuota per
+costruzione. Cio' che va formulato con cura non e' la fixture ma la
+**chiave** con cui si confronta (§9.5).
 
 Le maschere di settimana sono randomizzate insieme al resto, cosi' ogni
 famiglia esercita piu' di una firma fin dal primo test. E' deliberato: il
@@ -153,13 +172,33 @@ def _school(rng):
     # derivatore attraversa tutti e due i casi nello stesso testimone.
     partizione = ClassPartition.objects.create(
         school_class=classes[0], name="LINGUA")
-    parts = [ClassPart.objects.create(name=nm, partition=partizione)
+    # ⚠ Ogni parte ha il **proprio** piano di studi, e non e' un dettaglio di
+    # fixture: `student_units` sostituisce la classe con le sue parti quando ne
+    # ha, e il monte ore che confronta e' quello del piano **effettivo** della
+    # parte. Con le parti che ereditano il piano della classe, quel piano
+    # dichiara le ore di *entrambe*, mentre l'unita' `1A_ING` ne occupa solo le
+    # proprie piu' quelle a classe intera: lo scarto e' esattamente il monte
+    # ore dell'altra parte, ed e' la causa del `coverage_mismatch` che questo
+    # banco portava su tutti i seed (Ruling 102, ora chiuso).
+    parts = [ClassPart.objects.create(
+                name=nm, partition=partizione,
+                study_plan=StudyPlan.objects.create(
+                    code=f"P1-{nm}", name=f"Piano {nm}", year=1))
              for nm in ("1A_ING", "1A_TED")]
     return {"grid": grid, "year": year, "period": period, "schedule": schedule,
             "discipline": disc, "subjects": subjects, "plans": plans,
             "classes": classes, "teachers": teachers, "sites": sites,
             "parts": parts, "break_boundary": break_boundary,
             "holiday": (holiday_week, holiday_day)}
+
+
+def _piani_unita(env, klass):
+    """I piani di studi delle unita'-studente di una classe: le sue parti se ne
+    ha, altrimenti la classe stessa. Rispecchia `ScheduleState.student_units`,
+    che e' cio' che `CoverageChecker` legge."""
+    piani = [p.effective_study_plan for p in env["parts"]
+             if p.partition.school_class_id == klass.pk]
+    return piani or [klass.study_plan]
 
 
 def _make_activities(rng, env, seed=0):
@@ -191,11 +230,16 @@ def _make_activities(rng, env, seed=0):
             if sedi_rng.random() < 0.5:
                 act.site = sedi_rng.choice(env["sites"])
                 act.save()
-            service, _ = Service.objects.get_or_create(
-                study_plan=klass.study_plan, subject=subject,
-                defaults={"class_minutes": 0})
-            service.class_minutes += duration_slots * 60
-            service.save()
+            # Il monte ore di un'ora a classe intera va sul piano di **ogni**
+            # parte quando la classe e' sdoppiata: e' l'ora che tutti gli
+            # studenti seguono, e `student_units` la attribuisce a ciascuna
+            # unita'. Su una classe senza parti l'unita' e' la classe.
+            for piano in _piani_unita(env, klass):
+                service, _ = Service.objects.get_or_create(
+                    study_plan=piano, subject=subject,
+                    defaults={"class_minutes": 0})
+                service.class_minutes += duration_slots * 60
+                service.save()
             out.append(act)
     # Un'attivita' per parte (Task 15a). Sta in coda per non spostare nessuna
     # estrazione delle attivita' di classe: il flusso casuale principale e'
@@ -2568,13 +2612,8 @@ def _grossa(chiave_settimana):
     sulla risorsa 1 passa da `(5, 7)` a `(4, 5)` con `gap 3 / max_gap 2`
     **identici**. E' la stessa causa a monte del tie-break di `_placed_of` in
     «Ancora aperto» di CLAUDE.md."""
-    (code, resources, _activities, quantities), week = chiave_settimana
-    return (code, resources, quantities, week)
-
-
-def _causale_risorsa(chiave_settimana):
-    (code, resources, _activities, _quantities), week = chiave_settimana
-    return (code, resources, week)
+    chiave, week = chiave_settimana
+    return (chiave.code, chiave.resources, chiave.quantities, week)
 
 
 def _classifica_nuove(nuove, base):
@@ -2596,7 +2635,18 @@ def _classifica_nuove(nuove, base):
 
     Se il fenomeno tornasse, questo banco diventerebbe **rosso** invece di
     perdonarlo in silenzio. E' il comportamento giusto: rimettere l'esenzione
-    e' una decisione da prendere guardando la misura, non un default."""
+    e' una decisione da prendere guardando la misura, non un default.
+
+    ⚠ **E non c'e' nemmeno il terzo mucchio che l'oracolo ha**, cioe' la
+    chiave grossolana `(causale, risorsa, settimana)` di
+    `tests/test_solver_oracle.py::nuove` — quella che perdona il tetto
+    inevadibile del peso didattico. Qui c'era un `_causale_risorsa` che la
+    calcolava e che **nessuno chiamava**; rimosso il 2026-08-28 insieme a
+    `residual_floor`, per la stessa ragione e dopo la stessa misura: strumentando
+    `_classifica_nuove` per contare quante violazioni la chiave grossolana
+    salverebbe, sui dieci semi appuntati della suite il conto e' **zero**. Non
+    si aggiunge un'esenzione che non scatta: se un giorno scattera', il banco
+    diventera' rosso e la decisione si prendera' guardando quel rosso."""
     grosse = {_grossa(k) for k in base}
     deriva, vere = [], []
     for k in sorted(nuove, key=str):

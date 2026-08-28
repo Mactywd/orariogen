@@ -14,6 +14,45 @@ class TimeGrid(models.Model):
         return "morning" if slot < self.morning_end_slot else "afternoon"
 
 
+class SlotLabel(models.Model):
+    """L'**etichetta oraria** della fascia: l'ora che l'utente legge.
+
+    📦 È il `Place` dello XSD `Partenaire_Index` V4.6, che porta
+    `@LibelleHeureDebut` e `@LibelleHeureFin` accanto al suo `@Numero`
+    0-based — cioè l'orologio sta **per fascia**, non sulla griglia.
+
+    🔑 E non è ridondante con `slot_minutes`, che è un'altra grandezza:
+    `tempo-e-calendario.md` §*Due nozioni di «ora»* le tiene distinte per
+    nome. La **fascia di calcolo** è l'unità del motore *e* dell'ora di
+    servizio del docente (*«Mantenere la durata predefinita di 60 minuti se
+    una fascia oraria corrisponde a un'ora di servizio»*); l'**etichetta**
+    è personalizzabile (*«ad esempio 55 minuti»*, orari sfalsati) e non
+    ricalcola nessun monte ore. Un calendario legge la seconda: al telefono
+    di un docente interessa quando entra in aula, non quanto gli viene
+    contato.
+
+    ⚠ Facoltativa, e senza default: una griglia priva di etichette non ha un
+    orologio, e inventarne uno («si comincia alle 8») metterebbe in silenzio
+    le lezioni di tutta la scuola all'ora sbagliata. L'export rifiuta invece
+    di indovinare."""
+
+    grid = models.ForeignKey(TimeGrid, on_delete=models.CASCADE,
+                             related_name="slot_labels")
+    slot = models.PositiveSmallIntegerField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+
+    class Meta:
+        ordering = ["slot"]
+        constraints = [
+            models.UniqueConstraint(fields=["grid", "slot"],
+                                    name="uniq_slot_label_per_grid"),
+        ]
+
+    def __str__(self):
+        return f"f{self.slot} {self.start_time:%H:%M}-{self.end_time:%H:%M}"
+
+
 class Break(models.Model):
     """Intervallo: separatore fra due ranghi, non consuma slot. La linea sta
     prima di boundary_slot."""

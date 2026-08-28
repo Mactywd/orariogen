@@ -3,7 +3,9 @@ from .resources import Material, Resource, Room, StaffMember
 from .curriculum import CompetitionClass, Discipline, Service, StudyPlan, Subject
 from .classes import ClassPart, ClassPartition, Group, SchoolClass
 from .teachers import Teacher, TeachingAssignment
-from .time import Break, Holiday, Period, Schedule, SchoolYear, TimeGrid
+from .time import (
+    Break, Holiday, Period, Schedule, SchoolYear, SlotLabel, TimeGrid,
+)
 from .activities import Activity, ActivityMaterialRequirement, Placement
 from .constraints import (
     Extraction, RelaxationQuota, ResourceTimeConstraint,
@@ -16,7 +18,8 @@ __all__ = [
     "CompetitionClass", "Discipline", "Service", "StudyPlan", "Subject",
     "ClassPart", "ClassPartition", "Group", "SchoolClass",
     "Teacher", "TeachingAssignment",
-    "Break", "Holiday", "Period", "Schedule", "SchoolYear", "TimeGrid",
+    "Break", "Holiday", "Period", "Schedule", "SchoolYear", "SlotLabel",
+    "TimeGrid",
     "Activity", "ActivityMaterialRequirement", "Placement",
     "Extraction", "RelaxationQuota", "ResourceTimeConstraint",
     "ResourceUnavailability", "SubjectConstraint",
