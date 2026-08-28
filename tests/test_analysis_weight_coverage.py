@@ -5,7 +5,7 @@ from domain.analysis.conformity import check_schedule
 from domain.analysis.registry import REGISTRY, all_checkers
 from domain.models import (
     ClassPart, ClassPartition, InstituteSettings, ResourceTimeConstraint,
-    Service, SubjectConstraint,
+    Service, Subject, SubjectConstraint,
 )
 from tests.analysis_helpers import make_activity, mini_school, place
 
@@ -71,6 +71,35 @@ def test_copertura_monte_ore():
                 if f.code != "activity_unplaced"]
     assert [f.code for f in findings] == ["coverage_mismatch"]
     assert findings[0].quantities == {"expected_minutes": 120, "actual_minutes": 60}
+
+
+def test_due_materie_mancanti_sono_due_scostamenti():
+    """⚠ `Finding.key` esclude il **messaggio** per scelta, e la materia di
+    `coverage_mismatch` vive solo lì: senza il campo `subject` due materie
+    mancanti alla stessa unità per lo stesso numero di minuti — che è il caso
+    normale, `atteso 60 / osservato 0` su ciascuna — collassano in **un** solo
+    finding, e quale delle due venga nominata dipende dall'ordine di
+    iterazione. Trovato mutando i token della classe intera: due scostamenti
+    diversi si presentavano come uno."""
+    env = mini_school()
+    make_activity(env["subject"], classes=[env["klass"]])
+    seconda = Subject.objects.create(code="STO", name="Storia",
+                                     discipline=env["discipline"])
+    terza = Subject.objects.create(code="GEO", name="Geografia",
+                                   discipline=env["discipline"])
+    # due materie nel quadro orario che nessuna attività eroga, per lo stesso
+    # monte ore: quantità identiche, colpevoli identici (nessuno)
+    for subject in (seconda, terza):
+        Service.objects.create(study_plan=env["plan"], subject=subject,
+                               class_minutes=60)
+
+    scostamenti = [f for f in check_schedule(env["schedule"])
+                   if f.code == "coverage_mismatch"]
+    assert len(scostamenti) == 2
+    assert {f.subject for f in scostamenti} == {seconda.pk, terza.pk}
+    assert len({f.key for f in scostamenti}) == 2
+    assert {"Storia", "Geografia"} == {f.message.split(", ")[1].split(":")[0]
+                                       for f in scostamenti}
 
 
 def test_le_ore_di_quadrimestre_non_raddoppiano():

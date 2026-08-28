@@ -130,8 +130,8 @@ def test_le_famiglie_grossolane_seguono_il_registro():
 def _grossolana(chiave_settimana):
     """(causale, risorse, settimana): la chiave **senza** l'identita' delle
     attivita' e senza le quantita'."""
-    (code, resources, _activities, _quantities), week = chiave_settimana
-    return (code, resources, week)
+    chiave, week = chiave_settimana
+    return (chiave.code, chiave.resources, week)
 
 
 def violazioni(schedule, codici=CODICI):

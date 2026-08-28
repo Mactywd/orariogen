@@ -466,10 +466,22 @@ def test_fermi_i_criteri_di_qualita_misurati():
     # salta. Cinque righe, quattro livelli — ed è la regola «un criterio senza
     # niente da misurare non è un livello», non una perdita.
     assert "preferences_all" not in nomi
-    assert nomi[-3:] == ["isolated_all", "free_half_days_all", "regularity_all"]
+    # ⚠ I livelli che girano sono un **prefisso** dell'ordine dichiarato, non
+    # necessariamente tutti: a 3 s per livello e con la macchina carica un
+    # livello di qualità può non restituire alcuna soluzione, e allora la
+    # catena si ferma — è il comportamento dichiarato di `solve_chain`, non un
+    # difetto. Pretendere la coda esatta rendeva questo test rosso sotto la
+    # suite intera e verde da solo, che è il modo peggiore di fallire.
+    attesi = ["minuti_scartati", "attivita_scartate", "gaps_all",
+              "isolated_all", "free_half_days_all", "regularity_all"]
+    assert nomi == attesi[:len(nomi)]
 
     per_nome = {lv["nome"]: lv for lv in livelli_}
     assert per_nome["gaps_all"]["divario"] == 0, "zero è anche il suo limite"
-    assert per_nome["regularity_all"]["divario"] > 0, (
-        "il divario di regularity è il fenomeno che questo test misura: se "
-        "diventasse zero, il limite inferiore avrebbe smesso di essere inutile")
+    dimostrabili_male = [lv for lv in livelli_
+                         if lv["nome"] in attesi[3:] and lv["divario"] is not None]
+    assert dimostrabili_male, "nessun livello oltre gaps: la misura è vuota"
+    assert any(lv["divario"] > 0 for lv in dimostrabili_male), (
+        "il divario dei criteri dopo `gaps` è il fenomeno che questo test "
+        "misura: se diventasse zero ovunque, il limite inferiore avrebbe "
+        "smesso di essere inutile")

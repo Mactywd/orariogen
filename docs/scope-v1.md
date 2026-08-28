@@ -198,9 +198,19 @@ Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto 
    attività.
 2. **Rimandare Hall funziona solo se l'analisi di capienza è un componente a sé**,
    non un'interpretazione a posteriori dell'output del solver.
-3. **La classe articolata retta dalle parti** presuppone che una **parte** possa
-   portare un **piano di studi proprio**. Da verificare presto: se il quadro orario
-   resta agganciato alla sola classe, questa decisione decade.
+3. ⚠ **Verificata il 2026-08-28, e regge a metà.** **La classe articolata retta
+   dalle parti** presuppone che una **parte** possa portare un **piano di studi
+   proprio**. → `tests/test_classe_articolata.py`. La prima metà tiene, misurata:
+   il piano proprio esiste, la **copertura lo legge**, le due articolazioni
+   stanno **nella stessa fascia** (è ciò che la scorciatoia compra) e l'ora
+   comune a classe intera **occupa** entrambe le parti. La decisione 4 non
+   decade.
+   ⛔ Ma l'unità della copertura è la **parte** dove dovrebbe essere l'**atomo**
+   di ADR-017: un alunno non sta in una parte, sta in una **combinazione** di
+   parti, una per partizione. Appena una classe ha due partizioni — o una sola
+   con parti che ricevono materie diverse, cioè **IRC e alternativa: ogni
+   classe italiana** — `structural:coverage` produce scostamenti che non
+   esistono. Vedi «Cosa resta davvero aperto».
 
 ---
 
@@ -217,3 +227,22 @@ Non sono decisioni di scope, ma condizionano il lavoro che segue.
   della difficoltà.
 - **La via d'ingresso dei dati anagrafici** resta da scegliere, ora che
   `Partenaire_Index` è escluso ([ADR-012](decisioni.md)).
+- ⛔ **L'unità del monte ore: la parte o l'atomo?** (2026-08-28) È una decisione
+  di modello, non di scope, ma va presa prima di qualunque import: cambia i
+  dati che una scuola deve inserire. `structural:coverage` misura **ogni parte**
+  contro il piano **intero** della parte — lettura *per alunno*, che è quella
+  giusta — ma un alunno sta in una **combinazione** di parti, l'atomo di
+  ADR-017. Su una classe con IRC la copertura dichiara che chi fa religione
+  deve l'ora di alternativa, e viceversa: **due scostamenti inesistenti su ogni
+  classe italiana**. Tre strade, nessuna da indovinare:
+  **(a)** portare la copertura sull'atomo — il modello gli atomi li costruisce
+  già, per l'occupazione, ma non hanno un piano di studi e derivarlo
+  dall'unione dei piani delle parti sarebbe inventare un campo;
+  **(b)** materializzare un `StudyPlan` per combinazione — misurato: funziona e
+  azzera i finding, al prezzo di quattro piani per una 3A articolata con IRC,
+  cioè gli atomi come anagrafica, che ADR-017 ha deciso di **non** fare;
+  **(c)** leggere il monte ore **tripartito** del servizio (`reduced_minutes`,
+  `split_minutes`), che è la risposta di EDT alla stessa domanda — ⚠ sono nello
+  schema dal primo giorno e **letti da nessuno**, e la loro semantica non è mai
+  stata osservata in UI ([piani-di-studi.md](edt/piani-di-studi.md) la elenca
+  fra le cose da osservare).

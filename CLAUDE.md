@@ -82,7 +82,7 @@ domain/                l'app Django del modello di dominio v1
                         criteri, i sei rilevatori di problemi, le quattro
                         operazioni insiemistiche, e il perimetro che restringe
                         l'azione mai il conteggio
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, il parallelismo che compra, e il limite dell'unità di copertura), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -450,6 +450,21 @@ e il changelog). Vedi [ADR-008](docs/decisioni.md) e [ADR-016](docs/decisioni.md
 - [ ] Serve **una** via d'ingresso dei dati anagrafici, ora che
       `Partenaire_Index` è escluso ([ADR-012](docs/decisioni.md)): formato nostro,
       CSV, o aggancio al SaaS esistente. Da affrontare al momento dell'import.
+- [ ] ⛔ **L'unità del monte ore è la parte, dove dovrebbe essere l'atomo**
+      (2026-08-28). `structural:coverage` misura ogni **parte** contro il piano
+      **intero** della parte: lettura *per alunno*, che è quella giusta, ma un
+      alunno sta in una **combinazione** di parti — una per partizione — cioè
+      l'**atomo** di ADR-017. Con una sola partizione parte e atomo coincidono
+      e tutto quadra; con due, o con una sola le cui parti ricevono materie
+      diverse — **IRC e alternativa, cioè ogni classe italiana** — la copertura
+      dichiara che chi fa religione deve l'ora di alternativa e viceversa.
+      ⚠ Non l'aveva visto nessuno perché il **Fermi non ha nessuna partizione**
+      e `test_beyond_fermi.py` le costruisce senza mai chiamare
+      `check_schedule`: la forma di sempre. Tenuto fermo da
+      `test_l_unita_della_copertura_e_la_parte_dove_dovrebbe_essere_l_atomo`.
+      Le tre strade e i loro prezzi misurati sono in
+      [scope-v1.md](docs/scope-v1.md); **è una decisione di modello**, cambia i
+      dati che una scuola deve inserire, e va presa prima dell'import.
 - [x] **Come si comporta un builder quando un constraint mescola attività
       congelate già in violazione e attività libere?** Deciso con
       [ADR-018](docs/decisioni.md): **capacità residua** clampata sui soli
@@ -584,6 +599,81 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (la classe articolata, e l'unità del monte ore)** — **L'ultima
+  delle «tre condizioni da non perdere» di ADR-015 ancora non verificata è
+  stata verificata, e regge a metà.** `scope-v1.md` copre la classe articolata
+  — la 3A con 12 alunni di Manutenzione e 10 di Elettronica — senza entità
+  dedicata: *«la parte A segue un piano, la parte B un altro, le ore comuni si
+  insegnano a classe intera»*, con la condizione scritta accanto, *«da
+  verificare presto, non a modello finito»*. Non era mai stata esercitata:
+  `test_classes.py` asserisce che una parte **può** portare un piano proprio,
+  che è la metà anagrafica, e nient'altro.
+
+  🔑 **La prima metà tiene, ed è misurata invece che dichiarata.** La copertura
+  legge davvero il piano della parte; le due articolazioni **stanno nella
+  stessa fascia** — che è ciò che la scorciatoia compra, perché parti della
+  stessa partizione sono insiemi disgiunti di alunni — e l'ora comune a classe
+  intera **occupa** entrambe le parti, quindi nessuno fa laboratorio mentre la
+  sua classe fa italiano. La decisione 4 di ADR-015 non decade.
+  **Tre mutazioni, tre esiti distinti**: la parte che perde il piano proprio
+  uccide un test solo, la classe intera che smette di occupare le sue parti ne
+  uccide quattro su cinque, la parte che occupa anche la classe uccide solo
+  quello del parallelismo.
+
+  ⛔ **La seconda metà no, e non riguarda solo la classe articolata.**
+  `structural:coverage` misura ogni **parte** contro il piano **intero** della
+  parte: è una lettura *per alunno*, ed è quella giusta. Ma un alunno non sta
+  in una parte, sta in una **combinazione** di parti — una per partizione — e
+  quella combinazione è l'**atomo** di ADR-017, che il modello costruisce già
+  per l'occupazione e non per il curriculum. Con una sola partizione parte e
+  atomo coincidono; con due, o con una sola le cui parti ricevono materie
+  diverse — **IRC e alternativa, cioè ogni classe italiana** — la copertura
+  dichiara che chi fa religione deve l'ora di alternativa, e viceversa.
+  Misurato: due scostamenti inesistenti sulla classe più ordinaria che ci sia,
+  quattro su una 3A articolata con IRC.
+  ⚠ **Non l'aveva visto nessuno perché il Fermi non ha nessuna partizione**, e
+  `test_beyond_fermi.py` le costruisce senza mai chiamare `check_schedule` — la
+  forma di sempre, una proprietà del dataset scambiata per una proprietà del
+  codice. La scappatoia esiste ed è misurata (un `StudyPlan` gemello per
+  combinazione: funziona, e costa quattro piani per una classe), ma sceglierla
+  è **una decisione di modello**, non una correzione: cambia i dati che una
+  scuola deve inserire. Le tre strade sono in `scope-v1.md`, e la terza — il
+  monte ore **tripartito** del servizio, che è la risposta di EDT alla stessa
+  domanda — poggia su due campi (`reduced_minutes`, `split_minutes`) che sono
+  nello schema dal primo giorno, **letti da nessuno**, e la cui semantica non è
+  mai stata osservata in UI.
+
+  🔑 **E la mutazione ha trovato un difetto vero, in un punto che nessuno
+  guardava: `Finding.key` perdeva la materia.** Mutando i token della classe
+  intera, due scostamenti diversi si presentavano come **uno**: la chiave
+  esclude il messaggio per scelta, e per `coverage_mismatch` la materia vive
+  solo lì — quindi un'unità a cui mancano due materie per lo stesso numero di
+  minuti (`atteso 60 / osservato 0` su ciascuna, il caso normale) produceva un
+  finding solo, e *quale* delle due venisse nominata dipendeva dall'ordine di
+  iterazione. In uno strumento il cui valore è nominare la causa, questo è il
+  difetto peggiore della famiglia. Corretto con il campo `subject`, e
+  `subject_constraints` **non** ne ha bisogno: là la frase porta `subject_a`,
+  uguale per tutte le righe che potrebbero collidere.
+
+  ⚠ **E il campo in più ha rotto i due lettori che spacchettavano la chiave per
+  posizione** — l'oracolo differenziale e il banco, insieme, con quindici test
+  rossi. `Finding.key` è ora una **tupla nominata**: un campo in più diventa
+  additivo invece di essere una trappola per chi lo aggiunge. La regola resta
+  scritta dove serve: **tutto ciò che distingue due verdetti dev'essere un
+  campo**, perché il messaggio è fuori dalla chiave.
+
+  ⚠ Nello stesso giro, `test_fermi_i_criteri_di_qualita_misurati` — scritto il
+  giorno prima — si è rivelato **sensibile al carico**: verde da solo, rosso
+  nella suite intera, perché a 3 s per livello un criterio di qualità può non
+  restituire alcuna soluzione e la catena si ferma, che è il comportamento
+  dichiarato di `solve_chain`. Pretendeva la coda esatta dei livelli; ora
+  pretende che i livelli girati siano un **prefisso** dell'ordine dichiarato e
+  che almeno uno dei criteri dopo `gaps` abbia divario positivo — il fenomeno
+  che il test misura, senza dipendere da quale livello faccia in tempo.
+
+  **Quattro mutazioni in tutto, quattro esiti distinti.** **772 test verdi**,
+  16 skip. Il Fermi è invariato per costruzione: non ha partizioni.
 
 - **2026-08-28 (il costo dei criteri di qualità)** — **Il numero che questo
   file dichiarava da un giorno era misurato male, e la diagnosi che ne

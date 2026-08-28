@@ -63,4 +63,10 @@ class CoverageChecker(Checker):
                         Severity.HARD, resources=(key,),
                         activities=tuple(sorted(colpevoli.get(subject_id, ()))),
                         quantities={"expected_minutes": want, "actual_minutes": got},
+                        # ⚠ La materia sta nella frase, e la frase è fuori da
+                        # `Finding.key` per scelta: senza questo campo due
+                        # materie mancanti alla stessa unità per lo stesso
+                        # numero di minuti sarebbero **lo stesso finding**, e
+                        # la diagnosi ne nominerebbe una sola.
+                        subject=subject_id,
                     )

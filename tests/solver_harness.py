@@ -2612,8 +2612,8 @@ def _grossa(chiave_settimana):
     sulla risorsa 1 passa da `(5, 7)` a `(4, 5)` con `gap 3 / max_gap 2`
     **identici**. E' la stessa causa a monte del tie-break di `_placed_of` in
     «Ancora aperto» di CLAUDE.md."""
-    (code, resources, _activities, quantities), week = chiave_settimana
-    return (code, resources, quantities, week)
+    chiave, week = chiave_settimana
+    return (chiave.code, chiave.resources, chiave.quantities, week)
 
 
 def _classifica_nuove(nuove, base):
