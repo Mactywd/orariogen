@@ -44,7 +44,7 @@ class HallFinding:
     remedies: tuple
 
 
-def analyze_hall(schedule):
+def analyze_hall(schedule, selected=None):
     """⚠ Le firme di settimana sono una dimensione, non un dettaglio: due
     attivita' di settimane disgiunte non competono per la stessa fascia, e
     trattarle come concorrenti produce falsi positivi.
@@ -59,7 +59,7 @@ def analyze_hall(schedule):
     findings, seen = [], set()
     for representative, _weeks in week_signatures(schedule):
         state = ScheduleState.build(schedule, week=representative)
-        findings += _analyze_state(state, seen)
+        findings += _analyze_state(state, seen, selected)
     return findings
 
 
@@ -204,9 +204,9 @@ def _labels(state, group):
     return tuple(out)
 
 
-def _analyze_state(state, seen):
+def _analyze_state(state, seen, selected=None):
     grid = state.grid
-    free = free_candidates(state)
+    free = free_candidates(state, selected)
     starts = {a.id: admissible_starts(a, state, relaxed=True) for a in free}
     cells_of = {a.id: _footprint(a, starts[a.id]) for a in free}
 

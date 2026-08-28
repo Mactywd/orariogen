@@ -75,7 +75,11 @@ domain/                l'app Django del modello di dominio v1
                         `Piazza e sistema` (place_and_fix.py) e la **seconda
                         fase** — l'assegnazione delle aule (rooms.py), modello
                         a sé con due livelli propri
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+  extraction.py         `Estrai`: la selezione di lavoro come operazione —
+                        criteri, i sei rilevatori di problemi, le quattro
+                        operazioni insiemistiche, e il perimetro che restringe
+                        l'azione mai il conteggio
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -256,6 +260,17 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > Fermi pieno: **una** attività spostata su 284, in ~4 s. ⚠ Resta fuori,
 > dichiarata, la casella «Ignora i vincoli dell'attività selezionata»: da noi
 > non è separabile per attività.
+>
+> Dal 2026-08-28 (sera) **`Estrai` è un'operazione** (`domain/extraction.py`,
+> `manage.py extract`): la tabella c'era dal giorno dello schema e il solver la
+> onorava già, ma **niente la popolava** e le due fasi diagnostiche la
+> ignoravano. Ora ci sono i criteri (stato, risorsa, materia, finestra oraria),
+> i **sei rilevatori** che il nostro modello sa davvero rispondere, le quattro
+> operazioni insiemistiche del menu di EDT — `Limita la ricerca alle attività
+> già estratte` compresa — e il perimetro su `analyze`, `assign_rooms` e
+> `solve`. 🔑 La regola: **un'estrazione restringe ciò su cui si agisce, mai
+> ciò che si conta.** Fermi, `--estrazione biennio`: 104 attività libere su
+> 284, **3243 variabili contro 8426**, e 32 richieste d'aula contro 92.
 >
 > Restano i punti aperti elencati sotto.
 
@@ -531,6 +546,97 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (estrai)** — **La voce con più dipendenze in entrata
+  dell'inventario esisteva come tabella e non come funzione.** `Extraction` era
+  nello schema dal primo giorno e `SolverContext.build` la onorava già, ma
+  **niente la popolava**, e `analyze` e `assign_rooms` la ignoravano — cioè la
+  risposta a *«rigenera solo il biennio»* era scritta a metà, e la metà
+  mancante era tutta quella che l'utente tocca. `domain/extraction.py` più
+  `manage.py extract`, e il perimetro sulle due fasi diagnostiche.
+
+  🔑 **La regola che tiene insieme il pezzo: un'estrazione restringe ciò su cui
+  si *agisce*, mai ciò che si *conta*.** Fuori dal perimetro le attività
+  restano dove sono e continuano a occupare le loro risorse — è la ragione per
+  cui il solver le **congela** invece di escluderle, ed è la stessa ragione per
+  cui `ScheduleState` si costruisce sempre intero. Filtrare lo stato sarebbe
+  stato il difetto silenzioso di questo pezzo: l'occupazione risulterebbe più
+  bassa del vero e il motore piazzerebbe sopra a lezioni che esistono, mentre
+  ogni test di «l'estrazione restringe» resterebbe verde, perché restringere
+  lo farebbe comunque. Nell'analisi il perimetro entra come una **immobilità di
+  esecuzione** (`free_candidates(state, selected)`), che è letteralmente la
+  semantica che il solver già aveva.
+
+  🔑 **I token dicono chi confligge, non chi appartiene, e i due verbi non
+  coincidono.** `activity_tokens` è asimmetrico apposta: la classe intera
+  occupa **tutte** le sue parti, la parte **non** occupa la classe. Estrarre
+  «le attività della 2A» leggendo i token darebbe le ore a classe intera e
+  perderebbe gli sdoppiamenti — cioè proprio quelle che si cercano per prime.
+  Da qui `_appartenenze`, che percorre i tre versi che ai token non servono:
+  parte → classe, raggruppamento → classi dei membri (ADR-013: non esiste «la»
+  classe di un raggruppamento, ci sono tutte), e **tutte** le aule dichiarate
+  invece della sola candidata unica. Tre mutazioni, tre rossi distinti: era la
+  scorciatoia disponibile, ed è quella sbagliata.
+
+  ⚠ **I rilevatori nominano chi i finding nominano, e un'intera famiglia non
+  nomina nessuno.** Gli otto vincoli orari sulla risorsa — D.T.B., giorni
+  liberi, massimi — producono finding che nominano la **risorsa** e zero
+  attività, ed è corretto: un buco tollerato è una proprietà della *giornata*
+  di un docente, non di una delle sue cinque lezioni. `Estrai le attività che
+  non rispettano i vincoli` preso alla lettera restituirebbe quindi un insieme
+  vuoto su una scuola che viola il D.T.B. ovunque. Il rilevatore **dichiara** i
+  finding rimasti senza nome, con la stessa regola di `famiglie_silenziose()`:
+  un vincolo che tace e un vincolo innocuo non devono leggersi uguali, e
+  `Rilevamento.muto` distingue «vuoto perché sano» da «vuoto perché nessuno era
+  attribuibile».
+
+  ⚠ **E `coverage_mismatch` non nominava nessuno affatto**: il checker più
+  vecchio del registro confrontava monte ore e servizi senza mai popolare
+  `activities`, quindi `Estrai le attività non conformi ai piani di studi`
+  sarebbe stato muto per costruzione. Ora nomina le attività che **ci sono** —
+  ed è metà del verdetto, dichiarata come tale: con `got < want` il colpevole è
+  un'attività che **non esiste**, e nessuna estrazione può nominarla.
+
+  ⛔ **La misura ha smentito la previsione, di un fattore sei.** Restringere
+  alla 1A doveva costare un undicesimo (26 attività su 284) e costa il **62%**:
+  `0,263s` contro `0,422s`. La decomposizione dice perché — `~0,25s` di
+  `ScheduleState.build`, che il perimetro non tocca perché lo stato si
+  costruisce sempre intero, più `~0,6ms` per attività esaminata. Il perimetro
+  taglia il 90% della parte **variabile** e il 38% del totale. 🔑 Il che vale
+  più del numero: sul Fermi la classifica dei vincoli è **dominata dalla
+  costruzione dello stato**, non dal conteggio delle attività — ed è la
+  conferma dal verso opposto che «restringe l'azione, mai il conteggio» non è
+  solo una regola di correttezza, è anche il modello di costo. La frase è stata
+  riscritta nel test invece che nel changelog.
+
+  ⚠ **Un test non poteva fallire, e l'ha detto la mutazione.**
+  `apply_rooms_non_tocca_chi_sta_fuori` era verde sotto tutte e undici le
+  mutazioni: chi stava fuori teneva la sua aula anche **senza** perimetro,
+  perché nessuno gliela contendeva. Riscritto su un'istanza dove il perimetro è
+  l'unica cosa che la salva — l'aula è diventata indisponibile dopo
+  l'assegnazione a mano, quindi come *richiesta* rinuncerebbe, e `apply_rooms`
+  cancella l'aula di chi rinuncia — e ora una dodicesima mutazione lo uccide.
+  **Quattordici mutazioni, quattordici esiti distinti.**
+
+  ⚠ **E una nota di metodo, pagata:** lo script di mutazione ripristinava con
+  `git checkout -- domain/`, che su un pezzo con file **non tracciati** e
+  modifiche **non committate** fa il contrario di ciò che serve — lascia il file
+  nuovo mutato e butta via il lavoro degli altri. Da qui in avanti le mutazioni
+  si ripristinano da una **copia**, mai dall'indice.
+
+  I numeri sul Fermi, `--estrazione biennio` (104 attività su 284): `solve`
+  passa da **8426 a 3243 variabili** e da 1086 a 800 constraint, 0,53 s;
+  `assign_rooms` da 92 a **32 richieste d'aula**, 90 variabili contro 258.
+  Nessuna attività fuori dal biennio si muove, che è garantito per costruzione
+  — il loro dominio è un singoletto. **733 test verdi**, 16 skip.
+
+  Restano fuori, dichiarati: sei delle dodici voci del menu `Estrai` di EDT,
+  ognuna per una ragione scritta accanto al registro — `non costanti durante
+  l'anno`, `sezionate asincrone` e `spostate` riguardano la fascia variabile e
+  il sezionamento (ADR-010, fuori scope); `raggruppamenti ad alunni variabili` è
+  la formazione classi, che non abbiamo; `complesse` e `di compresenza` sono
+  filtri di forma, non problemi. E gli stati `Scartate` e `In attesa`, che sono
+  sfumature di «non piazzata» che il modello non distingue.
 
 - **2026-08-28 (piazza e sistema)** — **L'ultima voce strutturale ✅ di
   scope-v1 rimasta assente è dentro**, e con lei la **condizione 1** delle tre

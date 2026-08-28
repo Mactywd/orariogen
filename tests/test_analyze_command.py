@@ -119,3 +119,37 @@ def test_senza_schedule_la_classifica_si_dichiara_saltata():
     mini_school()
     testo = _run()
     assert "== Vincoli da allentare ==" in testo and "richiede --schedule" in testo
+
+
+def test_l_estrazione_restringe_le_tre_fasi_e_non_la_conformita():
+    """🔑 La regola del perimetro, vista da chi legge il rapporto: S.P. e
+    classifica guardano solo le estratte, l'elenco delle violazioni resta
+    intero. Un perimetro di lavoro non è la pretesa che il resto sia legale."""
+    from domain.models import Extraction
+
+    env = mini_school(days=1, slots=2)
+    dentro = make_activity(env["subject"], classes=[env["klass"]])
+    fuori = make_activity(env["subject"], classes=[env["klass"]],
+                          teachers=[env["teacher"]])
+    place(env["schedule"], fuori, 0, 0)
+    ResourceUnavailability.objects.create(
+        resource=env["teacher"], day=0, slot=0,
+        level=ResourceUnavailability.Level.HARD)
+    estrazione = Extraction.objects.create(name="solo-dentro")
+    estrazione.activities.add(dentro)
+
+    with pytest.raises(CommandError):
+        _run("--schedule", str(env["schedule"].pk), "--estrazione", "solo-dentro")
+    out = StringIO()
+    try:
+        call_command("analyze", "--schedule", str(env["schedule"].pk),
+                     "--estrazione", "solo-dentro", stdout=out)
+    except CommandError:
+        pass
+    testo = out.getvalue()
+
+    assert "perimetro: estrazione «solo-dentro», 1 attività" in testo
+    # La violazione di chi sta fuori si legge lo stesso...
+    assert "Rossi Anna ha una indisponibilità" in testo
+    # ...ma la classifica ha esaminato una sola attività.
+    assert "1 attività esaminate" in testo

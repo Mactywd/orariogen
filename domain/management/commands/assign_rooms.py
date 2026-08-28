@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from domain.analysis.conformity import check_schedule
 from domain.analysis.findings import Severity
-from domain.models import Activity, Schedule
+from domain.models import Activity, Extraction, Schedule
 from domain.solver.rooms import apply_rooms, solve_rooms
 
 
@@ -31,14 +31,22 @@ class Command(BaseCommand):
                             dest="ignora_opzionali",
                             help="tipi di risorsa per cui le indisponibilità "
                                  "gialle non si rispettano (es. room)")
+        parser.add_argument("--estrazione", type=str, default=None,
+                            help="nome dell'Extraction: si riassegnano solo le "
+                                 "aule delle attività estratte, e le altre "
+                                 "tengono la loro occupandone la capienza")
         parser.add_argument("--applica", action="store_true",
                             help="scrive le aule assegnate nel database")
 
     def handle(self, *args, **options):
         schedule = Schedule.objects.get(pk=options["schedule"])
+        estrazione = None
+        if options["estrazione"]:
+            estrazione = Extraction.objects.get(name=options["estrazione"])
         soluzione = solve_rooms(schedule, time_limit=options["limite"],
                                 workers=options["lavoratori"],
-                                ignora_opzionali=options["ignora_opzionali"])
+                                ignora_opzionali=options["ignora_opzionali"],
+                                extraction=estrazione)
         stats = soluzione.stats
 
         self.stdout.write(f"== Ripartizione delle aule (schedule {schedule.pk}) ==")

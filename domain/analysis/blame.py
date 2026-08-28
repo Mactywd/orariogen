@@ -109,7 +109,7 @@ def _statement(code, labels):
     return causali.CAUSALI[code].format(resource=testo, subject=testo, unit=testo)
 
 
-def rank_constraints(schedule, relaxed=True):
+def rank_constraints(schedule, relaxed=True, selected=None):
     """La classifica dei vincoli per fallimenti causati.
 
     ⚠ **Le firme di settimana sono una dimensione, non un dettaglio**, e qui
@@ -129,7 +129,7 @@ def rank_constraints(schedule, relaxed=True):
     for representative, _weeks in week_signatures(schedule):
         state = ScheduleState.build(schedule, week=representative)
         names.update(state.resource_names)
-        for a in free_candidates(state):
+        for a in free_candidates(state, selected):
             # ⚠ Si tocca `celle` anche a mani vuote: un'attività più lunga
             # della giornata non ha nessuna cella da provare, quindi il ciclo
             # sotto non gira mai. Senza questa riga sparirebbe dal rapporto —

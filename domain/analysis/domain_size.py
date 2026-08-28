@@ -25,10 +25,17 @@ def _hard_keys(state, resources, checkers):
     return keys
 
 
-def free_candidates(state):
+def free_candidates(state, selected=None):
     """Le immobili già piazzate consumano capienza; tutte le altre sono
     candidate — incluse le piazzate mobili, perché la domanda è «entra
     tutto?», non «l'orario di adesso è valido».
+
+    `selected` è l'estrazione, e vi entra come una **immobilità di
+    esecuzione**: ciò che le sta fuori resta dov'è e continua a occupare, esatto
+    come una congelata. È la stessa semantica di `SolverContext.build`, dove
+    l'estrazione non toglie attività dal modello ma ne fissa il dominio alla
+    collocazione corrente — un perimetro restringe ciò su cui si agisce, mai
+    ciò che si conta.
 
     ⚠ Le candidate si spiazzano TUTTE prima di calcolare i domini: se restano
     piazzate si tolgono il dominio a vicenda, la capienza risulta più bassa
@@ -40,8 +47,18 @@ def free_candidates(state):
     preparazione dello stato: due copie divergerebbero, e la §4.1 è
     precisamente il tipo di precauzione che si perde in una copia."""
     frozen = {Activity.Immobility.FIXED, Activity.Immobility.LOCKED_IN_PLACE}
-    free = [state.activities[aid] for aid in sorted(state.activities)
-            if not (state.activities[aid].immobility in frozen and aid in state.placed)]
+    free = []
+    for aid in sorted(state.activities):
+        act = state.activities[aid]
+        if selected is not None and aid not in selected:
+            # ⚠ Fuori perimetro **sempre**, piazzata o no: una congelata mai
+            # piazzata resta candidata perché non c'è niente a cui congelarla,
+            # ma una fuori estrazione non è candidata per definizione — non è
+            # il lavoro che si è chiesto di fare.
+            continue
+        if act.immobility in frozen and aid in state.placed:
+            continue
+        free.append(act)
     for a in free:
         if a.id in state.placed:
             state.unplace(a.id)

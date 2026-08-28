@@ -38,11 +38,13 @@ class RoomContext:
     assigned: dict = field(default_factory=dict)  # id → BoolVar «assegnata»
 
     @classmethod
-    def build(cls, schedule, ignora_opzionali=()):
+    def build(cls, schedule, ignora_opzionali=(), extraction=None):
         signatures = week_signatures(schedule)
         states = {rep: ScheduleState.build(schedule, week=rep)
                   for rep, _ in signatures}
         ignora = frozenset(ignora_opzionali)
+        selected = (None if extraction is None
+                    else set(extraction.activities.values_list("id", flat=True)))
 
         requests, dichiarate, previous, held = {}, {}, {}, {}
         for state in states.values():
@@ -50,6 +52,15 @@ class RoomContext:
                 if aid in requests or aid in held or aid not in state.placed:
                     continue
                 aula = state.assigned_room.get(aid)
+                if selected is not None and aid not in selected:
+                    # ⚠ Fuori perimetro: **mai** una decisione, nemmeno senza
+                    # aula. L'immobile senza assegnazione resta una decisione
+                    # perche' il blocco riguarda l'aula che ha; l'estrazione
+                    # no, perche' riguarda il lavoro che si e' chiesto di fare.
+                    # Cio' che tiene un'aula continua a consumarne la capienza.
+                    if aula is not None:
+                        held[aid] = aula
+                    continue
                 rooms = {r.pk for r in act.rooms.all()}
                 # Il blocco riguarda l'aula che ha, non quella che non ha:
                 # un'immobile senza assegnazione resta una decisione.
@@ -114,7 +125,8 @@ class RoomContext:
         return dict(load)
 
 
-def build_room_model(schedule, *, allow_unassigned=True, ignora_opzionali=()):
+def build_room_model(schedule, *, allow_unassigned=True, ignora_opzionali=(),
+                     extraction=None):
     """`allow_unassigned=False` pretende un'aula per ogni richiesta: e' il modo
     di chiedere «questo vincolo morde?». Con la rinuncia ammessa la risposta a
     un vincolo violato non e' l'infattibilita' ma la **rinuncia**, che e'
@@ -129,7 +141,8 @@ def build_room_model(schedule, *, allow_unassigned=True, ignora_opzionali=()):
     catena a due livelli) e' compito di chi risolve — `solve_rooms` (Task 4)
     per la fase vera, un `model.Maximize(...)` locale per chi vuole solo
     osservare il modello grezzo in un test."""
-    ctx = RoomContext.build(schedule, ignora_opzionali=ignora_opzionali)
+    ctx = RoomContext.build(schedule, ignora_opzionali=ignora_opzionali,
+                            extraction=extraction)
     model = cp_model.CpModel()
     for aid in sorted(ctx.requests):
         lits = []
@@ -220,12 +233,13 @@ def livelli_aule(ctx, model):
 
 
 def solve_rooms(schedule, *, time_limit=None, workers=None,
-                allow_unassigned=True, ignora_opzionali=()):
+                allow_unassigned=True, ignora_opzionali=(), extraction=None):
     """⚠ `time_limit` e' **per livello** della catena, non per la chiamata:
     e' la forma di `solve_chain`, e va detta."""
     started = time.monotonic()
     model, ctx = build_room_model(schedule, allow_unassigned=allow_unassigned,
-                                  ignora_opzionali=ignora_opzionali)
+                                  ignora_opzionali=ignora_opzionali,
+                                  extraction=extraction)
     catena = livelli_aule(ctx, model)
 
     def estrai(solver):

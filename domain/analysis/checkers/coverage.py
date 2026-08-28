@@ -22,16 +22,26 @@ class CoverageChecker(Checker):
                 continue
             expected = state.services_by_plan.get(plan_id, {})
             actual = defaultdict(int)
+            colpevoli = defaultdict(list)
             for aid, act in state.activities.items():
                 if key in state.tokens[aid]:
                     actual[act.subject_id] += act.duration_minutes
+                    colpevoli[act.subject_id].append(aid)
             for subject_id in sorted(expected.keys() | actual.keys()):
                 want, got = expected.get(subject_id, 0), actual.get(subject_id, 0)
                 if want != got:
+                    # ⚠ Le attività nominate sono quelle che **ci sono**, e con
+                    # `got < want` sono per definizione troppo poche: il
+                    # colpevole è un'attività che non esiste, e nessuna
+                    # estrazione può nominarla. Nominare quelle presenti resta
+                    # il verdetto utile — sono le righe da cui si corregge il
+                    # monte ore — ma non è l'elenco completo delle colpevoli,
+                    # perché quell'elenco in un verso non esiste.
                     yield Finding(
                         "coverage_mismatch",
                         causali.message("coverage_mismatch", unit=unit_name,
                                         subject=state.subject_names[subject_id]),
                         Severity.HARD, resources=(key,),
+                        activities=tuple(sorted(colpevoli.get(subject_id, ()))),
                         quantities={"expected_minutes": want, "actual_minutes": got},
                     )

@@ -60,3 +60,29 @@ def test_la_rinuncia_e_nominata_e_l_uscita_e_diversa_da_zero():
         call_command("assign_rooms", schedule=env["schedule"].pk, stdout=out)
     testo = out.getvalue()
     assert "LAB-FIS" in testo and env["klass"].name in testo
+
+
+def test_l_estrazione_riassegna_solo_le_estratte():
+    """Il perimetro nella seconda fase: chi sta fuori tiene la sua aula e ne
+    consuma la capienza, quindi la ripartizione è **incrementale** invece di
+    rifare tutto — che è ciò che serve dopo aver spostato tre lezioni."""
+    from domain.models import Extraction
+
+    env = mini_school(days=1, slots=2)
+    lab = Room.objects.create(name="LAB")
+    altra = Room.objects.create(name="A1")
+    fuori = make_activity(env["subject"], rooms=[lab, altra])
+    dentro = make_activity(env["subject"], rooms=[lab, altra])
+    place(env["schedule"], fuori, 0, 0, room=lab)
+    place(env["schedule"], dentro, 0, 0)
+    estrazione = Extraction.objects.create(name="solo-dentro")
+    estrazione.activities.add(dentro)
+
+    testo = _esegui(env["schedule"], estrazione="solo-dentro", applica=True,
+                    lavoratori=1)
+
+    assert "Richieste d'aula: 1" in testo
+    assert Placement.objects.get(activity=fuori).assigned_room_id == lab.pk
+    # L'unica aula libera in quella cella è l'altra: la capienza di LAB la
+    # consuma chi sta fuori, senza essere una decisione.
+    assert Placement.objects.get(activity=dentro).assigned_room_id == altra.pk
