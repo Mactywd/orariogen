@@ -24,7 +24,7 @@ class Solution:
 
 
 def build_model(schedule, extraction=None, allow_unplaced=True,
-                ignora_opzionali=()):
+                ignora_opzionali=(), pinned=None):
     """`allow_unplaced=False` pretende il piazzamento di ogni attività libera:
     è il modello di prima dello scarto, e resta il modo di chiedere «questo
     vincolo morde?». Con lo scarto ammesso la risposta a una violazione forzata
@@ -33,7 +33,14 @@ def build_model(schedule, extraction=None, allow_unplaced=True,
     `ignora_opzionali` porta i `Resource.Kind` per cui le indisponibilità
     **gialle** non si rispettano: è l'opzione di calcolo di EDT «Piazza le
     attività anche sulle fasce con indisponibilità opzionali», che si dichiara
-    per categoria di risorsa e non per la singola."""
+    per categoria di risorsa e non per la singola.
+
+    `pinned` — `{id attività: (giorno, fascia)}` — impone una collocazione e
+    lascia al resto del modello il compito di sistemarsi attorno: è `Piazza e
+    sistema` di EDT. ⚠ Una cella che i pre-filtri hanno tolto rende il modello
+    **infattibile** invece di essere ignorata in silenzio: un pin che non
+    vincola sarebbe la peggiore delle risposte, perché l'utente vedrebbe
+    l'attività altrove senza sapere perché."""
     ctx = SolverContext.build(schedule, extraction=extraction,
                               ignora_opzionali=ignora_opzionali)
     builders = all_builders()
@@ -68,6 +75,14 @@ def build_model(schedule, extraction=None, allow_unplaced=True,
         ctx.placed_var[aid] = piazzata
         model.Add(sum(lits) == piazzata)
 
+    for aid, (day, slot) in sorted((pinned or {}).items()):
+        lit = ctx.x.get((aid, day, slot))
+        if lit is None:
+            ctx.pin_fuori_dominio.append((aid, day, slot))
+            model.AddBoolOr([])     # clausola vuota: falsa, quindi INFEASIBLE
+        else:
+            model.Add(lit == 1)
+
     ctx.index_cells()
     ctx.vocab = Vocabulary(ctx, model)
     for builder in builders:
@@ -79,7 +94,7 @@ def build_model(schedule, extraction=None, allow_unplaced=True,
 
 
 def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
-          workers=None, ignora_opzionali=(), arbitrato=None):
+          workers=None, ignora_opzionali=(), arbitrato=None, pinned=None):
     """`workers=1` rende la ricerca **riproducibile**. Serve ai test che
     osservano *quale* ottimo torna e non solo che ne torni uno: con più
     lavoratori CP-SAT restituisce l'ottimo che il primo thread trova, e due
@@ -97,7 +112,7 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
     started = time.monotonic()
     model, ctx = build_model(schedule, extraction=extraction,
                              allow_unplaced=allow_unplaced,
-                             ignora_opzionali=ignora_opzionali)
+                             ignora_opzionali=ignora_opzionali, pinned=pinned)
     catena = livelli(ctx, model, arbitrato)
 
     def estrai(solver):
@@ -138,6 +153,7 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
                                    for aid in unplaced),
             "livelli": tuple(e.as_dict() for e in esiti),
             "arbitraggi": tuple(ctx.arbitraggi),
+            "pin_fuori_dominio": tuple(ctx.pin_fuori_dominio),
             "variabili": len(proto.variables),
             "constraint": len(proto.constraints),
             "secondi": round(time.monotonic() - started, 3),

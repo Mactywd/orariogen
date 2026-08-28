@@ -39,6 +39,10 @@ class SolverContext:
                              # com'era prima del solve: L4 minimizza gli spostamenti
     arbitraggi: list = field(default_factory=list)   # il rendiconto dei tetti di
                              # non-regressione posti sulla popolazione sacrificata
+    pin_fuori_dominio: list = field(default_factory=list)  # i pin di `Piazza e
+                             # sistema` su una cella che i pre-filtri hanno
+                             # tolto: il modello è infattibile *per quello*, e
+                             # va distinto da una riparazione impossibile
 
     @classmethod
     def build(cls, schedule, extraction=None, ignora_opzionali=()):

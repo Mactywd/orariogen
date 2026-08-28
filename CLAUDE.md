@@ -71,9 +71,10 @@ domain/                l'app Django del modello di dominio v1
                         la catena lessicografica (objective.py), le quote
                         di alleggerimento (relaxation.py), i criteri di
                         qualità (quality.py + criteria.py), la separazione
-                        per popolazione con la perdita tollerata (Arbitrato)
-                        e la **seconda fase** — l'assegnazione delle aule
-                        (rooms.py), modello a sé con due livelli propri
+                        per popolazione con la perdita tollerata (Arbitrato),
+                        `Piazza e sistema` (place_and_fix.py) e la **seconda
+                        fase** — l'assegnazione delle aule (rooms.py), modello
+                        a sé con due livelli propri
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze) e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
@@ -246,6 +247,15 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > monotone** ne restano fuori, il D.T.B. compreso: il criterio del dominio
 > residuo su di loro è falso, e contarle le metterebbe in cima a qualunque
 > classifica per un artefatto. La rinuncia la dichiara il comando.
+>
+> Dallo stesso giorno c'è **`Piazza e sistema`** (`domain/solver/place_and_fix.py`,
+> `manage.py place_and_fix`): imporre una collocazione e lasciare che l'orario
+> si ricomponga. Con esso è sciolta la **condizione 1** delle tre di ADR-015 —
+> *«qual è l'insieme minimo di attività da spostare perché A stia qui?»* — che
+> è ciò che tiene riapribile l'esclusione del risolutore passo-passo. Sul
+> Fermi pieno: **una** attività spostata su 284, in ~4 s. ⚠ Resta fuori,
+> dichiarata, la casella «Ignora i vincoli dell'attività selezionata»: da noi
+> non è separabile per attività.
 >
 > Restano i punti aperti elencati sotto.
 
@@ -521,6 +531,67 @@ Due conseguenze da non perdere di vista, entrambe scritte negli ADR:
   decomposizione per classe, che era la semplificazione più naturale su cui contare.
 
 ## Changelog
+
+- **2026-08-28 (piazza e sistema)** — **L'ultima voce strutturale ✅ di
+  scope-v1 rimasta assente è dentro**, e con lei la **condizione 1** delle tre
+  «da non perdere» di ADR-015: *«qual è l'insieme minimo di attività da
+  spostare perché A stia qui?»*. È lo stesso motore del risolutore passo-passo
+  escluso da v1, e averlo tiene quella porta aperta invece di richiederne la
+  riscrittura. `domain/solver/place_and_fix.py` più `manage.py place_and_fix`.
+
+  🔑 **Il pezzo costa poco perché la catena lessicografica lo era già.**
+  Imporre una cella è un vincolo hard — `pinned` su `build_model` —; «disturbare
+  il meno possibile» è **L4**, la stabilità, scritta per ADR-010 e per il
+  secondo quadrimestre da non stravolgere. L'ordine della catena era già
+  quello giusto e non si tocca: **non scartare** viene prima di **non
+  spostare**, perché ricollocare è meno grave che buttare fuori. Il minimo di
+  `moved` è quindi lessicografico *dopo* L1-L3, ed è la nozione corretta, non
+  un'approssimazione. Un test lo prova invece di dichiararlo.
+
+  🔑 **E la diagnosi del «perché no» è la `blame` scritta poche ore prima.**
+  Quando la cella non è nel dominio dell'attività, `trial_placements` sa già
+  *quali* causali la escludono: il rifiuto è una frase del catalogo con dentro
+  il nome del docente, non un `INFEASIBLE`. Le due risposte restano
+  **distinte**, ed è il punto: «la cella è vietata all'attività dai suoi
+  stessi vincoli» (nessuno spostamento aiuterebbe — una dimostrazione) e
+  «l'orario non si ricompone attorno» (la cella andrebbe bene, ma chi c'è non
+  ha dove andare — il caso in cui servirebbe il risolutore passo-passo).
+
+  ⚠ **La diagnosi va filtrata alle sole causali dei pre-filtri, o incolpa chi
+  si potrebbe spostare.** `trial_placements` valuta tutti i checker contro lo
+  stato corrente, quindi sulla cella contesa vede anche l'occupazione da parte
+  di chi ci sta — che è precisamente ciò che `Piazza e sistema` sposterebbe.
+  I builder che implementano `restrict()` sono **due**, griglia e
+  indisponibilità, e un test lo tiene fermo: se ne comparisse un terzo, la
+  diagnosi diventerebbe muta sul suo caso.
+
+  ⚠ **`moved` da solo mentirebbe, e serve `dropped`.** Un'attività che era
+  piazzata e che il modello ha dovuto **scartare** non si è spostata: ha perso
+  il posto. «Zero spostamenti» su un orario che ha perso un'ora sarebbe il
+  rendiconto peggiore possibile. Il buco l'ha trovato la mutazione: nessuno
+  dei test iniziali forzava uno scarto, quindi `dropped` era affermato solo da
+  un `== ()` che una costante vuota soddisfa.
+
+  ⚠ **Resta fuori, dichiarata: «Ignora i vincoli dell'attività selezionata».**
+  In EDT è una casella; da noi non è separabile per attività, perché i vincoli
+  di A non sono *di* A — una riga di materia sulla classe lega A alle sue
+  sorelle, e spegnerli vorrebbe dire attraversare ventisei builder. Una
+  versione parziale (riaprire i soli pre-filtri) lascerebbe forzare oltre
+  un'indisponibilità rossa ma non oltre un'incompatibilità di materia: un
+  modello mentale incoerente, peggiore dell'assenza.
+
+  **Otto mutazioni, otto esiti distinti**, e l'oracolo del file è verificato a
+  parte — spegnendo `OccupationBuilder` diventa rosso, quindi può fallire.
+
+  🔑 **La misura, e stavolta il Fermi la può dare.** Su un orario **pieno**
+  (284 attività piazzate, zero scarti) forzare una lezione dove ne sta
+  un'altra della stessa classe costa **uno** spostamento: l'insieme minimo è
+  uno scambio. ⚠ Il costo è ~4 s contro il secondo scarso del `solve` che ha
+  generato l'orario, e la differenza è **L4**, che prima non aveva niente da
+  conservare e ora confronta 284 collocazioni — è il prezzo di disturbare
+  poco, non un difetto. Come sempre sul Fermi la copertura resta fuori: senza
+  righe di vincolo la ricomposizione incontra la sola occupazione.
+  **707 test verdi**, 16 skip.
 
 - **2026-08-28 (quale vincolo allento)** — **La seconda delle due lacune di
   EDT è colmata: `domain/analysis/blame.py`.** `scope-v1.md` le chiama «la

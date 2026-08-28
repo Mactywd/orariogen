@@ -182,9 +182,15 @@ Decise il **2026-07-26**, registrate in [ADR-015](decisioni.md).
 
 Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto ora.
 
-1. **`Piazza e sistema` richiede comunque** la domanda *«qual è l'insieme minimo di
-   attività da spostare perché A stia qui?»*. È lo stesso motore del risolutore
-   passo-passo escluso: prevederlo tiene quella porta aperta.
+1. ✅ **Sciolta il 2026-08-28.** **`Piazza e sistema` richiede comunque** la
+   domanda *«qual è l'insieme minimo di attività da spostare perché A stia
+   qui?»*. È lo stesso motore del risolutore passo-passo escluso: prevederlo
+   tiene quella porta aperta. → `domain/solver/place_and_fix.py`: la
+   collocazione è un vincolo hard (`pinned`), il minimo è **L4** della catena
+   lessicografica, e la risposta alla domanda è `PlaceAndFix.moved`. Sul Fermi
+   pieno, **una** attività su 284. ⚠ Fuori, dichiarata: la casella «Ignora i
+   vincoli dell'attività selezionata», che da noi non è separabile per
+   attività.
 2. **Rimandare Hall funziona solo se l'analisi di capienza è un componente a sé**,
    non un'interpretazione a posteriori dell'output del solver.
 3. **La classe articolata retta dalle parti** presuppone che una **parte** possa
