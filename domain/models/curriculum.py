@@ -47,6 +47,13 @@ class Service(models.Model):
     class_minutes = models.PositiveIntegerField()
     reduced_minutes = models.PositiveIntegerField(null=True, blank=True)
     split_minutes = models.PositiveIntegerField(null=True, blank=True)
+    #: ADR-020. Le righe dello stesso piano che condividono l'etichetta sono
+    #: **alternative**: un alunno ne segue esattamente una. Senza di essa il
+    #: piano è un catalogo letto come curriculum, e IRC/alternativa produce due
+    #: scostamenti su ogni classe italiana. ⚠ È la forma minima del `MS` di EDT
+    #: (`Modalité d'élection`, sette codici, `R` = Religioso): l'enumerazione
+    #: si copia quando `MS` sarà osservata in UI, non prima (O3 di todo.md).
+    election_group = models.CharField(max_length=50, null=True, blank=True)
 
     class Meta:
         constraints = [

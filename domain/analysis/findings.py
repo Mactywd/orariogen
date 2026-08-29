@@ -27,6 +27,7 @@ class FindingKey(NamedTuple):
     activities: tuple[int, ...]
     quantities: tuple[tuple[str, int], ...]
     subject: int | None
+    group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class Finding:
     quantities: Mapping[str, int] = field(default_factory=dict)
     weeks: tuple[int, ...] = ()        # settimane in cui la violazione vale
     subject: int | None = None         # pk della Subject, quando la causale la nomina
+    group: str | None = None           # gruppo di elezione (ADR-020), quando la causale lo nomina
 
     @property
     def key(self):
@@ -53,6 +55,10 @@ class Finding:
         produceva **un** finding, e *quale* delle due materie sopravvivesse
         dipendeva dall'ordine di iterazione. Da qui `subject`.
 
+        ⚠ Da qui anche `group`: due gruppi in alternativa insoddisfatti sulla
+        stessa unità hanno causale, risorsa e quantità identiche, ed è la
+        stessa forma del difetto (ADR-020).
+
         ⚠ `subject_constraints` nomina anch'esso una materia e **non** ne ha
         bisogno: là la frase porta `subject_a`, che è la stessa per tutte le
         righe che potrebbero collidere, quindi due verdetti collassati dicono
@@ -60,4 +66,5 @@ class Finding:
         li ha generati, che è un limite già dichiarato in `blame.py` e di
         natura diversa."""
         return FindingKey(self.code, self.resources, self.activities,
-                          tuple(sorted(self.quantities.items())), self.subject)
+                          tuple(sorted(self.quantities.items())), self.subject,
+                          self.group)

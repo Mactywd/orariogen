@@ -63,7 +63,8 @@ RILEVATORI = {
     "problemi_di_sede": ("site_transition",),
     "a_cavallo_dell_intervallo": ("break_straddled",),
     "fuori_griglia": ("slot_out_of_grid", "holiday"),
-    "non_conformi_ai_piani_di_studi": ("coverage_mismatch",),
+    "non_conformi_ai_piani_di_studi": ("coverage_mismatch", "election_mismatch",
+                                       "ambiguous_study_plan"),
 }
 
 #: Gli stati di EDT che il nostro modello ha. ⚠ `Scartate` e `In attesa` sono

@@ -71,6 +71,7 @@ class AtomMap:
     part: dict    # ClassPart pk → frozenset di atomi
     klass: dict   # SchoolClass pk → frozenset di atomi
     names: dict   # atomo → nome leggibile, per le causali
+    parts_of: dict  # atomo → tupla delle parti che lo compongono (ADR-020)
 
     @classmethod
     def build(cls):
@@ -79,7 +80,7 @@ class AtomMap:
                 "pk", "partition_id", "partition__school_class_id"):
             by_class[class_id][partition_id].append(pk)
         class_names = dict(SchoolClass.objects.values_list("pk", "name"))
-        part, klass, names = {}, {}, {}
+        part, klass, names, parts_of = {}, {}, {}, {}
         for class_id, partitions in by_class.items():
             blocks = [sorted(parts) for _, parts in sorted(partitions.items()) if parts]
             if len(blocks) < 2:
@@ -90,10 +91,12 @@ class AtomMap:
                 key = "atom:{}:{}".format(class_id, "-".join(str(p) for p in combo))
                 keys.append(key)
                 names[key] = label
+                parts_of[key] = combo
                 for part_pk in combo:
                     part.setdefault(part_pk, set()).add(key)
             klass[class_id] = frozenset(keys)
-        return cls({p: frozenset(v) for p, v in part.items()}, klass, names)
+        return cls({p: frozenset(v) for p, v in part.items()}, klass, names,
+                   parts_of)
 
 
 def activity_tokens(activity, assigned_room_id=None, atoms=None):
@@ -186,7 +189,9 @@ class ScheduleState:
         self.part_class = {}          # ClassPart pk → SchoolClass pk (partizione)
         self.class_caps = {}          # SchoolClass pk → max_weekly_weight_per_student
         self.services_by_plan = {}    # StudyPlan pk → {subject_id: class_minutes}
+        self.election_groups = {}     # StudyPlan pk → {etichetta: (subject_id, …)} (ADR-020)
         self.student_units = []       # [(chiave, StudyPlan pk, nome)] — coverage._student_units
+        self.unit_plan_conflict = {}  # chiave → quanti piani diversi la dichiarano (ADR-020)
         self.break_boundaries = []    # boundary_slot degli intervalli della griglia
         self.subject_names = {}       # Subject pk → nome
 
@@ -258,19 +263,42 @@ class ScheduleState:
 
         state.subject_names = dict(Subject.objects.values_list("id", "name"))
         services = defaultdict(dict)
+        elezioni = defaultdict(lambda: defaultdict(list))
         for s in Service.objects.all():
             services[s.study_plan_id][s.subject_id] = s.class_minutes
+            if s.election_group:
+                elezioni[s.study_plan_id][s.election_group].append(s.subject_id)
         state.services_by_plan = dict(services)
+        state.election_groups = {plan: {label: tuple(sorted(subs))
+                                        for label, subs in gruppi.items()}
+                                 for plan, gruppi in elezioni.items()}
 
         for klass in SchoolClass.objects.select_related("study_plan"):
             parts = list(ClassPart.objects.filter(partition__school_class=klass)
                          .select_related("partition__school_class__study_plan", "study_plan"))
-            if parts:
-                for part in parts:
-                    state.student_units.append(
-                        (part.pk, part.effective_study_plan.pk, part.name))
-            else:
+            if not parts:
                 state.student_units.append((klass.pk, klass.study_plan_id, klass.name))
+                continue
+            by_pk = {p.pk: p for p in parts}
+            # ADR-020: l'unità della copertura è l'**atomo**, cioè la
+            # combinazione di parti in cui sta un alunno — una per partizione.
+            # Con meno di due partizioni l'atomo *è* la parte, e AtomMap non ne
+            # costruisce: la chiave resta la parte, come prima.
+            combinazioni = [(key, atoms.parts_of[key])
+                            for key in sorted(atoms.klass.get(klass.pk, ()))]
+            if not combinazioni:
+                combinazioni = [(p.pk, (p.pk,)) for p in parts]
+            for key, combo in combinazioni:
+                membri = [by_pk[pk] for pk in combo]
+                propri = {p.study_plan_id for p in membri if p.study_plan_id}
+                if len(propri) > 1:
+                    # ⚠ Non si fonde e non si sceglie: si nomina l'errore.
+                    state.unit_plan_conflict[key] = len(propri)
+                plan_id = propri.pop() if len(propri) == 1 else klass.study_plan_id
+                nome = (membri[0].name if len(membri) == 1
+                        else "{} [{}]".format(klass.name,
+                                              " · ".join(p.name for p in membri)))
+                state.student_units.append((key, plan_id, nome))
 
         state.break_boundaries = [b.boundary_slot for b in grid.breaks.all()]
         return state

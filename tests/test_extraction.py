@@ -8,7 +8,7 @@ import pytest
 from domain import extraction as ex
 from domain.analysis.state import activity_tokens
 from domain.models import (Activity, ClassPart, ClassPartition, Extraction,
-                           Group, ResourceUnavailability, Room)
+                           Group, ResourceUnavailability, Room, Subject)
 from tests.analysis_helpers import make_activity, mini_school, place
 
 pytestmark = pytest.mark.django_db
@@ -163,6 +163,31 @@ def test_lo_scostamento_dal_quadro_orario_nomina_le_attivita_che_ci_sono():
 
     r = ex.rileva(env["schedule"], "non_conformi_ai_piani_di_studi")
     assert r.activity_ids == {act.pk}
+
+
+def test_lo_scostamento_dal_quadro_orario_nomina_anche_le_elezioni_sbagliate():
+    """ADR-020: `non conformi ai piani di studi` è il rilevatore del quadro
+    orario, e l'elezione fa parte del quadro orario. Le due attività
+    dichiarate a classe intera invece che sulle parti sono **la** riga da cui
+    si corregge, e vanno nominate come qualunque altro scostamento."""
+    env = mini_school()
+    partizione = ClassPartition.objects.create(school_class=env["klass"],
+                                               name="IRC")
+    ClassPart.objects.create(name="1A_REL", partition=partizione)
+    ClassPart.objects.create(name="1A_ALT", partition=partizione)
+    religione = Subject.objects.create(code="REL", name="Religione",
+                                       discipline=env["discipline"])
+    alternativa = Subject.objects.create(code="ALT", name="Alternativa",
+                                         discipline=env["discipline"])
+    rel = make_activity(religione, classes=[env["klass"]])
+    alt = make_activity(alternativa, classes=[env["klass"]])
+    for materia in (religione, alternativa):
+        servizio = env["plan"].services.get(subject=materia)
+        servizio.election_group = "IRC"
+        servizio.save()
+
+    r = ex.rileva(env["schedule"], "non_conformi_ai_piani_di_studi")
+    assert r.activity_ids == {rel.pk, alt.pk}
 
 
 # -- composizione ------------------------------------------------------------

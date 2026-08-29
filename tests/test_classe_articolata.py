@@ -16,16 +16,11 @@ compra: parti della stessa partizione sono insiemi disgiunti di alunni, quindi
 non confliggono — e l'ora comune a classe intera **occupa** entrambe le parti,
 quindi nessuno può fare laboratorio mentre la classe fa italiano.
 
-⚠ **La seconda metà non tiene, e non riguarda solo la classe articolata.**
-L'unità della copertura è la **parte**, e l'atteso è il piano **intero** di
-quella parte: è una lettura *per alunno*, ed è quella giusta. Ma un alunno non
-sta in una parte, sta in una **combinazione** di parti — una per partizione — e
-quella combinazione è l'**atomo** di ADR-017, che il modello già costruisce per
-l'occupazione e non per il curriculum. Da cui il limite, tenuto fermo
-dall'ultimo test di questo file: appena una classe ha **due** partizioni — o
-anche una sola, se le due parti ricevono materie diverse, cioè IRC e
-alternativa: la configurazione di **ogni** classe italiana — la copertura
-produce scostamenti che non esistono.
+⚠ **La seconda metà non teneva**, e la correzione è ADR-020: la copertura
+misura ora l'**atomo** — la combinazione di parti in cui sta un alunno — e le
+righe in **alternativa** del piano si dichiarano tali. I due difetti e la loro
+chiusura stanno in `tests/test_copertura_per_alunno.py`; qui resta il caso in
+cui il dato **non** è dichiarato, che è l'ultimo test di questo file.
 
 Nessuno se n'era accorto perché il Fermi **non ha nessuna partizione**, e
 `test_beyond_fermi.py` le costruisce senza mai chiamare `check_schedule`: la
@@ -152,37 +147,28 @@ def test_l_ora_comune_a_classe_intera_occupa_le_parti():
 
 
 @pytest.mark.django_db
-def test_l_unita_della_copertura_e_la_parte_dove_dovrebbe_essere_l_atomo():
-    """⚠ Il limite, tenuto fermo perché chi lo toglie debba prima cancellare
-    questo test e leggerne il perché.
+def test_senza_elezione_dichiarata_irc_produce_due_scostamenti():
+    """⚠ Il caso in cui il dato **non** c'è, tenuto fermo perché chi crede che
+    ADR-020 abbia reso IRC un caso risolto per sempre debba prima cancellare
+    questo test.
 
     L'istanza è la classe italiana **normale**: nessuna articolazione, solo IRC
     e alternativa — due parti della stessa partizione che ricevono materie
     diverse. Il piano di classe dichiara entrambe le materie, come fa il quadro
-    orario di una scuola vera, e la copertura produce **due scostamenti che non
-    esistono**: chi fa religione risulta debitore dell'ora di alternativa, e
-    viceversa.
+    orario di una scuola vera, e **non dichiara che sono in alternativa**: la
+    copertura le legge allora come dovute entrambe, e produce due scostamenti
+    che non esistono — chi fa religione risulta debitore dell'ora di
+    alternativa, e viceversa.
 
-    🔑 La causa non è la misura ma l'**unità**. L'atteso è il piano intero
-    della parte, cioè il curriculum di *un alunno*: lettura giusta, unità
-    sbagliata, perché un alunno sta in una **combinazione** di parti — una per
-    partizione — e quella combinazione è l'**atomo** di ADR-017. Con una sola
-    partizione parte e atomo coincidono, ed è per questo che
-    `test_la_copertura_misura_ogni_parte_sul_proprio_piano` qui sopra è verde:
-    là le due parti hanno curriculum diversi *e* piani diversi.
+    🔑 È il comportamento **giusto**, e non un difetto residuo: il piano è un
+    catalogo, e senza il dato che le marca l'alternativa non è deducibile da
+    nessuna proprietà dell'orario. Con `Service.election_group` compilato i due
+    scostamenti spariscono, e la misura è in
+    `tests/test_copertura_per_alunno.py::test_l_elezione_dichiarata_toglie_lo_scostamento_di_irc`.
 
-    ⚠ Una scappatoia esiste ed è misurata: dare a `1A_ALT` un piano **gemello**
-    del piano di classe, identico salvo ALT al posto di REL, azzera i finding.
-    Ma costa un `StudyPlan` per ogni combinazione — quattro per una 3A
-    articolata con IRC — cioè materializzare gli atomi come anagrafica, che è
-    ciò che ADR-017 ha deciso di **non** fare per l'occupazione.
-
-    Alternative, entrambe da decidere e nessuna da indovinare qui: portare la
-    copertura sull'atomo, oppure leggere il monte ore **tripartito** del
-    servizio (`reduced_minutes`, `split_minutes` — nello schema dal primo
-    giorno, ⚠ letti da **nessuno**), che è la risposta di EDT alla stessa
-    domanda ma la cui semantica non è mai stata osservata in UI
-    (`docs/edt/piani-di-studi.md` la elenca fra le cose da osservare)."""
+    ⚠ Qui c'è anche la ragione per cui *questa* istanza non si chiude portando
+    l'unità sull'atomo: la partizione è **una sola**, e con una partizione sola
+    l'atomo *è* la parte."""
     env = mini_school(days=2, slots=2)
     klass, piano = env["klass"], env["plan"]
     partizione = ClassPartition.objects.create(school_class=klass, name="IRC")

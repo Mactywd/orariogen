@@ -62,8 +62,11 @@ LEGALITA = CODICI - {"activity_unplaced"}
 # Le causali del catalogo che restano **deliberatamente** fuori.
 FUORI = {
     # nessun builder: PLACEMENT_INDEPENDENT, il solver non crea ne' distrugge
-    # attivita' (vedi tests/test_solver_registry_completo.py)
-    "coverage_mismatch",
+    # attivita' (vedi tests/test_solver_registry_completo.py). Le altre due
+    # sono lo stesso checker (ADR-020): l'elezione e il piano ambiguo sono
+    # predicati sui **dati** — il monte ore e chi lo deve — e nessuna
+    # collocazione li cambia.
+    "coverage_mismatch", "election_mismatch", "ambiguous_study_plan",
     # non sono HARD: violazioni() le filtrerebbe comunque per severita', ma
     # elencarle qui rende la scelta leggibile invece che implicita
     "unavailability_optional", "preference",

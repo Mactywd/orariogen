@@ -34,7 +34,10 @@ def test_message_formatta_i_nomi():
 
 
 def test_tutte_le_causali_usano_solo_segnaposto_noti():
-    ammessi = {"resource", "subject", "unit"}
+    # ⚠ `group` è entrato con ADR-020, ed è un **nome** come gli altri tre:
+    # il gruppo di elezione. I numeri restano fuori dalle frasi e stanno in
+    # `quantities`, che è ciò che rende il verdetto verificabile.
+    ammessi = {"resource", "subject", "unit", "group"}
     for code, template in causali.CAUSALI.items():
         campi = set(re.findall(r"{(\w+)}", template))
         assert campi <= ammessi, f"{code}: segnaposto {campi - ammessi}"
