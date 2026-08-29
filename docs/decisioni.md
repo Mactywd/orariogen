@@ -702,3 +702,124 @@ Fermi — che non ha sedi — è invariato per costruzione. Il caso è tenuto fe
 da `test_adr018_due_sedi_sulla_stessa_fascia_non_bloccano_max_site_changes`
 (`tests/test_solver_sites.py`), verificato per mutazione: ripristinando il
 conteggio a insiemi, `solve()` torna `INFEASIBLE`.
+
+---
+
+## ADR-020 — La copertura è per alunno: l'unità è l'atomo, l'alternativa è un dato
+
+**Decisione.** `structural:coverage` misura l'**atomo** — la combinazione di
+parti in cui sta un alunno, una per partizione ([ADR-017](#adr-017--parti-di-partizioni-diverse-della-stessa-classe-confliggono)) — e non
+la parte. E il piano di studi smette di essere letto come se ogni sua riga
+fosse dovuta da ogni alunno: le righe **in alternativa** si dichiarano tali
+(`Service.election_group`), e di un gruppo l'alunno ne segue **esattamente
+una**.
+
+Con meno di due partizioni l'atomo *è* la parte e la chiave non cambia di un
+bit; il piano dell'atomo è quello della parte che lo dichiara, e se **due**
+parti della stessa combinazione ne dichiarano di diversi l'unità **non si
+misura**: si nomina l'errore (`ambiguous_study_plan`).
+
+**Alternative scartate.**
+
+1. **Portare solo l'unità sull'atomo.** Non basta, e la misura lo dice: il caso
+   che aveva aperto la voce — IRC e attività alternativa — è una classe con
+   **una sola** partizione, dove l'atomo *è* la parte. Chiude il lato
+   osservato e lascia intatto quello atteso.
+2. **Un `StudyPlan` per combinazione.** Chiude entrambi i lati, ed è misurato
+   che funziona, ma materializza gli atomi come anagrafica — quattro piani per
+   una 3A articolata con IRC — che è esattamente ciò che ADR-017 ha deciso di
+   non fare. E costa dove costa di più: nei dati che una scuola deve inserire.
+   ⚠ Il colpo di grazia è che quel documento **non esiste**: nessun quadro
+   orario ministeriale descrive «il curriculum dell'alunno che fa religione e
+   francese», quindi nessun import potrebbe alimentarlo.
+3. **Il monte ore tripartito** (`reduced_minutes` / `split_minutes`). È la
+   risposta di EDT a una domanda **diversa**: `Sdop.` è la *durata con alunni
+   sdoppiati*, cioè la stessa materia divisa in gruppi, non due materie in
+   alternativa. Non chiude il lato atteso, e resta da osservare per conto suo.
+4. **Fondere i piani delle parti** quando la combinazione ne porta due. Sarebbe
+   inventare il campo che ADR-017 ha rifiutato, e in silenzio.
+
+**Motivo.** L'atteso della copertura è il piano **intero**, cioè il curriculum
+di *un* alunno: la lettura è giusta, l'unità no. Un alunno non sta in una
+parte, sta in una combinazione di parti; e il piano di classe è un **catalogo**
+— contiene le righe che la classe riceve, non quelle che ogni alunno deve.
+Senza il primo pezzo la copertura perde le ore ricevute attraverso l'altra
+partizione; senza il secondo dichiara che chi fa religione è debitore dell'ora
+di alternativa. Misurato prima della correzione: **quattro** scostamenti
+inesistenti su una classe sdoppiata due volte, **due** sulla classe italiana
+più ordinaria che ci sia.
+
+Il dato che mancava non è «il piano dell'atomo»: è «questa riga non è dovuta da
+tutti», ed è un dato che **EDT ha già**. La colonna `MS` del servizio
+(*Modalità di scelta*, FR `Modalité d'élection`) porta sette codici — `N`
+Normale, `O` Obbligatoria, `F` Facoltativa, `L` Accademica, `D` DNL, **`R`
+Religioso**, `X` Extra — e le durate del servizio in EDT sono **quattro**, non
+tre: `H/Classe` (*Durée en classe*) e `H/Al.` (*Durée par élève*) sono due
+quantità distinte, ed è la distinzione che qui mancava.
+📦 [piani-di-studi.md](edt/piani-di-studi.md), [estratti/stringhe-localizzazione.md](edt/estratti/stringhe-localizzazione.md).
+
+**Conseguenze.**
+
+- `Service.election_group` è la forma **minima** del meccanismo: un'etichetta,
+  non l'enumerazione a sette codici. ⚠ `MS` è nota **dalle stringhe** e non è
+  mai stata osservata in UI: l'enum si copia quando lo sarà, non prima
+  ([todo.md](todo.md), O6).
+- `Finding` porta un campo `group`, per la ragione già misurata su `subject`:
+  il messaggio è fuori dalla chiave, quindi due gruppi insoddisfatti sulla
+  stessa unità collasserebbero in un verdetto solo.
+- Le risorse di un finding di copertura possono ora essere **chiavi-atomo**
+  (stringhe). `Finding.resources` lo prevedeva già; i nomi leggibili passano
+  da `state.resource_names`, che gli atomi li contiene.
+- La copertura resta `PLACEMENT_INDEPENDENT`: nessun builder, nessun effetto
+  sul modello CP-SAT.
+- **D1 di [todo.md](todo.md) è sciolta**, e con essa il blocco sull'import: ciò
+  che una scuola deve inserire in più è un'etichetta sulle righe in
+  alternativa — una riga del piano, per un liceo — invece di un piano per
+  combinazione.
+
+**Emendamento 2026-08-29 — `MS` osservata: EDT ha il campo, non il dato.**
+
+La colonna è stata vista in UI sulla base del produttore, e il tooltip conferma
+il nome (*«Modalità di scelta del servizio»*). Ma è **vuota su tutte le righe**,
+e la riga che conta lo dice meglio di tutte: `RELIGIONE` è un servizio ordinario
+del piano — `Alu. 390`, `H/Classe 1h00`, `H/Al. 1h00` — dovuto da **tutti** gli
+alunni, senza alternativa e senza modalità di scelta.
+
+⚠ Va quindi corretta una frase del **Motivo**: dove dice che «è un dato che EDT
+ha già», l'affermazione dimostrata è più debole — EDT ha la **colonna** dove il
+dato starebbe, e non la riempie nemmeno nella propria base di riferimento. Le
+due prove citate valgono ancora ma non sono *esercitate*: su questa base
+`H/Al.` = `H/Classe` su ogni riga, perché non c'è nessuno sdoppiamento.
+
+**La decisione non cambia, e semmai si rafforza.** Se la base del produttore
+non distingue chi fa religione da chi fa alternativa, allora **nessun import**
+poteva darci quel dato — che è esattamente l'argomento con cui era stata
+scartata l'alternativa 2. `Service.election_group` va quindi dichiarato per
+quello che è: **nostra estensione**, non traduzione di `MS`.
+
+🔑 **E la tendina di `MS`, aperta lo stesso giorno, dice perché — sono due
+domande diverse, non due risposte alla stessa.** I codici sono **otto** e non
+sette (mancava `S`, ed è quello che conta): `S = Senza` è `Tronc commun`, il
+**percorso curricolare**, cioè la riga che tutti seguono; `O F N X L R D` sono
+tutte forme di **opzione**, con `R` a nominare il caso religioso.
+
+L'asse di `MS` è dunque *«tronco comune oppure opzione»*. Non dice **quali
+opzioni siano alternative fra loro**, che è la sola cosa che `election_group`
+dice. I due meccanismi sono **complementari**:
+
+| Domanda | Chi risponde |
+|---|---|
+| «questa riga è dovuta da tutti?» | `MS` (`S`/vuoto contro il resto) |
+| «di queste righe l'alunno ne segue esattamente una» | `Service.election_group` |
+
+⚠ Ne discende una cosa che il nostro modello **non** fa ancora: una riga marcata
+opzione ma **fuori** da ogni gruppo di elezione è oggi contata come dovuta da
+tutti, cioè lo stesso falso positivo che ADR-020 ha corretto, su un altro
+ingresso. Nessun dato lo esercita — `MS` è vuota su entrambe le basi — quindi
+resta una **decisione** e non un difetto: → [todo.md](todo.md), O6.
+
+(⚠ Correzione di passaggio: `L` è `Locale`, non «Accademica». Il francese
+`académique` è l'aggettivo di *académie*, la circoscrizione scolastica. Falso
+amico, → [glossario-it-fr.md](edt/glossario-it-fr.md).)
+
+**Data.** 2026-08-28

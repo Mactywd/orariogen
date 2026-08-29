@@ -171,6 +171,10 @@ mai «settimana A/B» — terminologia non del prodotto.)
   servono davvero, e sono tre campi durata, non struttura. Il `Coeff.`
   (`Pondération`, 60/60) resta **fuori**: semantica mai chiarita
   ([piani-di-studi.md](edt/piani-di-studi.md)), si aggiunge quando la si capisce.
+  Dal 2026-08-28 porta anche `election_group` ([ADR-020](decisioni.md)): le
+  righe che lo condividono sono **alternative**, e l'alunno ne segue una. È la
+  forma minima del `MS` di EDT, che il piano sia un **catalogo** e non un
+  curriculum.
 
 **Classe, parti, raggruppamenti — l'unità didattica.**
 
@@ -229,7 +233,8 @@ Una riga per attività piazzata, dentro la versione d'orario del periodo.
 problema separato, validato da EDT — [scope-v1.md](scope-v1.md) §C), distinta
 dalle aule *dichiarate* sull'attività. La copertura del monte ore
 (Σ durate attività = ore del servizio) è un **predicato di controllo**, non un
-vincolo di integrità (principio 3).
+vincolo di integrità (principio 3) — e si misura sull'**atomo**, cioè sul
+curriculum di un alunno, non sulla parte ([ADR-020](decisioni.md)).
 
 ## I vincoli
 

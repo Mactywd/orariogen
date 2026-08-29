@@ -133,6 +133,14 @@ def buchi(ctx, model, chiavi):
     `ultima − prima + 1`, di cui `conteggio` occupate: le restanti sono
     esattamente quelle che soddisfano la congiunzione.
 
+    ⚠ **La mezza giornata come perimetro è una scelta, e in EDT è un
+    parametro.** Là il buco si misura sulla *giornata*, e una casella
+    `Non conteggiare come buchi le ore libere prima o dopo la linea di fine
+    mattinata` — **separata per classi e per docenti** — ne toglie la pausa.
+    Noi ci comportiamo come se fosse spuntata per entrambe le popolazioni.
+    Debito dichiarato in `docs/todo.md`; toccarlo cambia anche il D.T.B., che
+    è hard.
+
     ⚠ Una fascia **indisponibile** in mezzo a due lezioni conta come buco, ed è
     voluto: conta così anche nel checker, che legge i piazzamenti e non sa
     nulla delle indisponibilità. Un docente fermo un'ora in istituto ha perso

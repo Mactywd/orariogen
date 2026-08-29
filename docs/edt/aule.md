@@ -146,6 +146,83 @@ sono vincoli**. Non compaiono fra i vincoli ignorabili e servono solo a
 raggruppare la lista per chi sceglie a mano. L'unico vincolo reale sull'aula è la
 sua **disponibilità**, più la sede se attiva.
 
+### 📦 I due enum dell'assegnazione: come sceglie, e cosa la rende incompatibile
+
+⚠ Sono **valori estratti dai binari**. Le loro **etichette di interfaccia** sono
+anch'esse estratte (§ *La finestra dell'ottimizzatore*, 2026-08-29) e ne fissano
+la semantica; resta non osservato il solo comportamento a runtime. Ma dicono una cosa che vale: l'assegnazione delle aule è
+un'**ottimizzazione separata** dal piazzamento, con criteri propri.
+
+`TypeChoixOptimSalle` — i criteri con cui EDT sceglie *quale* aula fra quelle
+ammissibili:
+
+| Valore | Lettura |
+|---|---|
+| `tcosChangements` | limitare gli **spostamenti** fra attività consecutive — ⚠ *non* i cambi rispetto alla ripartizione precedente, vedi sotto |
+| `tcosSallePref` | privilegiare l'**aula preferenziale** (della classe, vedi sotto) |
+| `tcosCapacite` | ⚠ la **capienza** — che *non* è un vincolo, ma qui è un **criterio**: è la distinzione che spiega perché non compare fra i vincoli ignorabili |
+| `tcosChangementsConfort` | lo stesso fra attività **non** consecutive: il tragitto scomodo ma non immediato |
+| `tcosAucun` | nessun criterio |
+
+`TypeIncompatibiliteSalle` — le undici ragioni per cui un'aula non è
+assegnabile: `isElleMeme`, `isSite`, `isCapacite`, `isSalleDansGroupe`,
+`isDejaDansLeGroupe`, `isNbOccurences`, `isGroupeDansGroupe`, `isGroupeDeGroupe`,
+`isIndisponibilites`, `isOccupation`, `isGroupeDansConseil`. Le tre della
+finestra `Aule disponibili` si riconoscono (`isSite`, `isIndisponibilites`,
+`isOccupation`); le altre riguardano i **gruppi di aule** e il numero di
+occorrenze — cioè la struttura, non la didattica.
+
+Fonte: [estratti/catalogo-tipi-interni.md](estratti/catalogo-tipi-interni.md).
+
+### 📦 La finestra dell'ottimizzatore, dalle sue etichette
+
+Le etichette della finestra `FicheEdt_OptimiseurSalles` (📦, estratte il
+2026-08-29) mappano **uno a uno** sull'enum, e ne fissano la semantica che il
+catalogo lasciava aperta:
+
+| Valore | Etichetta in UI |
+|---|---|
+| `tcosChangements` (chiave `CritereDeplacements`) | `Limita gli spostamenti tra attività consecutive` |
+| `tcosSallePref` | `Favorisci l'utilizzo delle aule preferenziali` |
+| `tcosCapacite` | `Minimizza il superamento della capienza` |
+| `tcosChangementsConfort` (`CritereDeplacementsConfort`) | `Limita gli spostamenti tra attività non consecutive`\* |
+| `tcosAucun` | `Nessuno` |
+
+\* *«Questo criterio comporterà un'ottimizzazione più lunga, deve essere
+utilizzato solo se necessario.»*
+
+🔑 **`tcosChangements` non è «i cambi rispetto alla ripartizione precedente»**, che
+è la lettura che avevamo dato: è lo **spostamento dell'utente fra due attività
+consecutive** — quanto cammina una classe fra un'ora e la successiva. E
+`tcosChangementsConfort` è la stessa cosa fra attività **non** consecutive, cioè
+il tragitto che non è immediato ma resta scomodo. Le due nozioni di «cambio» sono
+distanze fisiche, non differenze fra due ripartizioni.
+
+⚠ Il che significa che il **secondo livello della nostra seconda fase — «i cambi
+rispetto alla ripartizione precedente» — non è nessuno dei cinque criteri di
+EDT.** È nostro, ed è la stabilità, l'analogo per le aule di L4 nella catena del
+piazzamento. Non è un errore: è una voce in più, da dichiarare come tale.
+
+Tre cose in più che la finestra dichiara, e che dicono la sua forma:
+
+- `Criteri di ottimizzazione` sono **quattro caselle numerate** (`1.` `2.` `3.`
+  `4.`), ciascuna con i cinque valori sopra: è una **catena lessicografica a
+  quattro livelli**, la stessa forma della nostra;
+- `Ottimizza per` **`Classi`** oppure **`Docenti`**, con `Classi prioritarie` /
+  `Docenti prioritari` da spuntare — la **separazione per popolazione**, di
+  nuovo, esattamente come nel piazzamento (`Arbitrato`);
+- `Blocco delle aule nelle attività coinvolte`, con `Blocca` / `Sblocca`: *«Potete
+  sbloccare alcune aule per consentire a EDT di esplorare altre combinazioni.»*
+
+E l'ottimizzatore lavora **su un gruppo di aule alla volta**, non globalmente:
+*«Solamente i gruppi di aule interamente assegnati possono essere ottimizzati»*,
+e la ripartizione va lanciata prima (`Assegna le aule alle attività`).
+
+La nostra seconda fase (`domain/solver/rooms.py`) ha **due** livelli — minuti
+senza aula, poi i cambi rispetto alla ripartizione precedente — e non implementa
+nessuno dei cinque criteri di EDT. **Resta da osservare in UI** solo quali siano
+i **quattro valori di default** nelle caselle (O1 di [todo.md](../todo.md)).
+
 ### Ma la classe ha un'aula preferenziale
 
 La vista Classi ha una colonna **`Aula preferenziale`**. Quindi il legame

@@ -329,6 +329,16 @@ ma conta per le classi. Ha senso — un docente con l'ora libera a mezzogiorno p
 una classe con un'ora scoperta a metà giornata è un problema di sorveglianza.
 È il tipo di sfumatura che un obiettivo unico e pesato non sa esprimere.
 
+⚠ **E qui il nostro modello diverge, in un modo scoperto solo confrontando**
+(2026-08-29, seconda osservazione dello stesso pannello: valori identici, il che
+rende la fonte replicabile). Per EDT il buco si misura sulla **giornata**, e
+questa casella ne *toglie* la pausa; da noi `MaxGapChecker` e il criterio `buchi`
+lo misurano **sempre e solo dentro la mezza giornata**, cioè si comportano come se
+la casella fosse spuntata — per **entrambe** le popolazioni. Sulla base di esempio
+saremmo quindi giusti sui docenti e sbagliati sulle classi. Non è un difetto di
+implementazione: è un parametro che non abbiamo. → debito in
+[todo.md](../todo.md).
+
 **`Raggruppa le attività`** — ◉ `All'inizio della giornata` / ○ `Dalla fine della mattinata`
 
 **`Incompatibilità di materia su 2 giorni`**

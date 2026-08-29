@@ -102,7 +102,7 @@ opzione di tracciabilità — lettura sbagliata, corretta in
 **Regola operativa che ne discende: quando IT e FR divergono, vince il francese.**
 L'italiano è una traduzione, e in qualche punto sbaglia.
 
-## Falsi amici — 2026-07-26
+## Falsi amici — 2026-07-26, ampliato il 2026-08-29
 
 | IT osservato | Sembra | È in realtà |
 |---|---|---|
@@ -110,6 +110,8 @@ L'italiano è una traduzione, e in qualche punto sbaglia.
 | **`Aree mobile`** | vincolo o risorsa di spazio | **`Mobile Teachers Webspace`** — il portale mobile di **PRONOTE**, fuori scope |
 | **`punti`** / `pesi` (alleggerimenti) | un punteggio del motore | l'unità del **peso didattico**: `points` è tradotto `pesi` |
 | **`P.P.`** | «Parte Principale» | `Fractionnable` = **Proprietà di Piazzamento** (fascia fissa/variabile) |
+| **`MS = L`** → `Locale` | «Accademica» (era scritto così fino al 2026-08-29) | `Académique` = *dell'**académie***, la circoscrizione scolastica francese. `Ajout académique au programme` è un'**aggiunta locale al programma**, niente di accademico |
+| **`MS = S`** → `Senza` | «nessun valore», il vuoto | `Tronc commun` = il **percorso curricolare**, cioè la riga che tutti seguono. Il vuoto è una voce a parte, `Senza specifica` / `Aucune modalité` |
 
 ⚠ Su `P.P.` c'è un caso doppio: **non** sono due colonne `P.P.` e `P.F.` — è la
 stessa colonna in due lingue (IT/FR `P.P.`, EN `P.F.`). E `Type_Contrainte_RS_LegendePP`

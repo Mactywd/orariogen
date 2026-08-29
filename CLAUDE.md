@@ -33,7 +33,7 @@ docs/
     attivita.md        servizio → sotto-servizio → attività, assegnazione docenti
     vincoli.md         indisponibilità, vincoli orari, di materia, attività↔attività, peso didattico
     diagnostica.md     📦 perché un'attività non si piazza: il catalogo delle causali
-    tempo-e-calendario.md 📦 griglia oraria, periodi, periodicità, mensa, sedi
+    tempo-e-calendario.md griglia oraria (👁), periodi, periodicità, mensa (👁), sedi
     risorse.md         📦 le cinque risorse di piazzamento; personale, materiali, incarichi
     moduli-e-scope.md  📦 i moduli oltre l'Orario, e cosa sta dentro o fuori
     schema-scambio.md  📦 lo schema XSD ufficiale Partenaire_Index V4.6 — modello dati formale
@@ -64,6 +64,8 @@ requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
+                        la copertura misurata **per alunno** (ADR-020:
+                        l'unità è l'atomo, non la parte),
                         il violatore di Hall (fase 5, hall.py), lo scarto come
                         stato nominato (checkers/placement.py), la richiesta
                         d'aula insoddisfatta (checkers/room_assignment.py) e la
@@ -85,7 +87,7 @@ domain/                l'app Django del modello di dominio v1
                         criteri, i sei rilevatori di problemi, le quattro
                         operazioni insiemistiche, e il perimetro che restringe
                         l'azione mai il conteggio
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, il parallelismo che compra, e il limite dell'unità di copertura), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -159,7 +161,8 @@ Coperto finora (una scuola di esempio inserita in EDT):
   osservati mentre lavorano, con tempi e comportamento in caso di conflitto
   (`docs/edt/motore-risoluzione.md`).
 
-> **L'osservazione di EDT è conclusa** (2026-07-26), e la decisione è stata presa
+> **L'osservazione di EDT è conclusa** (2026-07-26 — con la sola O2 riaperta e
+> chiusa il 2026-08-29, la griglia oraria), e la decisione è stata presa
 > esplicitamente con [ADR-016](docs/decisioni.md): il design del modello di
 > dominio è approvato in [docs/modello-dominio.md](docs/modello-dominio.md). Lo
 > schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
@@ -172,7 +175,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > vincolo da postare). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **779 test verdi**, 16 skip tutti misurati e attribuiti
+> minimo. **787 test verdi**, 16 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -443,11 +446,16 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
       **intervallo**, falso amico, ma vincolo hard. → `docs/edt/vincoli.md`
 - [x] L'**intervallo è un separatore**, non una `Place`; lo **spostamento fra sedi**
       è per **coppia orientata**. → `docs/edt/tempo-e-calendario.md`
+      👁 **Confermato in UI il 2026-08-29** insieme al resto di O2: la pausa di
+      mezza giornata **è** invece una fascia (6+1+3 = 10), la `Durata reale delle
+      fasce orarie` è un campo diverso dalla durata di calcolo, e la demo è
+      `5 × 10 × 1` a 60 min — il che chiude per osservazione `place = giorno × 10
+      + rango`.
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
-Quattro decisioni, cinque osservazioni da fare in EDT, sei debiti dichiarati.
-La prima è ⛔ **D1, l'unità del monte ore: la parte o l'atomo** — blocca
-l'import, perché cambia i dati che una scuola deve inserire.
+Quattro decisioni, due osservazioni e due esperimenti in EDT, otto debiti dichiarati. **Nessuna
+blocca il calcolo**: ⛔ D1, che bloccava l'import, è sciolta il 2026-08-28 con
+[ADR-020](docs/decisioni.md).
 
 Quello che segue è la **storia delle voci chiuse**, con il perché: si legge, non
 si aggiorna.

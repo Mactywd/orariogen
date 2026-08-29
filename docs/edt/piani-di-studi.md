@@ -47,7 +47,32 @@ valori dalla compilazione di SCI1, 2026-07-09):
 | Istituto: Ridotto | *"Durata con alunni ridotti"* | vuoto |
 | Istituto: Sdop. | *"Durata con alunni sdoppiati"* | vuoto — **quota ore in sdoppiamento**: i gruppi si dichiarano qui ([gruppi.md](gruppi.md)) |
 | Istituto: Alu./… | *"Numero di alunni ridotto del servizio"* | **`15` su tutte le righe, mai digitato** → è l'`Al./Rid.` delle materie che **eredita in cascata** fin dentro il servizio ([ADR-003](../decisioni.md)) |
-| Istituto: H/Al. | *"Durata per alunno"* | = H/Classe quando non c'è sdoppiamento |
+| Istituto: H/Al. | *"Durata per alunno"* | = H/Classe quando non c'è sdoppiamento. 🔑 **La quantità dell'alunno è una colonna distinta da quella della classe**, ed è la distinzione che mancava al nostro `Service`: la copertura confrontava un atteso per-alunno contro `class_minutes` ([ADR-020](../decisioni.md)) |
+
+#### 👁 La stessa griglia sulla base del produttore (2026-08-29)
+
+Riletta sulla base demo, che è una **secondaria di primo grado italiana** — quattro
+piani `1° / 2° / 3° TEMPO NORMALE` e `3° TEMPO PROLUNGATO`, materie e classi di
+concorso italiane (`A-60`, `A-49`, `A-30`, `A-28`, `A-22`, `A-25`, `A-01`, `REL`),
+`30h00` di totale sul primo. Ogni colonna coincide con la tabella qui sopra,
+inclusi il `Coeff. 60/60` e l'`Alu./… 15` mai digitato: la cascata di
+[ADR-003](../decisioni.md) si comporta identica su due basi diverse.
+
+🔑 **E `MS` è vuota anche lì — sulla riga `RELIGIONE` compresa.** Il piano porta
+`RELIGIONE / REL / RELIGIONE (REL) / Alu. 390 / H/Classe 1h00 / H/Al. 1h00`: un
+servizio ordinario dovuto da **tutti** i 390 alunni del piano, senza alcuna
+alternativa dichiarata e senza modalità di scelta. Anche `Ridotto` e `Sdop.` sono
+vuote su tutte le righe.
+
+Due conseguenze, e la seconda pesa:
+
+- **O3 non è osservabile, solo sperimentabile**: nessuna delle due basi che
+  abbiamo compila `Ridotto`/`Sdop.`, quindi «come nascono i gruppi» si vede solo
+  compilandole.
+- **EDT ha il campo, non il dato.** La colonna `MS` esiste e il tooltip la
+  conferma (*«Modalità di scelta del servizio»*), ma la base di riferimento del
+  produttore **non modella affatto** l'alternativa a IRC. Vedi l'emendamento ad
+  [ADR-020](../decisioni.md).
 
 Il monte ore è quindi **tripartito per servizio**: `H/Classe` (classe intera) +
 `Ridotto` (effettivo ridotto) + `Sdop.` (sdoppiata in gruppi). "Totale delle ore di
@@ -85,9 +110,43 @@ servizio" somma la colonna: per il Fermi **27h00 al biennio (verificato su SCI1)
 |---|---|---|
 | `A` | Stato di attivazione | — |
 | `Coeff.` | Coefficiente | `Pondération` |
-| `MS` | **Modalità di scelta** | `Modalité d'élection` — codici `N/O/F/L/D/R/X` |
+| `MS` | **Modalità di scelta** | `Modalité d'élection` — otto codici più il vuoto, § qui sotto |
 | `Ridotto` | Durata con alunni ridotti | — |
 | `Sdop.` | Durata con alunni sdoppiati | — |
+
+### 👁 `MS` — gli otto codici, con la loro semantica
+
+Tendina aperta in UI il 2026-08-29, e le etichette complete dalla famiglia
+`Type_ModaliteDElection` (📦). ⚠ **Sono otto più il vuoto, non sette**, e la voce
+che mancava è quella che conta.
+
+| Codice | IT | Spiegazione (IT) | FR |
+|---|---|---|---|
+| *(vuoto)* | `Senza specifica` | — | `Aucune modalité` |
+| **`S`** | `Senza` | **Percorso curricolare** | **`Tronc commun`** |
+| `O` | `Obbligatoria` | Opzione obbligatoria | `Option obligatoire` |
+| `F` | `Facoltativa` | Opzione facoltativa | `Option facultative` |
+| `N` | `Normale` | Opzione neutra (`O` o `F`) | `Option neutre` |
+| `X` | `Extra` | Opzione facoltativa in forma di aiuto personalizzato | `Option facultative à caractère d'aide personnalisée` |
+| `L` | `Locale` | Insegnamento locale | `Ajout académique au programme` |
+| `R` | `Religiosa` | **Insegnamento religioso** | `Enseignement religieux` |
+| `D` | `DNL` | Disciplina Non Linguistica | `Discipline Non Linguistique` |
+
+🔑 **L'asse di `MS` è *«tronco comune oppure opzione»*.** `S` non è «senza
+valore» — è `Tronc commun`, cioè la riga che **tutti** seguono; tutte le altre
+sono forme di opzione, con `R` a nominare il caso religioso. È esattamente il
+dato che [ADR-020](../decisioni.md) cercava… su **un** asse solo.
+
+⚠ Perché `MS` **non** dice quali opzioni siano alternative *fra loro*. Sa
+distinguere «dovuta da tutti» da «opzione», non «di queste tre se ne segue una».
+Il nostro `Service.election_group` risponde alla seconda domanda e tace sulla
+prima: i due meccanismi sono **complementari**, non uno la traduzione dell'altro.
+
+⚠ Due correzioni a quanto era scritto qui: `L` è **`Locale`** e non
+«Accademica» — il francese `académique` è l'aggettivo di *académie*, la
+circoscrizione scolastica, quindi `Ajout académique au programme` è
+un'**aggiunta locale al programma** e non qualcosa di accademico. Falso amico,
+→ [glossario-it-fr.md](glossario-it-fr.md). E il codice `S` mancava del tutto.
 
 `Coeff.` = FR `Pondération`, che nello schema di scambio è l'elemento
 `Cours/Ponderation`: è quindi la stessa quantità che scende in cascata fino
@@ -104,7 +163,14 @@ sé. Coerente con lo schema di scambio, che ne esporta tre.
 
 - Semantica fine di **Coeff.**: quando si usa un valore ≠ `60/60`? (è la
   `Pondération` del formato di scambio).
-- I sette codici di **MS** (`N/O/F/L/D/R/X`): quali sono e cosa fanno.
+- I sette codici di **MS** (`N/O/F/L/D/R/X`): i nomi si conoscono (📦, vedi la
+  tabella qui sopra), il **comportamento** no — cosa cambia per il piazzamento,
+  e se EDT ne derivi qualcosa o sia solo un'etichetta. 🔑 È la colonna che dice
+  *«questa riga non è dovuta da ogni alunno»*, ed è il meccanismo di cui
+  [ADR-020](../decisioni.md) ha preso la forma minima (`Service.election_group`)
+  per smettere di leggere il piano — che è un **catalogo** — come se fosse il
+  curriculum di un alunno. L'enumerazione si copia quando `MS` sarà osservata,
+  non prima (O6 di [todo.md](../todo.md)).
 - Cosa comporta un servizio **inattivo**.
 - Compilare **Ridotto/Sdop.** su un servizio (es. ING) per osservare come nascono i
   gruppi → [gruppi.md](gruppi.md).

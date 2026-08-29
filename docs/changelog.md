@@ -15,6 +15,257 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-29 — La griglia oraria, finalmente guardata (e un confronto che non cercavo)** — L'osservazione di
+  EDT era dichiarata conclusa da ADR-016, ma **O2 era rimasta aperta apposta**:
+  la configurazione della griglia era l'unica parte del modello del tempo nota
+  per sola via documentale, ed è quella su cui poggia tutto il resto. Riaperta
+  perché la licenza di prova fa scadere le basi dopo due settimane e la base
+  del produttore — `Monoposto/Esempio.edt`, 40 classi, 3 sedi, 984 corsi tutti
+  piazzati — si può ricopiare sul Desktop all'infinito.
+
+  Osservata `File → Strumenti → Cambia i parametri della griglia oraria`. Tre
+  cose che le stringhe non dicevano:
+
+  - 🔑 **Il numero di fasce è in sola lettura.** Non si scrive «10»: si
+    `Aggiungi`/`Togli` *N* fasce **all'inizio** o **alla fine** della giornata,
+    due righe gemelle. «Passare da 10 a 8 fasce» non è una domanda ben posta:
+    manca *da quale capo*, e il perché è l'allineamento — il rango di una fascia
+    cambia solo se se ne aggiunge una *prima*. ⚠ La prima stesura di questa
+    voce concludeva «la griglia si modifica ai bordi, **mai** al centro»: la
+    seconda schermata l'ha smentita nel giro di un turno, perché il pannello
+    `Orari` porta un `Inserisci / cancella una fascia oraria` che è
+    posizionale. Restano vere le due righe gemelle; falsa la generalizzazione.
+  - I **giorni lavorativi** sono una **maschera** di sette caselle, non un
+    conteggio, e il **primo giorno della settimana** è un campo a sé. Sulla demo:
+    Lun–Ven bianchi, Sab e Dom grigi, primo giorno lunedì.
+  - La **suddivisione** è un radio a **sei valori** — 2, 3, 4, 6, 12, `Nessuno` —
+    quindi `NombrePlacesParSequence` non è un intero libero. Default `Nessuno`.
+
+  Due cose promosse da [INFERENZA] a osservazione: la frase *«La durata della
+  fascia oraria serve per il calcolo dei servizi dei docenti»* è stampata dentro
+  la finestra, e la demo è `5 × 10 × 1` a 60 minuti — il che **chiude per
+  osservazione** la codifica `place = giorno × 10 + rango` dedotta dal formato
+  binario, perché il 10 è letto nel campo che lo imposta.
+
+  Nello stesso giro, `Parametri della base dati → Istituto → Orari`, che è una
+  procedura in tre passi (`Mezza giornata`, `Intervalli`, `Orari / Fasce
+  orarie`). Il passo 1:
+
+  - 🔑 **La pausa di mezza giornata non è un confine: è un blocco di fasce.**
+    `mattina 6 + pausa 1 + pomeriggio 3 = 10`, che è il `NombreSequencesParJour`
+    della griglia. Le righe si chiamano `M1…M6`, poi una **senza nome** fra due
+    linee verdi, poi `P1…P3`. La fascia di pausa **esiste** e non è piazzabile.
+    Il documento diceva che la linea si definisce in numero di fasce e non in
+    orario: vero, ma diceva anche che le due modalità erano `Giornata continua`
+    e *«Giornata con una pausa delimitata da un'ora di fine mattinata»* — la
+    seconda in UI si chiama `2 mezze giornate separate da una pausa` e non
+    chiede **nessun** orario, solo tre conteggi. Corretto.
+  - ☑ *«Dopo la pausa della mezza giornata, riprendi all'inizio dell'ora
+    successiva»* è **la stessa discontinuità** che l'export iCal già gestisce
+    spezzando un'attività in corse contigue. Lì era dedotta dalle `SlotLabel`;
+    qui è una casella.
+  - ⚠ **Una maschera che non abbiamo**: una casella per giorno, *«I giorni
+    spuntati saranno ignorati durante il calcolo delle giornate libere»*. Non è
+    la maschera dei giorni lavorativi — il giorno resta e ci si lavora, ma non
+    conta come libero. `FreeGuaranteedChecker`/`Builder` contano su tutti i
+    `days_per_cycle`. Nuovo debito dichiarato.
+
+  I passi 2 e 3, che hanno chiuso O2:
+
+  - 🔑 **L'intervallo è un confine, e la conferma è su una trasformazione.** Il
+    pannello elenca due intervalli con la colonna `Nr. fasce orarie dopo
+    l'ultimo intervallo` = **2** e **2**; la tabella `RECREATION` del binario
+    porta i ranghi **2** e **4**. La UI mostra il salto, il file il cumulato: le
+    due letture combaciano su una regola, non su un numero, che è una verifica
+    molto più forte di una coincidenza. E sulla griglia le linee gialle stanno
+    **fra** due righe, mentre la pausa di mezza giornata è una riga intera — la
+    differenza fra un confine e una `Place`, nella stessa immagine.
+  - Due cose che le stringhe non davano: gli intervalli hanno un **orario
+    proprio** (09:50–10:00 e 11:50–12:00, dieci minuti ritagliati *prima* del
+    confine, che non allungano la giornata), e una colonna **`Classi`** — un
+    intervallo può non valere per tutte.
+  - Corretta un'attribuzione del 2026-07-26: il rango vuoto **6** era stato
+    letto come «la mensa». È la **fascia di pausa della mezza giornata**; la
+    mensa è ciò che ci si svolge dentro, e sulla demo non ha turni attivi.
+  - 🔑 Il passo 3 è il **generatore delle `SlotLabel`**: `Primo orario sulla
+    griglia` 08:00, `Durata reale delle fasce orarie` 60, `Durata tra le fasce
+    orarie` 0. La *durata reale* è un campo **diverso** da quello della finestra
+    di conversione, che è la durata della fascia di **calcolo** — le due nozioni
+    di «ora» sono letteralmente due caselle in due finestre. E `Durata tra le
+    fasce orarie` permette etichette con un **buco** che il modello di calcolo
+    non conosce: l'export iCal fa bene a leggere le etichette invece di
+    `slot_minutes`, perché lì le due grandezze divergono per costruzione.
+
+  E la scheda `Mensa`, che era in bilico come «fuori scope da dichiarare»:
+  l'osservazione lo **rafforza**. Non è un'ora bloccata — è una finestra oraria
+  con maschera per giorno propria, divisa in **turni**, ciascuno destinato a
+  classi (con un `N. Max.`) o docenti, con `Equilibra automaticamente` e
+  `Statistiche di ripartizione`. È un terzo problema di assegnazione con
+  capienze, della stessa forma delle aule. Entrarci costerebbe un modello a sé.
+
+  Una quinta schermata, `Parametri → Piazzamento`, ha invece prodotto **zero
+  informazioni nuove** — ed è un risultato, non uno spreco. Ogni valore
+  coincide con quanto documentato il 2026-07-26 dalla stessa base: le due
+  caselle dei buchi, il raggruppamento all'inizio della giornata, i due massimi
+  quindicinali su «rispetta il massimo in ciascuna settimana», i primi otto
+  degli undici criteri nell'ordine. Una fonte che si rilegge a un mese di
+  distanza e dà la stessa cosa è una fonte replicabile.
+
+  Ha però prodotto un **confronto**, che lo screenshot da solo non conteneva:
+  per EDT il buco si misura sulla **giornata**, e la casella `Non conteggiare
+  come buchi le ore libere prima o dopo la linea di fine mattinata` ne toglie la
+  pausa — **separatamente per classi e per docenti**, e sulla base è spuntata
+  per i docenti e non per le classi. Da noi `MaxGapChecker` e il criterio
+  `buchi` misurano sempre e solo **dentro la mezza giornata**: ci comportiamo
+  come se la casella fosse spuntata per tutti, quindi giusti sui docenti e
+  sbagliati sulle classi. Nuovo debito, non toccato subito perché cambierebbe la
+  quantità di un vincolo hard (il D.T.B.) oltre a un livello della catena.
+
+  E **O5 è stata riclassificata da osservazione a decisione**: la lista degli
+  undici criteri era già scritta da luglio, quindi non manca uno screenshot —
+  mancano dieci decisioni dentro/fuori. Tre le decide già la struttura (la
+  mensa è fuori scope; due criteri valgono solo con la suddivisione sub-oraria,
+  che è a `Nessuno`).
+
+  E la tabella delle stringhe, rigenerata dal binario per dare all'utente i nomi
+  esatti delle voci di menu invece di fargliele cercare, ha pagato un dividendo
+  che nessuno cercava: la finestra `FicheEdt_OptimiseurSalles`. Le sue etichette
+  mappano **uno a uno** sui cinque `TypeChoixOptimSalle`, e **smentiscono la
+  lettura che avevamo dato al primo**. `tcosChangements` non è «minimizzare i
+  cambi rispetto alla ripartizione precedente»: l'etichetta dice `Limita gli
+  spostamenti tra attività consecutive` — è il **cammino** di una classe fra
+  un'ora e la successiva, e `tcosChangementsConfort` è lo stesso fra attività
+  **non** consecutive. Sono distanze fisiche, non differenze fra ripartizioni.
+
+  🔑 Conseguenza diretta sul codice già scritto: il **secondo livello della
+  nostra seconda fase** — «i cambi rispetto alla ripartizione precedente» — **non
+  è nessuno dei cinque criteri di EDT**. È nostro, ed è la stabilità, l'analogo
+  per le aule di L4. Non è sbagliato, ma va dichiarato come voce in più invece
+  che passare per traduzione di `tcosChangements`, che è quel che
+  [aule.md](edt/aule.md) faceva.
+
+  La stessa finestra dichiara **quattro** caselle numerate di criterio (una
+  catena lessicografica a quattro livelli, la stessa forma della nostra) e un
+  `Ottimizza per` **Classi/Docenti** con liste di prioritari — la separazione per
+  popolazione vale anche nella fase aule. Di O1 resta solo *quali siano i
+  quattro default*.
+
+  Infine la griglia dei **servizi** di un piano di studi, sulla stessa base. Ogni
+  colonna coincide con quanto scritto il 2026-07-09 dal Fermi — `Coeff. 60/60`,
+  `Alu./… 15` mai digitato, `H/Al.` = `H/Classe`: la cascata di ADR-003 si
+  comporta identica su due basi diverse, il che è la sua prima verifica fuori
+  dai nostri dati. La base del produttore è per inciso una **secondaria di primo
+  grado italiana** (`1°/2°/3° TEMPO NORMALE`, `3° TEMPO PROLUNGATO`, classi di
+  concorso `A-60 A-49 A-30 A-28 A-22 A-25 A-01 REL`, 30h00), non francese.
+
+  🔑 **E `MS` è vuota anche lì, sulla riga `RELIGIONE` compresa** — che è un
+  servizio ordinario del piano, `Alu. 390`, `H/Classe 1h00`, `H/Al. 1h00`,
+  dovuto da tutti. Il che obbliga a **emendare ADR-020**: il Motivo diceva che
+  il dato mancante «è un dato che EDT ha già», e l'affermazione dimostrata è più
+  debole — EDT ha la **colonna** dove il dato starebbe e non la riempie nemmeno
+  nella propria base di riferimento. La decisione non cambia e semmai si
+  rafforza (se il produttore non distingue IRC da alternativa, **nessun import**
+  poteva darcelo — che era l'argomento contro l'alternativa 2), ma
+  `Service.election_group` va dichiarato per quello che è: **nostra estensione**,
+  non traduzione di `MS`.
+
+  E poi la tendina di `MS`, che era l'ultima richiesta della serie e che avevo
+  presentato come *«la meno utile»*. Sbagliato: 🔑 **i codici sono otto più il
+  vuoto, non sette, e quello che mancava è quello che conta.** `S = Senza` non
+  è «nessun valore» — è **`Tronc commun`**, il *percorso curricolare*, la riga
+  che tutti seguono; `O F N X L R D` sono tutte forme di **opzione**. Il vuoto è
+  una nona voce a sé (`Senza specifica` / `Aucune modalité`).
+
+  Il che chiarisce, e ridimensiona, l'emendamento scritto un'ora prima:
+  `MS` **è** l'asse *«dovuta da tutti oppure opzione»*, ma non dice **quali
+  opzioni siano alternative fra loro**, che è la sola cosa che
+  `Service.election_group` dice. Non sono due risposte alla stessa domanda: sono
+  due domande. ⚠ E ne esce un caso che il nostro modello non copre — una riga
+  marcata opzione ma fuori da ogni gruppo di elezione verrebbe ancora contata
+  come dovuta da tutti, lo stesso falso positivo di ADR-020 su un altro ingresso.
+  Resta una decisione e non un difetto, perché nessun dato lo esercita.
+
+  ⚠ E un falso amico corretto: `L` è **`Locale`**, non «Accademica» come era
+  scritto dal 2026-07-26. Il francese `académique` è l'aggettivo di *académie*,
+  la circoscrizione scolastica: `Ajout académique au programme` è
+  un'**aggiunta locale al programma**. Aggiunto alla tabella dei falsi amici
+  insieme a `S`.
+
+  Stessa griglia, seconda conseguenza: `Ridotto` e `Sdop.` sono vuote su tutte
+  le righe di entrambe le basi. **O3 non è osservabile, solo sperimentabile**, e
+  con D1 sciolta non sblocca più niente — la domanda residua è se tenere
+  `reduced_minutes`/`split_minutes` o toglierli.
+
+  ⚠ E una assenza, che vale quanto una presenza: **il ciclo pluri-settimanale
+  non c'è**. La finestra mostra i sette giorni della settimana e nient'altro,
+  mentre lo XSD ammette `NombreJoursParCycle > 7` e le stringhe hanno un
+  `Ciclo personalizzato`. Vive dunque nel solo wizard di creazione — da
+  confermare. O2 resta aperta per questo e per la linea di mezza giornata.
+
+- **2026-08-28 (sera) — D1: la copertura era per classe e si spacciava per
+  alunno** — ⛔ La sola voce marcata *blocca l'import* è sciolta
+  ([ADR-020](decisioni.md)), e la prima cosa che l'analisi ha trovato è che
+  **il nome della voce nominava metà del problema**. La voce diceva «l'unità è
+  la parte dove dovrebbe essere l'atomo»; il caso misurato — IRC e attività
+  alternativa — è una classe con **una sola partizione**, dove l'atomo *è* la
+  parte. Portare l'unità sull'atomo su quel caso non cambia un bit.
+
+  Erano **due difetti**, e le tre strade elencate nel todo li confondevano in
+  uno:
+
+  - **il lato osservato** — con due partizioni, un'attività sulla parte `Y`
+    non porta la chiave della parte `X`: l'alunno che sta in `X∩Y` vede
+    sparire le ore ricevute attraverso l'altra divisione. Misurato su una
+    classe sdoppiata due volte: **quattro** scostamenti inesistenti, del tipo
+    `1A_L1, Laboratorio: atteso 60, osservato 0`. Si chiude portando l'unità
+    sull'**atomo** — e senza un dato nuovo, perché `activity_tokens` gli atomi
+    li marca già per l'occupazione;
+  - **il lato atteso** — il piano è un **catalogo**, non un curriculum:
+    contiene REL e ALT perché la classe le riceve entrambe, ma nessun alunno
+    le deve entrambe. **Due** scostamenti su ogni classe italiana, con una
+    sola partizione. Nessuna proprietà dell'orario dice che sono in
+    alternativa: è un **dato**, e mancava.
+
+  🔑 **E il dato mancante ce l'aveva EDT**, in due colonne che avevamo
+  documentato senza collegarle. Le durate del servizio sono **quattro**, non
+  tre: `H/Classe` (*Durée en classe*) e `H/Al.` (*Durée par élève*) sono
+  quantità distinte — noi confrontavamo un atteso per-alunno contro
+  `class_minutes`. E `MS` (*Modalità di scelta*, `Modalité d'élection`) porta
+  sette codici, fra cui **`R` Religioso**: EDT marca la riga elettiva sulla
+  riga stessa. `Service.election_group` è la forma minima di quel meccanismo —
+  un'etichetta, non l'enum, perché `MS` viene dalle stringhe (📦) e non è mai
+  stata osservata in UI (ora **O6** in [todo.md](todo.md)).
+
+  **Il prezzo per la scuola** è ciò che decideva fra le strade, e non è
+  un'opinione: un `StudyPlan` per combinazione — misurato, funziona — costa
+  **quattro piani** per una 3A articolata con IRC; l'etichetta ne costa **una
+  riga**. ⚠ E il colpo di grazia alla prima è che quel documento **non
+  esiste**: nessun quadro orario ministeriale descrive «il curriculum
+  dell'alunno che fa religione e francese», quindi nessun import — e nessun
+  agente che legge un PDF, che è la via d'ingresso decisa per Aurora — potrebbe
+  alimentarlo.
+
+  Due guardie del progetto hanno fatto il loro mestiere invece di essere
+  aggirate: `test_codici_copre_tutto_il_catalogo` ha preteso che le due causali
+  nuove fossero classificate per decisione esplicita (`FUORI`, stessa ragione
+  di `coverage_mismatch`: `PLACEMENT_INDEPENDENT`), e
+  `test_tutte_le_causali_usano_solo_segnaposto_noti` ha rifiutato la frase che
+  ci infilava il **numero** — i numeri stanno in `quantities`, ed è ciò che
+  rende il verdetto verificabile. La frase ha perso il conteggio, `group` è
+  entrato nel vocabolario dei segnaposto **e** in `Finding.key`: due gruppi
+  insoddisfatti sulla stessa unità sarebbero altrimenti collassati in un
+  verdetto solo — la stessa forma già misurata su `subject`.
+
+  ⚠ **Ciò che resta fuori, dichiarato**: se due parti della stessa
+  combinazione portano piani diversi, l'unità **non si misura** e si nomina
+  l'errore (`ambiguous_study_plan`). Fondere i due piani sarebbe inventare il
+  campo che ADR-017 ha rifiutato, e sceglierne uno in silenzio sarebbe peggio.
+
+  Sette test nuovi in `tests/test_copertura_per_alunno.py`, uno in
+  `tests/test_extraction.py`; il test che teneva fermo il limite resta, con il
+  nome e la ragione corretti — è ora il caso in cui il dato **non** è
+  dichiarato, e i due scostamenti sono il comportamento giusto.
+
 - **2026-08-28 (la review della seconda fase, e il file che si leggeva da solo)**
   — Cinque difetti applicati, ciascuno riprodotto prima di essere corretto e
   ciascuno verificato per mutazione: nessuno era visibile rileggendo il codice,

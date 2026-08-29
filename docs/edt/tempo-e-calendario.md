@@ -4,8 +4,10 @@
 > autorevole), le **etichette di interfaccia** dai binari (📦) e gli header
 > `<CARTEIDENTITE>` delle due basi. Vedi [ADR-009](../decisioni.md).
 >
-> **La configurazione oraria non è mai stata osservata in UI.** Quello che segue è
-> il modello ricostruito, con i testi letterali a supporto.
+> **La finestra di configurazione della griglia è osservata dal 2026-08-29**
+> (§ *La finestra, osservata*). Il resto del documento — intervalli, periodi,
+> periodicità, sedi — resta ricostruito dalle tre fonti, con i testi letterali a
+> supporto.
 
 ## Perché serve
 
@@ -48,10 +50,58 @@ Vincoli di configurazione dichiarati: la giornata non può superare le 24 ore
 (*"numero di fasce orarie × durata di un'unità"*) e c'è un tetto parametrico al
 numero di fasce.
 
+### 👁 La finestra, osservata
+
+`File → Strumenti → Cambia i parametri della griglia oraria`, sulla base demo
+(2026-08-29). Titolo: *«Conversione della griglia oraria della base dati»* — la
+stessa finestra che il wizard mostra alla creazione, riaperta su una base viva.
+
+| Campo | Valore sulla demo | Note |
+|---|---|---|
+| `Modificate il primo giorno della settimana` | **lunedì** | menu a tendina: il ciclo non parte per forza da lunedì |
+| `Modificate i vostri giorni lavorativi (in bianco)` | Lun–Ven bianchi, **Sab e Dom grigi** | sette caselle cliccabili |
+| `Numero di fasce orarie` | **10 fasce orarie** | ⚠ **campo in sola lettura** — vedi sotto |
+| `Durata della fascia oraria` | **60 Minuti** | modificabile (matita) |
+| `Durata totale di una giornata` | **10h00** | derivato, non inseribile |
+| `Suddivisione della fascia oraria` | **Nessuno** | radio: in 2 / 3 / 4 / 6 / 12 / Nessuno |
+| `Durata di ogni frazione` | **1h00** | derivato dai due sopra |
+
+🔑 **Il numero di fasce non si scrive: si aggiunge o si toglie a un'estremità.** Il
+campo è grigio, e sotto ci sono due righe gemelle — `Aggiungi`/`Togli` *N* fasce
+**all'inizio della giornata**, `Aggiungi`/`Togli` *N* fasce **alla fine della
+giornata**. «Passare da 10 a 8 fasce» non è quindi una domanda ben posta qui:
+bisogna dire **da quale capo**, e il perché è l'allineamento — il rango di una
+fascia esistente cambia solo se se ne aggiunge una *prima* di essa.
+
+⚠ Ma **ai bordi non è l'unico modo**: il pannello `Parametri → Istituto → Orari`
+porta un pulsante `Inserisci / cancella una fascia oraria` (👁 2026-08-29), che è
+un'operazione posizionale. Le due strade coesistono, e quale sia la differenza —
+se non che una è di conversione e l'altra di manutenzione — **non è osservato**.
+
+⚠ **Il ciclo pluri-settimanale non è raggiungibile da questa finestra.** I giorni
+mostrati sono i sette della settimana e nient'altro; `NombreJoursParCycle > 7` — che
+lo XSD ammette e le stringhe chiamano `Ciclo personalizzato` — vive quindi altrove,
+verosimilmente nel solo wizard di creazione della base. Sulla demo il ciclo **è** la
+settimana, cinque giorni.
+
+E la nota che il prodotto stampa in chiaro dentro la finestra, che era
+[INFERENZA] fino a oggi:
+
+> *«La durata della fascia oraria serve per il calcolo dei servizi dei docenti. 10
+> fasce orarie da 60 minuti corrispondono a una giornata compresa tra le 8.00 e le
+> 18.00.»*
+
+**Per noi**, la demo è `5 × 10 × 1` a 60 minuti — e questo **chiude per
+osservazione** la codifica `place = giorno × 10 + rango` dedotta dal formato
+binario: il 10 è davvero `NombreSequencesParJour`, letto nella finestra che lo
+imposta.
+
 ### Le suddivisioni sub-orarie
 
 Una fascia si divide in **2, 3, 4, 6 o 12** parti uguali — con fasce da 60 minuti:
-30, 20, 15, 10, 5 minuti.
+30, 20, 15, 10, 5 minuti. **Confermato in UI** (2026-08-29): sono sei radio in
+esclusione, e il sesto è `Nessuno`, che è il valore della demo. Non è quindi un
+elenco aperto: `NombrePlacesParSequence` prende **sei valori e basta**.
 
 > *"Una suddivisione in 2 crea 2 frazioni orarie da 30 min. che permettono la
 > creazione di attività da 30 minuti, 1h, 1h30, 2h00, 2h30..."*
@@ -76,10 +126,11 @@ secondo giro — con l'avallo del produttore, che la sconsiglia.
 Esistono quindi:
 
 - la **fascia di calcolo**, unità del motore **e** unità di conteggio delle ore di
-  servizio del docente (*"Mantenere la durata predefinita di 60 minuti se una fascia
-  oraria corrisponde a un'ora di servizio per i vostri docenti"*);
+  servizio del docente — scritto nella finestra stessa, 👁 osservato: *«La durata
+  della fascia oraria serve per il calcolo dei servizi dei docenti»*;
 - l'**etichetta oraria visualizzata**, personalizzabile (55 min, orari sfalsati),
-  con una validazione di coerenza cronologica.
+  con una validazione di coerenza cronologica — 👁 e sono davvero **due campi in
+  due finestre diverse**, entrambi a 60 sulla demo (§ *Orari / Fasce orarie*).
 
 ⚠ Cambiare la durata di fascia **ricalcola i monte ore**. Non è un parametro
 grafico.
@@ -101,9 +152,45 @@ soli record** — etichetta più indice di rango (`Intervallo del mattino` = 2,
 
 Prova sui dati: i ranghi **2 e 4 sono fra i più occupati** della base (168 e 162
 attività). Se l'intervallo consumasse un rango, sarebbero vuoti. L'unico rango
-vuoto è il **6**, che è la mensa. Le stringhe concordano: le attività stanno «**a
+vuoto è il **6** — che avevamo attribuito «alla mensa» e che l'osservazione
+precisa: è la **fascia di pausa della mezza giornata**, la riga senza nome fra
+`M6` e `P1`. La mensa è ciò che ci si svolge dentro, e sulla demo non ha nemmeno
+un turno attivo. Le stringhe concordano: le attività stanno «**a
 cavallo** dell'intervallo», e l'utente «sposta le **linee gialle**» — è un confine
 disegnato fra due ranghi.
+
+**👁 Confermato in UI il 2026-08-29** (`Parametri → Istituto → Orari`, passo 2),
+e la conferma è più stretta di quanto sperassi. Il pannello elenca due righe —
+`Intervallo del mattino` e `Intervallo del pomeriggio` — con tre colonne: un
+segno di spunta (attivo/no), il **`Nr. fasce orarie dopo l'ultimo intervallo`** e
+le **`Classi`**.
+
+| | Nome | Nr. fasce dopo l'ultimo | Classi |
+|---|---|---|---|
+| ✔ | Intervallo del mattino | **2** | Tutte |
+| ✔ | Intervallo del pomeriggio | **2** | Tutte |
+
+🔑 **La UI mostra il salto, il file memorizza il rango.** `2` e `2` cumulano a 2 e
+4, che sono esattamente i due indici trovati nella tabella `RECREATION`. Le due
+letture — binario e interfaccia — combaciano su una trasformazione, non su un
+numero, il che è una verifica molto più forte di una coincidenza.
+
+E sulla griglia a destra le linee sono **gialle** e stanno **fra** due righe, non
+al posto di una: il contrasto con la pausa di mezza giornata, che è una riga
+intera senza nome, si vede nella stessa immagine. È la differenza fra un confine e
+una `Place`, disegnata.
+
+Due cose nuove, che le stringhe non davano:
+
+- gli intervalli hanno un **orario proprio** (§ *Orari / Fasce orarie*): sulla demo
+  09:50–10:00 e 11:50–12:00, cioè **dieci minuti ritagliati prima del confine**.
+  Non allungano la giornata — `M6` finisce lo stesso alle 14:00 — quindi mangiano
+  l'etichetta della fascia precedente e lasciano intatta la fascia di calcolo.
+  Ancora le due nozioni di «ora»;
+- la colonna **`Classi`** (sulla demo `Tutte`): un intervallo può valere per un
+  **sottoinsieme di classi**. Non è l'eccezione al vincolo — quella è
+  `NONRESPECTCLASSERECREATION` — è l'intervallo stesso che può non esistere per
+  tutti.
 
 Il vincolo che ne discende è però **hard**, con eccezione per classe
 (`NONRESPECTCLASSERECREATION`) — vedi [vincoli.md](vincoli.md).
@@ -111,19 +198,52 @@ Il vincolo che ne discende è però **hard**, con eccezione per classe
 ⚠ In italiano «intervallo» traduce **due** parole francesi diverse: `récréation`
 (questa) e `interclasse`. Vedi [glossario-it-fr.md](glossario-it-fr.md).
 
-### La linea di mezza giornata
+### 👁 La linea di mezza giornata
 
-Due modalità **alternative**, dichiarate esplicitamente:
+Osservata il 2026-08-29 in `Parametri della base dati → Istituto → Orari`, che è
+una procedura in **tre passi**: `1 Mezza giornata`, `2 Intervalli`,
+`3 Orari / Fasce orarie`.
 
-| Modalità | Testo |
+Due modalità **alternative**:
+
+| Modalità | |
 |---|---|
-| `Giornata continua` | *"La giornata continua disattiva la mensa"* |
-| `Giornata con una pausa delimitata da` | `l'ora di fine mattinata:` + `e l'ora di inizio del pomeriggio:` |
+| `Giornata continua` | *«La giornata continua disattiva la mensa»* |
+| `2 mezze giornate separate da una pausa` | ← selezionata sulla demo |
 
-La linea si definisce **in numero di fasce**, non in orario assoluto:
-*"Spostare gli indicatori viola sulla griglia sottostante per definire il numero di
-fasce orarie di ogni mezza giornata"*. Con un'opzione di arrotondamento:
-*"Dopo la pausa della mezza giornata, riprendi all'inizio dell'ora successiva"*.
+🔑 **La pausa non è un confine: è un blocco di fasce, e consuma la giornata.** La
+demo dichiara `della mattina (M): 6`, `della pausa: 1`, `del pomeriggio (P): 3` — e
+**6 + 1 + 3 = 10**, cioè esattamente il `NombreSequencesParJour` della griglia. Le
+righe a destra si chiamano `M1…M6`, poi una riga **senza nome** fra due linee
+verdi, poi `P1…P3`. La fascia di pausa esiste nella griglia e non è piazzabile:
+è la «fascia di sistema» che il modello nostro deve saper rappresentare.
+
+La linea si sposta **trascinando le linee verdi** sulla griglia — *«Spostate le
+linee verdi sulla griglia sottostante per definire il numero di fasce orarie di
+ogni mezza giornata»* — quindi si definisce in **numero di fasce**, mai in orario
+assoluto. Le linee attraversano tutti i giorni insieme: la divisione è **globale**,
+non per giorno.
+
+E la casella spuntata sulla demo:
+
+> ☑ *«Dopo la pausa della mezza giornata, riprendi all'inizio dell'ora successiva.»*
+
+🔑 È **la stessa discontinuità** che il nostro export iCal già gestisce: al confine
+di mezza giornata l'orologio salta invece di proseguire, quindi un'attività a
+cavallo non è **un** evento. Lì l'avevamo dedotta dalle `SlotLabel`; qui è un
+parametro dichiarato, con una casella per accenderlo.
+
+⚠ **E c'è una maschera che non abbiamo.** In fondo alla griglia, una casella per
+giorno (`Lun. Mar. Mer. Giov. Ven.`, tutte vuote sulla demo) con la legenda:
+
+> *«I giorni spuntati saranno ignorati durante il calcolo delle giornate libere.»*
+
+Non è la maschera dei giorni lavorativi — quella sta nella griglia oraria e
+toglie il giorno dalla base. Questa è un **secondo** filtro, che lascia il giorno
+lavorativo ma lo esclude dal conteggio di `giornate libere` / `mezze giornate
+libere`. I nostri `FreeGuaranteedChecker` e `FreeGuaranteedBuilder` contano su
+tutti i `days_per_cycle` senza eccezioni: → fra i **debiti dichiarati** di
+[todo.md](../todo.md).
 
 🔑 **La mezza giornata è l'unità di misura di un'intera famiglia di vincoli**:
 `Massimo di mezze giornate di lavoro`, `mezze giornate libere garantite`,
@@ -147,10 +267,66 @@ Prova diretta: nella finestra di ricerca di una fascia libera, la mensa è elenc
 E il piazzamento automatico mostra lo stato `Mensa attiva` / `Mensa non attiva` fra
 i suoi indicatori di sistema.
 
+#### 👁 Ed è più grosso di un vincolo: è un sotto-sistema
+
+Osservata il 2026-08-29 la scheda `Parametri → Istituto → Mensa`. La mensa è una
+**finestra oraria** — `☑ Attivata dalle 14h00 alle 15h00` — con una **maschera per
+giorno** propria (sulla demo `Lun. Mer. Giov. Ven.`, con `Mar.` fuori), e dentro
+quella finestra si definiscono dei **turni**:
+
+- `Aggiungi un turno`, ciascuno con la sua sotto-finestra dentro 14h00–15h00,
+  disegnata come una barra;
+- ogni turno destinato a `Classi` (con un `N. Max.`) e/o a `Docenti`;
+- `Gestione dei turni destinati agli alunni`: ☑ `Equilibra automaticamente`,
+  ☐ `Gestisci un numero massimo di classi`, con `Statistiche di ripartizione`.
+
+Sulla demo: quattro turni definiti ma `Nessun turno mensa attivo`.
+
+🔑 Non è quindi «un'ora bloccata»: è un **problema di assegnazione a sé**, con
+capienze e bilanciamento — la stessa forma dell'assegnazione delle aule, che da
+noi è già una seconda fase.
+
 **Per noi:** in una scuola italiana la pausa mensa quasi non esiste (tempo pieno a
-parte). È un candidato ragionevole a *fuori scope v1*, ma va dichiarato, non
-dimenticato — e il meccanismo generale «fascia di sistema che blocca il piazzamento»
-serve comunque per le mezze giornate non lavorative.
+parte), e questa osservazione **rafforza** il *fuori scope v1* invece di
+indebolirlo: entrarci vorrebbe dire un terzo modello di ottimizzazione. Ciò che
+serve comunque è il meccanismo generale «fascia di sistema che blocca il
+piazzamento», che le mezze giornate non lavorative usano lo stesso — e che la
+**fascia di pausa** della mezza giornata (§ *La linea di mezza giornata*) rende
+necessario a prescindere dalla mensa.
+
+### 👁 Orari / Fasce orarie — dove nascono le `SlotLabel`
+
+Passo 3 della stessa procedura (👁 2026-08-29). In alto un radio,
+`Definizione delle etichette relative a: ● Orari  ○ Fasce orarie`: le fasce si
+possono etichettare con l'**orologio** oppure con il **rango** («1ª ora»).
+
+`Creazione automatica degli orari` prende **tre** numeri:
+
+| Campo | Demo |
+|---|---|
+| `Primo orario sulla griglia` | **08:00** |
+| `Durata reale delle fasce orarie` | **60** Minuti |
+| `Durata tra le fasce orarie` | **0** Minuti |
+
+🔑 **`Durata reale` non è la durata della fascia di calcolo, ed è in un altro
+pannello.** Il valore che serve al motore e al conteggio dei servizi si imposta in
+`File → Strumenti → Cambia i parametri della griglia oraria`; questo genera solo
+le **etichette**. È il campo che la guida evocava con l'esempio dei «55 minuti», e
+qui si vede che sono davvero due caselle in due finestre diverse. E `Durata tra le
+fasce orarie` aggiunge la terza possibilità: **etichette con un buco fra l'una e
+l'altra**, senza che il modello di calcolo lo sappia.
+
+Sotto, i due blocchi che riprendono gli altri due passi con l'orologio invece che
+con i conteggi — `Mezza giornata` 14:00 → 15:00 (che è anche la finestra della
+mensa) e `Intervallo` con i due orari sopra. Poi `Valori predefiniti` e **`Crea
+gli orari`**: le etichette sono **generate**, e `Personalizza gli orari` permette
+poi di riscriverle a mano una per una.
+
+**Per noi.** È esattamente il nostro `SlotLabel`, e ne conferma il ruolo: il
+generatore automatico è `primo_orario + rango × (durata_reale + durata_fra)`, e
+tutto il resto è personalizzazione. L'export iCal fa la cosa giusta a leggere le
+etichette invece di `slot_minutes` — con `Durata tra le fasce orarie > 0` le due
+grandezze **divergono per costruzione**, non per un caso limite.
 
 ## Il calendario
 
@@ -354,7 +530,9 @@ carta d'identità riassume solo conteggi di entità.
 1. **Slot parametrico**, non "l'ora". `giorni_per_ciclo × fasce × suddivisione`.
    Default 5 × 6 × 1, ma la struttura deve reggere altro.
 2. **Il ciclo non è la settimana.** Tenere separati "settimana di calendario" e
-   "posizione nel ciclo" fin dallo schema, anche se in v1 coincidono.
+   "posizione nel ciclo" fin dallo schema, anche se in v1 coincidono. ⚠ Nella
+   finestra di conversione (👁 2026-08-29) il ciclo pluri-settimanale **non
+   compare**: lo XSD lo ammette, la UI corrente lo mostra solo alla creazione.
 3. **Collocazione per periodo**, con vincolo di uguaglianza se l'attività è fissa.
    È la scelta strutturale più costosa da rimandare.
 4. **Eccezioni datate come layer separato** dalla ricorrenza. Aggancio naturale al
@@ -368,7 +546,11 @@ carta d'identità riassume solo conteggi di entità.
 
 - [ ] **`Aree mobile`** (FR *Espaces mobiles*): citate una sola volta, senza
       contesto. → `Parametri → Orari`
-- [ ] Se un **intervallo** occupi una `Place` propria o sia un confine fra fasce.
+- [ ] Dove si imposta il **`Ciclo personalizzato`** (`NombreJoursParCycle > 7`):
+      **non** è nella finestra di conversione della griglia (👁 2026-08-29).
+- [x] ~~Se un **intervallo** occupi una `Place` propria o sia un confine fra
+      fasce.~~ **Confine** — chiuso sui dati il 2026-07-26, 👁 confermato in UI il
+      2026-08-29 (linee gialle *fra* le righe, contro la riga intera della pausa).
 - [ ] Se il **tempo di spostamento fra sedi** sia globale o per coppia di sedi (il
       campo `Verso` suggerisce che possa essere direzionale).
 - [ ] Se esistano periodicità reali con denominatore **> 2** (oltre Q1/Q2).

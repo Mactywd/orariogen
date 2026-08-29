@@ -205,12 +205,12 @@ Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto 
    stanno **nella stessa fascia** (è ciò che la scorciatoia compra) e l'ora
    comune a classe intera **occupa** entrambe le parti. La decisione 4 non
    decade.
-   ⛔ Ma l'unità della copertura è la **parte** dove dovrebbe essere l'**atomo**
-   di ADR-017: un alunno non sta in una parte, sta in una **combinazione** di
-   parti, una per partizione. Appena una classe ha due partizioni — o una sola
-   con parti che ricevono materie diverse, cioè **IRC e alternativa: ogni
-   classe italiana** — `structural:coverage` produce scostamenti che non
-   esistono. Vedi «Cosa resta davvero aperto».
+   ✅ **E la seconda metà regge dal 2026-08-28 (sera)**: l'unità della copertura
+   era la **parte** dove doveva essere l'**atomo** di ADR-017, e il piano era
+   letto come un curriculum quando è un **catalogo**. Corretti entrambi con
+   [ADR-020](decisioni.md) — la copertura misura l'atomo, e le righe in
+   alternativa sono un dato dichiarato. Misura: quattro scostamenti inesistenti
+   su una classe sdoppiata due volte e due su ogni classe italiana, ora zero.
 
 ---
 
@@ -218,10 +218,13 @@ Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto 
 
 Non sono decisioni di scope, ma condizionano il lavoro che segue, e stanno
 tutte in **[todo.md](todo.md)** — l'unico elenco, per non averne due che
-divergono. In sintesi: ⛔ **D1**, l'unità del monte ore (la parte o l'atomo:
-**due scostamenti inesistenti su ogni classe italiana**, e cambia i dati che una
-scuola deve inserire); **D2**, la via d'ingresso dei dati anagrafici; **D3**, se
-la fase 1 debba smettere di essere cieca alle aule; **D4**, se serva
-un'interfaccia. Più cinque osservazioni da fare in EDT, fra cui la
+divergono. In sintesi: **D2**, la via d'ingresso dei dati anagrafici; **D3**, se
+la fase 1 debba smettere di essere cieca alle aule; **D4**, il confine con
+l'interfaccia. Più sei osservazioni da fare in EDT, fra cui la
 **configurazione della griglia oraria**, che non è mai stata vista in UI ed è la
 base su cui poggia tutto il modello del tempo.
+
+⛔ **D1 — l'unità del monte ore — è sciolta** il 2026-08-28 con
+[ADR-020](decisioni.md), e con essa cade il blocco sull'import: ciò che una
+scuola deve inserire in più è un'etichetta sulle righe in alternativa, non un
+piano di studi per combinazione di parti.

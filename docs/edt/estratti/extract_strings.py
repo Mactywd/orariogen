@@ -2,7 +2,7 @@
 """Ri-estrae le tabelle di lingua IT/FR/EN da EDT Monoposto.dll (sola lettura)."""
 import re, html, sys, os
 
-DLL = "/home/mactyws/.wine/drive_c/Program Files/Index Education/EDT 2026/Monoposto/EDT Monoposto.dll"
+DLL = "/home/mattia/.wine/drive_c/Program Files/Index Education/EDT 2026/Monoposto/EDT Monoposto.dll"
 OUT = os.path.dirname(os.path.abspath(__file__))
 
 data = open(DLL, "rb").read()
