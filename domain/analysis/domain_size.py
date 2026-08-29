@@ -123,7 +123,19 @@ def trial_placements(activity, state, relaxed=False):
     was = state.placed.get(activity.id)
     if was is not None:
         state.unplace(activity.id)
-    resources = state.tokens[activity.id]
+    # ⚠ Le chiavi di occupazione **più le aule candidate dichiarate**. Le due
+    # cose non coincidono: `activity_tokens` mette l'aula fra i token solo a
+    # candidata unica, perché con due o più la scelta è della seconda fase.
+    # Ma `structural:room_pool` (ADR-021) parla proprio di quel caso — il
+    # picco di un **gruppo** di aule — e il filtro `resources` è un
+    # sottoinsieme di chiavi, non di famiglie: senza le candidate qui dentro
+    # il checker gira e scarta ogni pool, perché nessuno tocca le risorse
+    # chieste, e S.P., il violatore di Hall e la classifica dei vincoli
+    # restano ciechi a una famiglia intera. Allargare il filtro è sempre
+    # sano: è un'ottimizzazione, e un'ottimizzazione più larga costa, non
+    # sbaglia.
+    resources = set(state.tokens[activity.id])
+    resources |= {r.pk for r in activity.rooms.all()}
     baseline = _hard_keys(state, resources, checkers)
     grid = state.grid
     out = []

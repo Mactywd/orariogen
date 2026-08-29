@@ -530,7 +530,7 @@ def run_tutte_le_famiglie(seed, time_limit=120):
 
 from domain.models import (
     ClassPart, ClassPartition, InstituteSettings, ResourceTimeConstraint,
-    ResourceUnavailability, SubjectConstraint,
+    ResourceUnavailability, Room, SubjectConstraint,
 )
 from domain.models.resources import Resource
 
@@ -576,6 +576,44 @@ def _derive_occupation(w):
     senza conflitti, e con piu' firme di settimana in gioco. Non vacuo per
     costruzione: ogni testimone ha attivita' da ricollocare."""
     return 1
+
+
+@deriver("structural:room_pool", {"room_group_peak"})
+def _derive_room_pool(w):
+    """Un gruppo di aule **esattamente capiente** per il testimone.
+
+    La derivazione non puo' scegliere le righe a caso: il testimone
+    dev'essere valido, quindi il numero di aule dev'essere almeno il picco di
+    simultaneita' delle attivita' a cui il gruppo viene attaccato. Lo si
+    misura sul piazzamento del testimone, per firma di settimana — due
+    attivita' di settimane disgiunte non competono — e si creano
+    **esattamente** quelle aule: il vincolo e' cosi' soddisfatto e stretto,
+    che e' l'unico modo di distinguere un builder giusto da un builder vacuo.
+
+    ⚠ Serve un picco di **almeno due**. A picco uno il gruppo avrebbe una
+    sola aula, e una candidata unica e' una chiave di occupazione
+    (`activity_tokens`): starebbe misurando `structural:occupation`, non
+    questa famiglia. Quando il seed non lo esibisce la derivazione e' vacua e
+    `run_family` la salta, invece di spacciare per verde un test che misura
+    un'altra cosa."""
+    scelte = w.rng.sample(w.activities, max(2, len(w.activities) // 2))
+    picco = 0
+    for rep, _ in w.signatures:
+        carico = defaultdict(int)
+        for a in scelte:
+            if rep not in w.weeks_of[a.id]:
+                continue
+            day, slot = w.placement[a.id]
+            for s in range(slot, slot + a.duration_slots):
+                carico[(day, s)] += 1
+        picco = max([picco, *carico.values()])
+    if picco < 2:
+        return 0
+    aule = [Room.objects.create(name=f"LAB-{i}", simultaneous_capacity=1)
+            for i in range(picco)]
+    for a in scelte:
+        a.rooms.add(*aule)
+    return len(scelte)
 
 
 @deriver("structural:unavailability", {"unavailability"})

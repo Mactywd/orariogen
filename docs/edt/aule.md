@@ -146,6 +146,19 @@ sono vincoli**. Non compaiono fra i vincoli ignorabili e servono solo a
 raggruppare la lista per chi sceglie a mano. L'unico vincolo reale sull'aula è la
 sua **disponibilità**, più la sede se attiva.
 
+⚠ **E questa è la lista di ciò che vincola la scelta di *quale* aula — non di
+quante ne servano.** La distinzione è stata letta male fino al 2026-08-29, ed è
+costata otto rinunce su novantadue nel nostro Fermi
+([ADR-021](../decisioni.md)). Il conteggio dei posti **non è in questa
+finestra** perché non è una domanda dell'assegnazione: è una domanda del
+**piazzamento**, e in EDT ha la sua causale nella diagnostica del piazzamento —
+*«il gruppo di aule ha raggiunto il suo picco d'occupazione»*
+([diagnostica.md](diagnostica.md)) — più il conto `Aule` fra le cinque risorse
+del pannello dell'attività ([motore-risoluzione.md](motore-risoluzione.md)).
+Cioè: **le aule si contano mentre si piazza, e si scelgono dopo.** I cinque
+`TypeChoixOptimSalle` qui sotto sono tutti criteri di *scelta*; nessuno conta i
+posti, perché quel conto è già stato fatto.
+
 ### 📦 I due enum dell'assegnazione: come sceglie, e cosa la rende incompatibile
 
 ⚠ Sono **valori estratti dai binari**. Le loro **etichette di interfaccia** sono
@@ -357,6 +370,13 @@ La capienza dell'aula non è il collo di bottiglia: lo è il docente. Vedi
 - L'aula ha `nome`, `sede`, `capienza` (descrittiva) e un intero
   **`simultaneous_capacity`** — l'unico attributo che il solver deve rispettare.
   Default 1.
+- 🔑 **E lo rispettano entrambe le fasi, per due domande diverse.** La fase 1
+  conta i posti di un **insieme** di aule candidate (`structural:room_pool`,
+  [ADR-021](../decisioni.md)): non «quale aula», ma «quante ne servono qui», che
+  è un vincolo di Hall e non un totale — sul Fermi, su nessuna delle 26 celle
+  contese l'unione delle candidate era in deficit, e le rinunce c'erano lo
+  stesso. La fase 2 sceglie *quale*, ed è lì che valgono i tre vincoli della
+  finestra `Aule disponibili`.
 - La **gerarchia padre/figlio** fra aule è un extra rimandabile: serve a nominare
   gli spazi, non a esprimere la capienza. Se la implementiamo, va con la
   **cascata di default** sui campi ereditabili (gestore, sede).

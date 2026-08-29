@@ -15,6 +15,86 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-29 (sera) — D3: la fase 1 impara a contare le aule, e la risposta era già nel repo** —
+  D3 chiedeva se accettare le rinunce della seconda fase come conseguenza
+  dichiarata o insegnare al piazzamento a contare le aule. La domanda sembrava
+  una preferenza di prodotto; era un'**osservazione mal letta**, e le tre fonti
+  stavano già nei documenti:
+
+  - la causale *«il gruppo di aule ha raggiunto il suo picco d'occupazione»*
+    sta in `AffSco_UtilDiagnostic` — la diagnostica del **piazzamento**, cioè
+    l'elenco delle ragioni per cui un'attività non si piazza;
+  - nel risolutore passo-passo il pannello dell'attività conta **tutte e
+    cinque** le risorse (`Aule 0`) e le risorse in conflitto diventano rosse,
+    aule comprese;
+  - il `Qtà` dell'aula è una capacità simultanea, con le colonne calcolate
+    `Assegnate` / `Picco d'occ.`.
+
+  🔑 **La frase falsa era una sola**, e questo repo l'aveva scritta in tre
+  posti: *«non è un difetto del modello, è la conseguenza dichiarata di
+  assegnare le aule dopo»*. Assegnarle dopo **non obbliga a contarle dopo**. In
+  EDT l'ottimizzatore dedicato sceglie *quale* aula fra le ammissibili — i suoi
+  cinque criteri sono tutti criteri di scelta, nessuno conta i posti, perché
+  quel conto è già stato fatto.
+
+  **La misura che ha deciso, prima di scrivere una riga di modello.** Sul Fermi
+  con le aule: 92 richieste, 84 assegnate, **8 rinunce**, e i numeri di prima
+  dicevano solo «39 celle contese». Contate a mano le celle in deficit, il
+  risultato è netto in due modi:
+
+  - su **nessuna** delle 26 celle contese l'unione delle candidate era in
+    deficit. Un tetto sul totale non avrebbe morso: il deficit vive in un
+    **sottoinsieme**, cioè è Hall e non un totale;
+  - il deficit di Hall sommato su tutte le celle faceva **8**, che è
+    esattamente il numero di rinunce, e stava tutto su un insieme solo —
+    `{LAB-FIS, LAB-INF}`, ripetuto su sette celle. La fase 2 rinuncia una volta
+    per ogni unità di deficit che la fase 1 le lascia, perché non ha altra
+    mossa.
+
+  Da qui `structural:room_pool`, trentesimo checker e ventisettesimo builder
+  ([ADR-021](decisioni.md)). Il checker trova l'insieme colpevole col
+  macchinario che il violatore di Hall usava già (`domain/analysis/flow.py`:
+  flusso massimo, e il lato sorgente del taglio minimo *è* l'insieme
+  deficitario) e nomina l'**unione delle candidate del gruppo colpevole**, non
+  il taglio grezzo — i due contengono le stesse attività, ma il taglio si porta
+  dietro aule che nessuno di quel gruppo chiede, e mandare a smontare l'aula
+  sbagliata è il difetto peggiore di una diagnostica. Il builder posta i tetti
+  sulla chiusura per unione degli insiemi dichiarati, troncata a 256.
+
+  **Il vincolo è sano per costruzione**, e vale la pena dirlo perché è ciò che
+  lo distingue da un'euristica: vieta esattamente le configurazioni che
+  *nessuna* assegnazione potrebbe servire — il principio dei cassetti — quindi
+  non toglie mai al piazzamento un orario che la fase 2 saprebbe completare.
+  Non può creare scarti nuovi, può solo spostare un problema da «rinuncia
+  d'aula» a «collocazione diversa».
+
+  **Risultato, misurato:** 92 richieste su 92 assegnate, **zero rinunce**, zero
+  deficit residuo, e la fase 1 continua a piazzare tutte e 284 le attività
+  senza scarti. Prezzo: **1116 → 1536 constraint** (+420: quattordici pool con
+  più di un'aula su 30 celle) e 1,07 → 1,27 s.
+
+  ⚠ **Un difetto trovato integrando, non prevedendo — e non era del pezzo
+  nuovo.** Il filtro `resources` di `trial_placements` sono le **chiavi di
+  occupazione** dell'attività, e un'aula con due candidate non è una chiave:
+  `activity_tokens` la mette fra i token solo a candidata unica, perché con due
+  la scelta è della seconda fase. S.P., il violatore di Hall e la classifica
+  dei vincoli erano quindi ciechi all'intera famiglia nuova — il checker girava
+  e scartava ogni pool, perché nessuno toccava le risorse chieste. Si vedeva
+  solo guardando un `S.P. = 2` che avrebbe dovuto essere 1. Il filtro ora
+  comprende le candidate dichiarate; allargarlo è sempre sano, perché è
+  un'ottimizzazione e un'ottimizzazione più larga costa, non sbaglia.
+
+  ⚠ **Il banco a testimone ha un derivatore in più, e un seed vacuo
+  dichiarato.** Il testimone non ha aule: il derivatore ne crea
+  **esattamente** quante ne serve il picco di simultaneità misurato sul
+  piazzamento, così il vincolo è soddisfatto e stretto. A picco uno il gruppo
+  avrebbe una sola aula, cioè una chiave di occupazione, e starebbe misurando
+  un'altra famiglia: quel caso è una derivazione vacua, e `run_family` lo
+  salta invece di spacciarlo per verde. Misurato: 4 seed su 5 lo esercitano,
+  il seed 2 no.
+
+  **814 test verdi**, 17 skip (uno nuovo, quello lì sopra).
+
 - **2026-08-29 — La griglia oraria, finalmente guardata (e un confronto che non cercavo)** — L'osservazione di
   EDT era dichiarata conclusa da ADR-016, ma **O2 era rimasta aperta apposta**:
   la configurazione della griglia era l'unica parte del modello del tempo nota

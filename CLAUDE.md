@@ -65,14 +65,16 @@ config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
                         la copertura misurata **per alunno** (ADR-020:
-                        l'unità è l'atomo, non la parte),
+                        l'unità è l'atomo, non la parte), il **picco del gruppo
+                        di aule** (ADR-021, room_pool.py: Hall su un insieme, non
+                        un totale — le aule che la fase 1 conta senza assegnarle),
                         il violatore di Hall (fase 5, hall.py), lo scarto come
                         stato nominato (checkers/placement.py), la richiesta
                         d'aula insoddisfatta (checkers/room_assignment.py) e la
                         **classifica dei vincoli** per fallimenti causati
                         (blame.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
-                        residuo di ADR-018, ventisei builder su ventisette,
+                        residuo di ADR-018, ventisette builder su trenta checker,
                         la catena lessicografica (objective.py), le quote
                         di alleggerimento (relaxation.py), i criteri di
                         qualità (quality.py + criteria.py), la separazione
@@ -87,7 +89,7 @@ domain/                l'app Django del modello di dominio v1
                         criteri, i sei rilevatori di problemi, le quattro
                         operazioni insiemistiche, e il perimetro che restringe
                         l'azione mai il conteggio
-tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisei builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture, più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisette builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -168,21 +170,24 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
 > predicati e l'analisi di capienza **sono anch'essi implementati**
 > (`domain/analysis/`); e il **modello CP-SAT hard è completo**
-> (`domain/solver/`): **ventisei builder su ventotto checker**, e i due senza
+> (`domain/solver/`): **ventisette builder su trenta checker**, e i tre senza
 > builder non ne hanno uno per costruzione — `structural:coverage`
-> (`PLACEMENT_INDEPENDENT`: il solver non crea né distrugge attività) e
+> (`PLACEMENT_INDEPENDENT`: il solver non crea né distrugge attività),
 > `structural:placement` (lo scarto *è* il meccanismo del modello, non un
-> vincolo da postare). Il **violatore di Hall** (fase 5 dell'Analisi dei
+> vincolo da postare) e `structural:room_assignment` (vive nel modello della
+> **seconda fase**). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **787 test verdi**, 16 skip tutti misurati e attribuiti
+> minimo. **814 test verdi**, 17 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
 > righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
-> `None`, quindi ventuno builder su ventisei non postano nulla — e infatti dà
-> **gli stessi 8140 variabili e 1082 constraint dello spike a cinque vincoli**,
-> `OPTIMAL` in ~0,56 s. La misura del modello è
+> `None`, quindi **ventuno builder su ventisette non postano nulla** — e prima
+> delle aule dava gli stessi 8140 variabili e 1082 constraint dello spike a
+> cinque vincoli, `OPTIMAL` in ~0,56 s. Le famiglie che esercita sono **sei**:
+> griglia, indisponibilità, occupazione, sedi, D.T.B. e — dal 2026-08-29 —
+> `room_pool`. La misura del modello resta
 > `test_modello_completo`, che attiva tutte le famiglie **insieme** sullo stesso
 > testimone: 22–23 famiglie con righe su 26, 48–73 righe, `OPTIMAL` su tutti e
 > cinque i seed, oracolo pulito.
@@ -265,13 +270,21 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > senza aula, poi i cambi rispetto alla ripartizione precedente), la
 > **rinuncia** ammessa come lo scarto, e `manage.py assign_rooms`.
 >
-> ⚠ **E la seconda fase ha un prezzo, ora misurato invece che previsto.** Il
-> piazzamento è cieco alle aule con più di una candidata, e §6 dichiara fuori
-> scope il ritorno indietro: la fase 1 può quindi accatastare su una cella più
-> richieste di quante aule esistano, e la fase 2 non ha altra risposta che
-> rinunciare. Sul Fermi con le aule: 92 richieste, **84 assegnate, 8 rinunce**,
-> 39 celle contese, fino a 5 richieste su una sola cella. Non è un difetto del
-> modello: è la conseguenza dichiarata di assegnare le aule *dopo*.
+> 🔑 **E dal 2026-08-29 la fase 1 le aule le conta** (`structural:room_pool`,
+> [ADR-021](docs/decisioni.md)) — trentesimo checker, ventisettesimo builder.
+> Fino a quel giorno il piazzamento era cieco alle aule con più di una
+> candidata e la fase 2 rinunciava: **84 assegnate su 92**. Era scritto qui
+> come «la conseguenza dichiarata di assegnare le aule *dopo*», e la parola
+> falsa era *dopo*: assegnarle dopo non obbliga a **contarle** dopo, ed EDT
+> infatti le conta mentre piazza (la causale del *picco d'occupazione del
+> gruppo di aule* sta in `AffSco_UtilDiagnostic`, la diagnostica del
+> piazzamento; il pannello dell'attività conta `Aule` fra le cinque risorse).
+> Il vincolo è **Hall, non un totale** — su nessuna delle 26 celle contese
+> l'unione delle candidate era in deficit, e le rinunce c'erano lo stesso — e
+> il deficit misurato era *esattamente* il numero di rinunce: 8, tutte su
+> `{LAB-FIS, LAB-INF}`. Ora: **92 su 92, zero rinunce**, zero scarti in fase 1,
+> 1116 → 1536 constraint e 1,07 → 1,27 s. Contare non è assegnare: l'aula la
+> sceglie ancora la seconda fase.
 >
 > Dal 2026-08-28 c'è anche la **classifica dei vincoli per fallimenti
 > causati** (`domain/analysis/blame.py`, in `manage.py analyze`): la seconda
@@ -331,7 +344,7 @@ risposta a un problema più facile.
 Questo script **resta parcheggiato ed è superato**: il codice vivo del solver
 è `domain/solver/` (vedi la nota di stato sopra), che ne riprende l'idea sullo
 schema del dominio approvato invece che sui dati grezzi. Il **modello hard è
-ora completo** — ventisei builder su ventisette checker. Ciò che manca non è
+ora completo** — ventisette builder su trenta checker. Ciò che manca non è
 più la traduzione dei vincoli, ma i due pezzi dichiarati fuori dal piano: gli
 alleggerimenti a quota con l'ottimizzazione lessicografica e l'assegnazione
 delle aule (il violatore di Hall è implementato, vedi la nota di stato sopra

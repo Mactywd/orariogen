@@ -33,6 +33,10 @@ CODICI = {
     "unavailability",
     "slot_out_of_grid", "break_straddled", "holiday",
     "site_transition",
+    # il picco del **gruppo di aule** (ADR-021): la fase 1 le conta, quindi
+    # e' questo oracolo a sorvegliarlo — non quello della seconda fase, che
+    # sorveglia invece *quale* aula viene assegnata (`room_unassigned`).
+    "room_group_peak",
     "weight_day", "weight_morning", "weight_afternoon", "weight_week",
     # orari sulla risorsa
     "min_distribution", "max_hours_day", "max_hours_morning",
@@ -620,10 +624,16 @@ def test_fermi_intero_misurato():
         # l'occupazione di `PALESTRA` sulle 30 celle della griglia: MOT e' la
         # sola materia a **candidata unica**, e a candidata unica l'aula entra
         # gia' nei token del piazzamento (`_activity_tokens`), quindi diventa
-        # una risorsa come il docente e la classe. FIS, SCI e DIS ne hanno due,
-        # e le due candidate non occupano niente qui: la scelta e' della
-        # seconda fase.
-        assert soluzione.stats["constraint"] == 1116
+        # una risorsa come il docente e la classe.
+        #
+        # ⚠ 1116 → 1536 con ADR-021, ed e' il prezzo di far **contare** le
+        # aule alla fase 1. I +420 sono i tetti di `structural:room_pool`: i
+        # quattro insiemi di candidate dichiarati dal dataset generano una
+        # chiusura per unione di quindici, di cui quattordici con piu' di
+        # un'aula (i singoletti non si postano — sono gia' occupazione), su 30
+        # celle. Non tutti mordono, e quelli che non potrebbero mordere
+        # nemmeno con tutte le attivita' insieme il builder li salta.
+        assert soluzione.stats["constraint"] == 1536
         # i due livelli hanno concluso, e con l'ottimo dimostrato
         assert [l["nome"] for l in soluzione.stats["livelli"]] == [
             "minuti_scartati", "attivita_scartate"]

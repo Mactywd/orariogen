@@ -63,6 +63,12 @@ def test_structural_room_assignment_non_ha_un_builder_ed_e_voluto():
     piazzamenti gia' scritti. I builder di questo registro postano sul modello
     del **piazzamento**, dove l'aula non e' ancora una decisione.
 
+    ⚠ Non confonderlo con `structural:room_pool`, che dal 2026-08-29 un
+    builder ce l'ha (ADR-021). Le due chiavi rispondono a due domande
+    diverse: *quante* aule servono in una fascia — che si sa **prima** di
+    assegnare, ed e' un vincolo del piazzamento — e *quale* aula tocca a
+    ognuno, che e' la seconda fase.
+
     Come per `structural:coverage` e `structural:placement`, l'assenza e'
     dichiarata qui perche' non sembri una dimenticanza."""
     assert "structural:room_assignment" in CHECKERS
@@ -70,7 +76,7 @@ def test_structural_room_assignment_non_ha_un_builder_ed_e_voluto():
 
 
 def test_il_registro_dei_builder_e_completo():
-    """Ventisei chiavi su ventinove. I numeri sono scritti qui apposta: se
+    """Ventisette chiavi su trenta. I numeri sono scritti qui apposta: se
     un checker nuovo entra in `domain/analysis` senza il builder
     corrispondente, questo test lo dice per nome."""
     senza_builder = {"structural:coverage", "structural:placement",
@@ -78,5 +84,5 @@ def test_il_registro_dei_builder_e_completo():
     mancanti = sorted(str(k) for k in CHECKERS
                       if k not in BUILDERS and k not in senza_builder)
     assert mancanti == []
-    assert len(CHECKERS) == 29
-    assert len(BUILDERS) == 26
+    assert len(CHECKERS) == 30
+    assert len(BUILDERS) == 27

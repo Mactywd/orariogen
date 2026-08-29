@@ -218,11 +218,15 @@ Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto 
 
 Non sono decisioni di scope, ma condizionano il lavoro che segue, e stanno
 tutte in **[todo.md](todo.md)** — l'unico elenco, per non averne due che
-divergono. In sintesi: **D2**, la via d'ingresso dei dati anagrafici; **D3**, se
-la fase 1 debba smettere di essere cieca alle aule; **D4**, il confine con
-l'interfaccia. Più sei osservazioni da fare in EDT, fra cui la
-**configurazione della griglia oraria**, che non è mai stata vista in UI ed è la
-base su cui poggia tutto il modello del tempo.
+divergono. In sintesi: **D2**, la via d'ingresso dei dati anagrafici; **D4**, il
+confine con l'interfaccia. Più due residui di osservazione in EDT e due
+esperimenti che nessun dato esistente può sostituire.
+
+⛔ **D3 — se la fase 1 debba smettere di essere cieca alle aule — è sciolta** il
+2026-08-29 con [ADR-021](decisioni.md), e non era una decisione: era
+un'osservazione già nel repo e letta male. In EDT le aule si **contano** mentre
+si piazza; l'ottimizzatore dedicato sceglie soltanto *quale*. Sul Fermi le
+richieste servite passano da **84 su 92** a **92 su 92**.
 
 ⛔ **D1 — l'unità del monte ore — è sciolta** il 2026-08-28 con
 [ADR-020](decisioni.md), e con essa cade il blocco sull'import: ciò che una

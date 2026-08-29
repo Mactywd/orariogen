@@ -58,16 +58,17 @@ def test_i_builder_tradotti_finora():
     Task 16, l'ultimo — cosi' una registrazione dimenticata o una di troppo si
     vede subito, invece di dipendere dalla memoria di chi legge.
 
-    Con il Task 16 il registro e' **completo**: ventisei chiavi su
-    ventisette, e la ventisettesima (`structural:coverage`) non ne ha una per
-    costruzione — e' `PLACEMENT_INDEPENDENT`, il solver non crea ne'
-    distrugge attivita'."""
+    Dal 2026-08-29 c'e' anche `structural:room_pool` (ADR-021), che e' il
+    ventisettesimo: il picco d'occupazione del **gruppo di aule**, cioe' le
+    aule **contate** dalla fase 1. Contarle non e' assegnarle — quella resta
+    la seconda fase, e `structural:room_assignment` resta senza builder qui."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
     assert set(BUILDERS) == {
         "structural:grid",
         "structural:unavailability",
         "structural:occupation",
+        "structural:room_pool",
         "structural:site_transition",
         "structural:didactic_weight",
         ResourceTimeConstraint.Type.MAX_GAP_HOURS,

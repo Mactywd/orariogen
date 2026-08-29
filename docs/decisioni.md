@@ -823,3 +823,127 @@ resta una **decisione** e non un difetto: → [todo.md](todo.md), O6.
 amico, → [glossario-it-fr.md](edt/glossario-it-fr.md).)
 
 **Data.** 2026-08-28
+
+---
+
+## ADR-021 — La fase 1 conta le aule; la fase 2 le assegna
+
+**Decisione.** Il modello del **piazzamento** porta una famiglia di vincoli in
+più, `structural:room_pool`: per ogni fascia e per ogni insieme *S* di aule, le
+attività le cui candidate stanno **tutte** dentro *S* non possono superare i
+posti di *S*. L'assegnazione resta una **seconda fase** con i suoi criteri, i
+suoi due livelli e la sua rinuncia: non cambia niente di
+[ADR-015](#adr-015--perimetro-funzionale-di-v1-le-sei-decisioni-contese) né
+della spec dell'assegnazione. Cambia una cosa sola, ed è quella che D3
+chiedeva: **contare non è assegnare**.
+
+**Alternative scartate.**
+
+1. **Accettare le rinunce come conseguenza dichiarata.** È ciò che il progetto
+   ha scritto per un giorno — *«non è un difetto del modello: è la conseguenza
+   dichiarata di assegnare le aule dopo»* — e la parte falsa è il **dopo**.
+   Assegnare le aule dopo non obbliga a **contarle** dopo, e il prezzo era
+   misurato: **8 richieste su 92** senza aula, su un dataset che ha quattro
+   sole materie di laboratorio.
+2. **Un tetto sull'unione delle candidate**, cioè «quante aule esistono in
+   tutto per queste attività». Non morde: misurato sul Fermi, su **nessuna**
+   delle 26 celle contese l'unione era in deficit, e le rinunce c'erano lo
+   stesso. Il deficit vive in un **sottoinsieme** — è Hall, non un totale.
+3. **Assegnare le aule dentro la fase 1**, cioè una variabile per (attività,
+   aula) nel modello grande. Chiude il problema e ne apre uno peggiore:
+   distrugge la forma del prodotto, che è di EDT — criteri propri
+   (`TypeChoixOptimSalle`), ottimizzatore dedicato (`FicheEdt_OptimiseurSalles`)
+   e una `ripartizione delle aule` distinta dal calcolo — e moltiplica il
+   modello per il numero di candidate.
+4. **Il ritorno indietro dalla fase 2 alla fase 1** quando una rinuncia
+   accade. Dichiarato fuori scope da §6 della spec dell'assegnazione, e resta
+   fuori: è la strada che costa di più e che nessun prodotto osservato
+   percorre.
+
+**Motivo — ed è un'osservazione, non una preferenza.** In EDT le aule si
+contano **mentre si piazza**. Tre fonti indipendenti, tutte già nel repo e
+tutte lette male fino a oggi:
+
+- la causale *«il gruppo di aule ha raggiunto il suo picco d'occupazione»* sta
+  nella famiglia `AffSco_UtilDiagnostic`, che è la diagnostica del
+  **piazzamento** — l'elenco delle ragioni per cui un'attività non si piazza
+  ([diagnostica.md](edt/diagnostica.md));
+- nel risolutore passo-passo il pannello `Attività da piazzare` conta **tutte e
+  cinque** le risorse (`Personale 0`, `Aule 0`, `Materiali 0`, …) e le risorse
+  in conflitto **diventano rosse, aule comprese**
+  ([motore-risoluzione.md](edt/motore-risoluzione.md));
+- il `Qtà` dell'aula è una **capacità simultanea**, con le colonne calcolate
+  `Assegnate` / `Picco d'occ.` ([aule.md](edt/aule.md)).
+
+Ciò che l'ottimizzatore dedicato decide è *quale* aula fra le ammissibili, e i
+suoi cinque criteri (`tcosSallePref`, `tcosCapacite`, …) sono tutti criteri di
+**scelta**. Nessuno di essi conta i posti: quel conto è già stato fatto.
+
+**Il metodo: Hall, non il totale.** L'insieme colpevole si trova come nella
+fase 5 dell'analisi — flusso massimo su sorgente → attività → aule candidate →
+pozzo, e il lato sorgente del taglio minimo *è* l'insieme deficitario
+(`domain/analysis/flow.py`, già scritto per il violatore di Hall). Il checker
+nomina l'**unione delle candidate del gruppo colpevole**, non il taglio grezzo:
+i due contengono le stesse attività, ma il taglio può portarsi dietro aule che
+nessuno di quel gruppo chiede, e mandare a smontare l'aula sbagliata è il
+difetto peggiore di una diagnostica.
+
+Il builder posta i tetti sulla **chiusura per unione** degli insiemi di
+candidate dichiarati: un violatore stretto è sempre di quella forma, perché
+restringere *S* all'unione delle candidate del gruppo non perde nessuna
+attività e non guadagna nessun posto. La chiusura è esponenziale nel numero di
+insiemi **distinti** — uno per materia che chiede un laboratorio, cioè pochi —
+e oltre `TETTO_POOL = 256` si tronca. La troncatura non rende il modello
+sbagliato: toglie tetti, quindi ammette di più, e ciò che passa lo nomina il
+checker.
+
+**Il vincolo è sano per costruzione.** Vieta esattamente le configurazioni che
+*nessuna* assegnazione d'aula potrebbe servire — il principio dei cassetti —
+quindi non toglie mai al piazzamento un orario che la fase 2 saprebbe
+completare. Non può introdurre scarti nuovi: può solo spostare un problema da
+«rinuncia d'aula» a «collocazione diversa».
+
+**Misure.** Fermi, con le aule del nostro dataset:
+
+| | prima | dopo |
+|---|---|---|
+| richieste d'aula servite | **84 / 92** | **92 / 92** |
+| rinunce della fase 2 | 8 | 0 |
+| deficit di Hall dopo la fase 1 | 8, su 7 celle | 0 |
+| attività scartate dalla fase 1 | 0 | 0 |
+| constraint del modello di piazzamento | 1116 | 1536 |
+| secondi della fase 1 | 1,07 | 1,27 |
+
+🔑 Il deficit misurato **era esattamente** il numero di rinunce — 8 e 8 — e
+stava tutto su un insieme solo, `{LAB-FIS, LAB-INF}`, ripetuto su sette celle.
+Non è una coincidenza: la fase 2 rinuncia una volta per ogni unità di deficit
+che la fase 1 le lascia, perché non ha altra mossa.
+
+**Conseguenze.**
+
+- Il registro passa a **ventisette builder su trenta checker**. I tre senza
+  builder restano tre, e `structural:room_assignment` è ancora fra loro: le due
+  chiavi rispondono a due domande diverse — *quante* aule servono in una
+  fascia (si sa prima, ed è piazzamento) e *quale* aula tocca a ognuno
+  (seconda fase).
+- ⚠ **Un difetto trovato integrando, non prevedendo.** Il filtro `resources` di
+  `trial_placements` erano le **chiavi di occupazione** dell'attività, e
+  un'aula con due candidate non è una chiave — `activity_tokens` la mette fra i
+  token solo a candidata unica. S.P., il violatore di Hall e la classifica dei
+  vincoli erano quindi ciechi all'intera famiglia: il checker girava e scartava
+  ogni pool, perché nessuno toccava le risorse chieste. Il filtro ora
+  comprende le candidate dichiarate. Allargarlo è sempre sano — è
+  un'ottimizzazione, e un'ottimizzazione più larga costa, non sbaglia.
+- Il checker conta un'aula **rossa** come zero posti e una **gialla** come
+  posti pieni, e il builder fa lo stesso, così che l'oracolo differenziale
+  confronti due letture identiche. ⚠ La fase 2 invece toglie anche le gialle
+  (`RoomContext._filtra`): resta quindi un angolo in cui la fase 1 può
+  riempire una fascia che la fase 2 non serve. Nessun dato lo esercita — è un
+  debito, → [todo.md](todo.md).
+- L'assegnata non conta come fissa: `Placement.assigned_room` è una
+  ripartizione rivedibile — `solve_rooms` la tratta da preferenza, non da
+  vincolo — quindi contarla inventerebbe deficit che la fase 2 scioglie da
+  sola. Un'assegnazione **senza** candidate dichiarate è invece un fatto, e
+  consuma.
+
+**Data.** 2026-08-29

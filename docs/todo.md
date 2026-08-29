@@ -23,14 +23,20 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > ([ADR-020](decisioni.md)): la copertura misura l'atomo e l'alternativa è un
 > dato dichiarato, quindi **l'import non è più bloccato**.
 >
-> **Niente blocca il calcolo.** Restano **quattro decisioni** di prodotto
-> (D2, D3, D4, e O5 che è una decisione travestita), **due osservazioni** in
+> **Niente blocca il calcolo.** Restano **tre decisioni** di prodotto
+> (D2, D4, e O5 che è una decisione travestita), **due osservazioni** in
 > EDT — entrambe residui minori di O1 e O2 — **due esperimenti** che nessun
-> dato esistente può sostituire (O3, O6), e **otto debiti** già decisi.
+> dato esistente può sostituire (O3, O6), e **nove debiti** già decisi.
 >
 > ⚠ Il giro del 2026-08-29 ha spostato quattro voci dalla colonna 👁 a 🧭 o 🧪:
 > non mancavano schermate, mancavano decisioni. È il segno che l'osservazione
 > di EDT ha davvero finito il suo lavoro.
+>
+> 🔑 E **D3 è caduta la sera dello stesso giorno, senza aprire EDT**: non era
+> una decisione di prodotto, era un'osservazione già nel repo e letta male.
+> Le aule si contano mentre si piazza ([ADR-021](decisioni.md)) — il che
+> vale come avvertimento sulle tre voci 🧭 rimaste: prima di scegliere,
+> rileggere cosa fa EDT.
 
 ---
 
@@ -52,17 +58,6 @@ d'ingresso non è quindi un formato ma un **dialogo**, e ciò che il modello dev
 saper dire è *quale dato manca*: la stessa cosa che i checker con causali
 nominate già dicono. ⚠ Da implementare **dopo** che il generatore è
 consolidato, non prima.
-
-### D3 🧭 La fase 1 resta cieca alle aule?
-
-L'assegnazione delle aule è una **seconda fase**, ed è la forma del prodotto
-(EDT ha un ottimizzatore dedicato). Il prezzo è misurato invece che previsto:
-sul Fermi **92 richieste, 84 assegnate, 8 rinunce**, 39 celle contese, fino a 5
-richieste su una sola cella — perché il piazzamento è cieco alle aule con più
-di una candidata e §6 della spec dichiara fuori scope il ritorno indietro.
-
-Si accetta come conseguenza dichiarata, o la fase 1 impara a contare le aule?
-La seconda costa una famiglia di vincoli cumulativi in più nel modello grande.
 
 ### D4 🧭 Serve un'interfaccia? — **una direzione c'è**
 
@@ -277,6 +272,15 @@ nuovo, non per fastidio.
   `days_per_cycle`. Costo: un campo maschera sulla griglia e un filtro nei due
   posti. Non adesso perché nessun dato lo esercita — sul Fermi il sabato non c'è
   proprio. 👁 2026-08-29.
+- ⚖ **L'indisponibilità gialla di un'aula: la fase 1 la conta piena, la fase 2
+  la toglie.** `structural:room_pool` (ADR-021) azzera i posti di un'aula
+  **rossa** e lascia pieni quelli di una gialla, perché un finding `HARD` per
+  un ostacolo violabile sarebbe falso; `RoomContext._filtra` invece toglie
+  anche le gialle, salvo l'opzione di calcolo. Resta quindi un angolo in cui la
+  fase 1 riempie una fascia che la fase 2 non serve. Costo: passare
+  `ignora_opzionali` al builder e accettare che builder e checker leggano
+  diversamente, o portare l'opzione dentro il checker. Non adesso perché
+  nessun dato lo esercita — le due basi non hanno indisponibilità d'aula.
 - ⚖ **Sei delle dodici voci del menu `Estrai`**, ognuna per una ragione scritta
   accanto al registro: tre riguardano la fascia variabile e il sezionamento
   (fuori per ADR-010), una la formazione classi, due sono filtri di forma e non
@@ -313,6 +317,15 @@ perché nessuno debba ricostruire *perché*.
 
 Il racconto è in [changelog.md](changelog.md), alla data.
 
+- [x] **2026-08-29 (sera)** — **D3, la fase 1 cieca alle aule**, sciolta con
+      [ADR-021](decisioni.md): non era una decisione di prodotto ma
+      un'osservazione già nel repo e letta male — in EDT le aule si **contano**
+      mentre si piazza (la causale del picco del gruppo sta nella diagnostica
+      del piazzamento), e l'ottimizzatore dedicato sceglie soltanto *quale*.
+      Il deficit misurato era esattamente il numero di rinunce (8 e 8), tutto
+      su un insieme solo. Ora: **92 richieste su 92**, zero rinunce.
+      ⚠ Ha aperto un debito (l'indisponibilità gialla d'aula) e scoperto un
+      difetto di integrazione nel filtro `resources` del dominio residuo.
 - [x] **2026-08-28 (sera)** — ⛔ **D1, l'unità del monte ore**, sciolta con
       [ADR-020](decisioni.md): la copertura misura l'**atomo**, e le righe in
       alternativa sono un **dato dichiarato** (`Service.election_group`) invece

@@ -34,18 +34,26 @@ def test_fermi_ripartizione_misurata():
     """⚠ Il Fermi misura il **costo**, mai la copertura: una firma di settimana
     sola, nessuna indisponibilita' d'aula, nessun vincolo di sede.
 
-    🔑 E misura una cosa in piu', che il dataset non sapeva dire prima: **il
-    prezzo della decomposizione a due fasi**. Il piazzamento e' cieco alle aule
-    con piu' di una candidata (a candidata unica se le prende come token), e
-    §6 dichiara fuori scope il ritorno al piazzamento — quindi la fase 1 puo'
-    accatastare su una cella piu' richieste di quante aule esistano, e la fase
-    2 non ha altra risposta che rinunciare. Misurato: 39 celle contese, fino a
-    **5** richieste su una sola cella, **8 rinunce su 92**.
+    🔑 E misura la cosa che ha chiuso D3: **la fase 1 conta le aule**, quindi
+    la fase 2 non rinuncia piu'.
 
-    Non e' un difetto del modello di questa fase: e' la conseguenza dichiarata
-    della scelta di assegnare le aule *dopo*. Se un giorno il numero cambiasse,
-    la notizia sarebbe che il piazzamento e' cambiato — non che la
-    ripartizione si e' rotta."""
+    Fino al 2026-08-29 questo test pretendeva **8 rinunce su 92**, ed era la
+    misura giusta di un modello sbagliato: il piazzamento era cieco alle aule
+    con piu' di una candidata (a candidata unica se le prende come token), e
+    §6 dichiara fuori scope il ritorno al piazzamento — quindi la fase 1
+    accatastava su una cella piu' richieste di quante aule esistessero, e la
+    fase 2 non aveva altra risposta che rinunciare. Era scritto come «la
+    conseguenza dichiarata di assegnare le aule *dopo*», e la parte falsa era
+    proprio quella: assegnarle dopo non obbliga a **contarle** dopo. EDT le
+    conta mentre piazza — la causale *«il gruppo di aule ha raggiunto il suo
+    picco d'occupazione»* sta in `AffSco_UtilDiagnostic`, che e' la
+    diagnostica del piazzamento. Vedi ADR-021.
+
+    Il deficit misurato allora era esattamente il numero di rinunce: **8**,
+    su 7 celle, tutte sullo stesso insieme `{LAB-FIS, LAB-INF}`. Ora
+    `structural:room_pool` lo vieta prima, e le richieste servite sono 92 su
+    92. Se un giorno tornasse una rinuncia qui, la notizia sarebbe che il
+    piazzamento e' tornato cieco — non che la ripartizione si e' rotta."""
     from domain.solver.model import apply, solve
     from tests import fermi
     schedule = fermi.build()["schedule"]
@@ -54,7 +62,8 @@ def test_fermi_ripartizione_misurata():
     soluzione = solve_rooms(schedule, workers=1)
     assert soluzione.status == "OPTIMAL"
     assert soluzione.stats["richieste"] == 92
-    assert len(soluzione.unassigned) == 8, soluzione.stats
+    assert soluzione.unassigned == (), soluzione.stats
+    assert soluzione.stats["assegnate"] == 92
 
 
 @pytest.mark.parametrize("seed", range(1, 11))
