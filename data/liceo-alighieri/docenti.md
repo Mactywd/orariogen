@@ -4,8 +4,9 @@ Ogni riga quadra a `+/- = 0`: le ore assegnate sono esattamente il monte ore
 contrattuale (`Mh/s`), e il test lo verifica cattedra per cattedra.
 
 ⚠ **`Mh/s` non si legge dal quadro orario**, e l'ondata 2 lo rende visibile: N01
-lavora **18** ore per 17 ore di curriculum, perché l'ora di laboratorio
-sdoppiata di 3A la insegna due volte. Vedi [gruppi.md](gruppi.md) §3.
+lavora **19** ore per 17 ore di curriculum, perché le due ore di laboratorio
+sdoppiate — 3A dall'ondata 2, 4A dall'ondata 4 — le insegna due volte
+ciascuna. Vedi [gruppi.md](gruppi.md) §3.
 
 | ID | Docente | Abbr. | Insegna | Mh/s |
 |---|---|---|---|---:|
@@ -24,7 +25,7 @@ sdoppiata di 3A la insegna due volte. Vedi [gruppi.md](gruppi.md) §3.
 | M02 | Quaranta Livia | QUARA | MAT, FIS in 1C 2C | 14 |
 | M03 | Rinaldi Tommaso | RINAL | MAT, FIS in 3A 4A 5A | 21 |
 | M04 | Sartori Gaia | SARTO | MAT in 1B–5B, FIS in 3B 4B 5B | 18 |
-| N01 | Tosi Alberto | TOSI | SCI in 1A 2A 1C 2C 3A 4A 5A (3A sdoppiata) | **18** |
+| N01 | Tosi Alberto | TOSI | SCI in 1A 2A 1C 2C 3A 4A 5A (3A e 4A sdoppiate) | **19** |
 | N02 | Urbani Chiara | URBAN | SCI in 1B–5B | **10** |
 | A01 | Vitali Renzo | VITAL | DIS nelle 7 scientifiche, STA in 3B 4B 5B | 20 |
 | P01 | Zanetti Luca | ZANET | MOT in 1A 2A 3A 4A 5A 1C | **12** |
@@ -32,7 +33,7 @@ sdoppiata di 3A la insegna due volte. Vedi [gruppi.md](gruppi.md) §3.
 | R01 | Colombo Padre Egidio | COLOM | IRC in tutte e dodici | **12** |
 | R02 | Donati Marta | DONAT | ALT (attività alternativa) in tutte e dodici | **12** |
 | I01 | Ricci Dario | RICCI | INF in 2C (parte Scienze Applicate) | **3** |
-| | | | **Totale erogato** | **361** |
+| | | | **Totale erogato** | **362** |
 
 ## I tempi parziali, e lo spezzone
 

@@ -25,13 +25,13 @@ pesare su tutti.
 
 ## Le classi che portano uno sdoppiamento
 
-Tutte e dodici hanno la partizione **IRC / alternativa**; tre ne hanno una
+Tutte e dodici hanno la partizione **IRC / alternativa**; quattro ne hanno una
 seconda. Il dettaglio sta in [gruppi.md](gruppi.md).
 
 | Classe | Seconda partizione | Cosa esercita |
 |---|---|---|
 | 1A, 1B | `INGLESE` (due livelli) | il **raggruppamento trasversale**: rompe la decomposizione per classe |
-| 3A | `LABSCI` (due gruppi) | lo **sdoppiamento a effettivo ridotto** |
+| 3A, 4A | `LABSCI` (due gruppi) | lo **sdoppiamento a effettivo ridotto** — e in due classi, perché i quattro tipi `PARTS_*` vogliono portatori che non si implichino ([relazioni.md](relazioni.md)) |
 | 2C | `ARTICOLAZIONE` (ordinario / Scienze Applicate) | la **classe articolata**, condizione 3 di ADR-015 |
 
 ⚠ **Il raggruppamento non attraversa le sedi, deliberatamente.** Fra 1A e 1C

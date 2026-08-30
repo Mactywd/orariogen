@@ -149,7 +149,9 @@ def test_l_ora_sdoppiata_il_docente_la_fa_due_volte(dataset):
     servizio = dataset["plans"]["SCI3"].services.get(subject__code="SCI")
     assert servizio.class_minutes == 3 * 60
     assert sum(a.duration_minutes for a in _attivita("SCI", classes__name="3A")) == 120
-    assert _attivita("SCI", parts__partition__name="LABSCI").count() == 2
+    # ⚠ Quattro e non due dall'ondata 4: la partizione `LABSCI` esiste ora in
+    # 3A **e** in 4A, due parti ciascuna.
+    assert _attivita("SCI", parts__partition__name="LABSCI").count() == 4
 
 
 def test_i_gruppi_di_laboratorio_stanno_sotto_l_effettivo_ridotto(dataset):
@@ -215,7 +217,7 @@ def test_l_allineamento_e_un_campo_che_nessuno_legge(dataset):
     un'ora in cui non ha lezione.
 
     Misurato sul dataset completo (2026-08-30): dei **15** allineamenti
-    dichiarati, **13** escono dal solve senza una sola coincidenza — i due
+    dichiarati, **14** escono dal solve senza una sola coincidenza — i due
     livelli di inglese di 1A/1B sparsi su sei celle diverse, il latino e
     l'informatica della 2C articolata mai in parallelo.
 
@@ -225,8 +227,8 @@ def test_l_allineamento_e_un_campo_che_nessuno_legge(dataset):
     giorno in cui il debito si chiude. Vedi `docs/todo.md`."""
     env = dataset
     allineate = Activity.objects.exclude(alignment_ident="")
-    assert allineate.count() == 38
-    assert len({a.alignment_ident for a in allineate}) == 15
+    assert allineate.count() == 40
+    assert len({a.alignment_ident for a in allineate}) == 16
 
     irc = _attivita("IRC", parts__name="1A_REL").first()
     alt = _attivita("ALT", parts__name="1A_ALT").first()

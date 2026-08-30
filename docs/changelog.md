@@ -15,6 +15,71 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (notte) — L'Alighieri, ondata 4: l'asse Relazione, e la rimozione che torna misurabile se la si punta** —
+  I **tredici tipi** di `SubjectConstraint` in tredici righe, e la sonda dei
+  builder passa da **12 a 25 su 27**. Due fasi ancora `OPTIMAL` a zero scarti —
+  **15 545 variabili, 11 783 constraint** (ondata 3: 15 372 / 8 758), **73 aule
+  su 73**. Dettaglio riga per riga in
+  [`data/liceo-alighieri/relazioni.md`](../data/liceo-alighieri/relazioni.md).
+  I due builder che restano sono nominati e non dimenticati:
+  `structural:unavailability` — il banco non ha ancora una riga di
+  indisponibilità — e `structural:didactic_weight`, i cui quattro tetti sono
+  `None` com'è fedele a EDT. Sono l'ondata 5.
+
+  🔑 **La tacca dell'ondata 3 non si applica qui, e la ragione è che una
+  proibizione non sparpaglia.** Un tetto su una risorsa dal carico fisso si
+  rompe stringendolo di un'unità; un divieto di relazione no. Il disegno
+  prevedeva una quarta tacca — spostare `two_days_incompatible` dal greco del
+  3B (3 ore) al latino (4 ore), perché quattro giornate a due a due non
+  adiacenti non stanno in cinque — e l'aritmetica era giusta. **La premessa
+  no**: niente obbliga quattro ore della stessa materia a stare su quattro
+  giornate distinte. Misurato: `OPTIMAL`. È la stessa trappola che rende
+  `same_day_incompatible` fra due materie sempre soddisfacibile da solo, e nel
+  solve libero si vede — le tre ore di greco del 3B finiscono **tutte lo
+  stesso venerdì**, legalmente. Un test asserisce quell'`OPTIMAL` perché
+  diventi rosso all'ondata 7.
+
+  🔑 **Al suo posto il testimone puntato — ed è la regola 4 che torna
+  misurabile, un'ondata dopo essere stata dichiarata inutilizzabile.** L'ondata
+  3 aveva scartato *«togli la riga e l'orario deve cambiare»* perché senza
+  funzione di costo sopra lo scarto ogni orario a zero scarti è ottimo, e ciò
+  che torna dice quale ottimo ha trovato la ricerca. Vero **finché il solver è
+  libero**: imponendo con `pinned` la configurazione che la riga vieta, le due
+  esecuzioni non rispondono più «quale orario» ma `INFEASIBLE` con la riga e
+  `OPTIMAL` a zero scarti senza. Due proprietà del **modello**, in due
+  direzioni, nessuna dipendente dal testimone. **13 su 13**, in entrambe le
+  direzioni. Il secondo ramo non è un lusso: senza, un pin illegale per
+  un'altra ragione qualunque direbbe `INFEASIBLE` e non proverebbe niente.
+
+  🔑 **E una delle tre tacche superstiti attraversa i due assi.** Dove il tipo
+  ha un parametro la tacca resta il modo più economico di dirlo, e sono tre su
+  tredici: il tetto di 60′ per mezza giornata sulla matematica di 2A (il blocco
+  da due ore non si spezza), lo scarto minimo a 3 mezze giornate sul latino di
+  1B (cinque ore vogliono un arco di dodici, la settimana ne ha dieci), e —
+  quella che conta — il tetto di 60′ al giorno sull'italiano del 3B, che
+  diventa impossibile perché **GENTI lavora tre giornate** per una riga
+  `max_presence` scritta all'ondata 3, su una risorsa e non su una materia. È
+  l'argomento di §1.1 della spec — *una scuola combina i vincoli come li
+  combina una scuola* — misurato invece che dichiarato.
+
+  ⚠ **Il dataset è cresciuto, ed è la mossa del cappellano.** I quattro tipi
+  `PARTS_*` vogliono quattro portatori che **non si implichino**: un ordine per
+  giornata su un'unità rende veri per costruzione gli omogenei su ogni
+  sotto-unità e dentro ogni mezza giornata, quindi con la sola 3A sdoppiata due
+  dei quattro sarebbero stati *presenti e implicati* — il difetto che la regola
+  4 esiste per non avere. Da qui un secondo laboratorio a mezza classe in
+  **4A**: +1 partizione, +2 parti, +2 attività, N01 da 18 a 19 ore, quadratura
+  `+/- = 0` intatta su tutte e ventitré le cattedre. E la forma che ne esce è
+  quella che una scuola scriverebbe: in 3A le due metà **ruotano attorno
+  all'ora di teoria**, in 4A vale solo la regola debole.
+
+  ⚠ **Una riga del dataset che nessuna riga di vincolo può avere**: nessun tipo
+  sta su un **raggruppamento**, e non è una svista. I due raggruppamenti di
+  inglese portano una materia che a classe intera non esiste in nessuna delle
+  due classi che attraversano, quindi una riga su di loro sarebbe vera per
+  vacuità. Il campo `group` resta esercitato dal solo `structural:occupation`;
+  le due righe su **parte** coprono l'altra forma.
+
 - **2026-08-30 (notte) — L'Alighieri, ondata 3: l'asse Cardinalità, e la regola della mutazione che si è rotta in mano** —
   Otto famiglie di `ResourceTimeConstraint` in **dieci righe**, e la sonda dei
   builder passa da **4 a 12 su 27**: il salto più grande che una singola ondata

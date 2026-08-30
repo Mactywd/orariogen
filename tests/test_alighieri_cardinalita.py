@@ -171,7 +171,7 @@ def test_le_otto_forme_dichiarate():
     # E nessuna riga violata, che è l'altra metà: le forme qui sopra dicono
     # *quale* effetto si vede, il checker dice che non ce ne sono di rotti.
     hard = [f for f in check_schedule(env["schedule"]) if f.severity == Severity.HARD]
-    assert [f.code for f in hard] == ["room_unassigned"] * 71
+    assert [f.code for f in hard] == ["room_unassigned"] * 73
 
 
 @pytest.mark.parametrize("famiglia", sorted(STRETTE))

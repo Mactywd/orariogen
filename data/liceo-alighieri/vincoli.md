@@ -1,5 +1,10 @@
 # I vincoli — l'asse Cardinalità (ondata 3)
 
+> L'altro asse — i tredici tipi di `SubjectConstraint`, cioè come le materie
+> stanno fra loro — sta in [relazioni.md](relazioni.md), e la prova che le sue
+> righe mordono è **diversa**: su un divieto la tacca di questo file non si
+> applica, perché una proibizione non sparpaglia.
+
 Le otto famiglie di `ResourceTimeConstraint`, in **dieci righe**. La tabella è
 la parte del banco che paga l'intero pezzo: prima di questa ondata il dataset
 esercitava quattro builder su ventisette, e ventiquattro famiglie del motore

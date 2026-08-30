@@ -26,7 +26,7 @@ stimato — e lascia tredici tabelle su trentatré vuote, `ClassPartition`,
 `ClassPart` e `Group` comprese, cioè voci ✅ dello scope v1 che nessun dataset
 rappresenta.
 
-## Stato: ondate 1–3 di 7
+## Stato: ondate 1–4 di 7
 
 1. ✅ **L'anagrafica** — sedi, indirizzi, materie, piani di studi e servizi,
    classi, docenti, aule, attività.
@@ -35,6 +35,9 @@ rappresenta.
    [gruppi.md](gruppi.md).
 3. ✅ **L'asse Cardinalità** — le otto famiglie di `ResourceTimeConstraint` in
    dieci righe, ognuna scelta **al bordo**. Vedi [vincoli.md](vincoli.md).
+4. ✅ **L'asse Relazione** — i tredici tipi di `SubjectConstraint`, uno per
+   riga, ognuno provato col **testimone puntato**. Vedi
+   [relazioni.md](relazioni.md).
 
 Le famiglie restanti arrivano dalle ondate successive, e ognuna aggiorna
 `esiti-attesi.md` *prima* del codice che le esercita.
@@ -54,11 +57,12 @@ Le famiglie restanti arrivano dalle ondate successive, e ognuna aggiorna
 | Giorni | lunedì – venerdì |
 | Fasce | 8 — mattina 08:00–13:00 (5), mensa, pomeriggio 14:00–17:00 (3) |
 | Monte ore | 27 h/sett. nei due bienni; 30 h allo scientifico e 31 h al classico nei trienni |
-| Partizioni / parti / raggruppamenti | 16 / 32 / 2 |
+| Partizioni / parti / raggruppamenti | 17 / 34 / 2 |
 | Righe di vincolo orario | 10 (8 famiglie) |
+| Righe di vincolo di materia | 13 (13 tipi) |
 | **Ore-alunno** | **345** — 27 nei bienni, 30 e 31 nei trienni |
-| **Ore erogate** | **361** |
-| **Attività** | **340** |
+| **Ore erogate** | **362** |
+| **Attività** | **342** |
 
 🔑 **Le otto fasce non sono decorazione.** `max_hours` con tetto mattutino
 diverso da quello giornaliero, `max_half_days` e le mezze giornate libere non
@@ -67,26 +71,26 @@ ce l'ha.
 
 🔑 **Le due sedi nemmeno.** `structural:site_transition` legge
 `Activity.site`; il Fermi ha zero righe `Site`, quindi quel builder non ha mai
-visto un dataset. Qui ogni attività ha una sede, e sei docenti su ventuno
+visto un dataset. Qui ogni attività ha una sede, e **otto docenti su ventitré**
 insegnano in entrambe.
 
 ## Quadratura
 
 ⚠ **Due totali, e non sono lo stesso numero.** Le **345** ore-alunno sono la
-somma dei quadri orari; le **361** erogate sono le ore che qualcuno insegna. Lo
+somma dei quadri orari; le **362** erogate sono le ore che qualcuno insegna. Lo
 scarto sta tutto negli sdoppiamenti: dodici ore di attività alternativa
 affiancate all'IRC, tre di informatica affiancate al latino nella 2C
-articolata, e l'ora di laboratorio di 3A insegnata **due volte**. Confonderli
-è il modo in cui un monte ore torna e una cattedra no.
+articolata, e le due ore di laboratorio — 3A e 4A — insegnate **due volte**
+ciascuna. Confonderli è il modo in cui un monte ore torna e una cattedra no.
 
-Le 361 ore erogate coincidono per costruzione con tre somme indipendenti, e i
+Le 362 ore erogate coincidono per costruzione con tre somme indipendenti, e i
 test le verificano tutte e tre
 ([`tests/test_alighieri_representation.py`](../../tests/test_alighieri_representation.py)):
 
 - la somma dei quadri orari delle 12 classi, con le erogazioni per parte
   (`piani-di-studi.md`, `gruppi.md`);
 - la somma dei monte ore delle 23 cattedre (`docenti.md`), ciascuna a `+/- = 0`;
-- la somma delle durate delle 340 attività.
+- la somma delle durate delle 342 attività.
 
 ⚠ E la verifica è **per (classe, materia)**, non sui totali: è la lezione del
 Fermi, dove due materie invertite quadravano lo stesso. Dall'ondata 2 quella
@@ -94,15 +98,15 @@ somma grossolana non basta più — dove entrano parti e raggruppamenti l'unità
 vera è l'**atomo** (ADR-020), e il predicato che la usa è
 `structural:coverage`, verificato sul dataset intero.
 
-## Misure, ondata 3
+## Misure, ondata 4
 
 | | |
 |---|---|
-| Modello fase 1 | **15 372** variabili, **8 758** constraint (senza le righe: 14 372 / 7 704) |
-| Fase 1 | `OPTIMAL`, **zero scarti**, ~5 s a 8 lavoratori |
-| Richieste d'aula | 71 |
-| Fase 2 | `OPTIMAL`, **71 su 71**, zero rinunce, ~0,3 s |
-| Sonda dei builder | **12 su 27** (ondata 2: 4; Fermi: 3) |
+| Modello fase 1 | **15 545** variabili, **11 783** constraint (ondata 3: 15 372 / 8 758) |
+| Fase 1 | `OPTIMAL`, **zero scarti**, ~6 s |
+| Richieste d'aula | 73 |
+| Fase 2 | `OPTIMAL`, **73 su 73**, zero rinunce |
+| Sonda dei builder | **25 su 27** (ondata 3: 12; ondata 2: 4; Fermi: 3) |
 
 ⚠ **L'ondata 2 non aveva allargato la sonda, ed era corretto così.** Partizioni,
 parti e raggruppamenti non hanno un builder proprio: entrano nel modello
@@ -112,21 +116,26 @@ attraverso le **chiavi di occupazione** (ADR-017), cioè facendo lavorare di pi�
 cricchetto che contasse i constraint direbbe «cresciuto» senza dire niente di
 vero.
 
-L'ondata 3 la allarga invece di **otto** in un colpo: una riga per famiglia
-di `ResourceTimeConstraint`, e ogni riga sceglie il proprio portatore perché
-quella famiglia abbia un soggetto vero.
+L'ondata 3 la allarga invece di **otto** in un colpo e l'ondata 4 di
+**tredici**: una riga per famiglia, e ogni riga sceglie il proprio portatore
+perché quella famiglia abbia un soggetto vero.
 
-⚠ **Dodici su ventisette non è un risultato, è metà strada.** Il
+⚠ **I due che restano sono nominati, non dimenticati**:
+`structural:unavailability` — il banco non ha ancora una riga di
+indisponibilità — e `structural:didactic_weight`, i cui quattro tetti in
+`InstituteSettings` sono `None` com'è fedele a EDT. Sono l'ondata 5. Il
 criterio di accettazione della spec è ventisette su ventisette all'ondata 7, e
 il cricchetto che ci arriva è
 [`tests/test_alighieri_sonda.py`](../../tests/test_alighieri_sonda.py): ogni
 ondata deve allargare l'insieme dichiarato lì.
 
 ⚠ E il dataset **non è ancora stretto** nel senso della spec (una sola aula o
-un solo docente in meno e compaiono gli scarti). Ma dall'ondata 3 lo è
-**famiglia per famiglia**: per otto righe su nove una tacca più stretta rende
-il modello `INFEASIBLE`. La nona — il D.T.B. — no, ed è misurato invece che
-taciuto: vedi [vincoli.md](vincoli.md).
+un solo docente in meno e compaiono gli scarti). Ma lo è **famiglia per
+famiglia**, con due prove diverse perché i due assi vogliono prove diverse:
+sulla cardinalità otto righe su nove non sopportano una tacca più stretta
+(la nona — il D.T.B. — no, ed è misurato: [vincoli.md](vincoli.md)); sulla
+relazione tredici su tredici non sopportano il **testimone puntato**, cioè la
+configurazione vietata imposta con `pinned` ([relazioni.md](relazioni.md)).
 
 ## Indice del dataset
 
@@ -138,6 +147,7 @@ taciuto: vedi [vincoli.md](vincoli.md).
 - [aule.md](aule.md) — le 20 aule, per sede
 - [gruppi.md](gruppi.md) — 🔑 le quattro forme di sdoppiamento, e il debito che hanno trovato
 - [vincoli.md](vincoli.md) — 🔑 le dieci righe dell'asse Cardinalità, e perché stanno al bordo
+- [relazioni.md](relazioni.md) — 🔑 i tredici tipi dell'asse Relazione, e il testimone puntato
 - [esiti-attesi.md](esiti-attesi.md) — 🔑 cosa deve succedere, scritto prima di eseguire
 
 Per la **semantica** delle entità (non i dati) vedi [`docs/edt/`](../../docs/edt/).

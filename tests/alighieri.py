@@ -26,7 +26,13 @@ rappresentava. Quattro forme, tutte diverse fra loro — vedi `EROGAZIONI` e
 quella famiglia abbia un soggetto vero — vedi `TIME_CONSTRAINTS` e
 `data/liceo-alighieri/vincoli.md`.
 
-Le altre famiglie arrivano dalle ondate 4 in poi, e ognuna aggiunge righe a
+**Ondata 4 — l'asse Relazione.** I tredici tipi di `SubjectConstraint`, uno
+per riga — vedi `SUBJECT_CONSTRAINTS` e `data/liceo-alighieri/relazioni.md`.
+⚠ È l'ondata che ha fatto **crescere il dataset**: i quattro tipi `PARTS_*`
+vogliono quattro portatori che non si implichino a vicenda, e con la sola 3A
+sdoppiata non esistono. Da qui il secondo laboratorio, in 4A.
+
+Le altre famiglie arrivano dalle ondate 5 in poi, e ognuna aggiunge righe a
 `esiti-attesi.md` prima del codice che le esercita."""
 
 import datetime as dt
@@ -36,7 +42,7 @@ from domain.models import (
     Activity, Break, ClassPart, ClassPartition, CompetitionClass, Discipline,
     Group, InstituteSettings, Period, ResourceTimeConstraint, Room, Schedule,
     SchoolClass, SchoolYear, Service, Site, SlotLabel, StudyPlan, Subject,
-    Teacher, TeachingAssignment, TimeGrid,
+    SubjectConstraint, Teacher, TeachingAssignment, TimeGrid,
 )
 
 WEEKS_IN_YEAR = 33  # come il Fermi: periodicità S (33/33) osservata in EDT
@@ -198,6 +204,15 @@ for _c, _n in (("1A", 13), ("1B", 11)):
 # ancora da fare in EDT. Riempirlo qui sarebbe inventare un campo, che è
 # esattamente ciò che la convenzione della casa vieta.
 PARTITIONS["3A"]["LABSCI"] = [("3A_G1", 13, None), ("3A_G2", 13, None)]
+# 🔑 E lo stesso laboratorio in 4A, che l'**ondata 4** aggiunge per una ragione
+# sola e dichiarata: i quattro tipi `PARTS_*` vogliono quattro portatori che
+# non si implichino a vicenda, e con una sola classe sdoppiata non esistono.
+# Una riga d'ordine *per giornata* su un'unità implica l'omogeneità su ogni
+# sotto-unità e su ogni mezza giornata, quindi con 3A da sola due dei quattro
+# tipi sarebbero **presenti e implicati** — cioè il difetto che §6.4 esiste per
+# non avere. È la stessa mossa del cappellano dell'ondata 3: una famiglia senza
+# soggetto ne riceve uno.
+PARTITIONS["4A"]["LABSCI"] = [("4A_G1", 13, None), ("4A_G2", 13, None)]
 # La classe articolata: la parte ordinaria **eredita** il piano della classe
 # (`NULL` = eredita, ADR-003), quella di Scienze Applicate ne porta uno proprio.
 PARTITIONS["2C"]["ARTICOLAZIONE"] = [("2C_ORD", 14, None), ("2C_APP", 10, "SAP2")]
@@ -221,6 +236,8 @@ EROGAZIONI = {
     # sdoppiamento e la ragione per cui N01 passa da 17 a 18 ore.
     ("3A", "SCI"): [(None, 2, ""), (("part", "3A_G1"), 1, "3A-LABSCI"),
                     (("part", "3A_G2"), 1, "3A-LABSCI")],
+    ("4A", "SCI"): [(None, 2, ""), (("part", "4A_G1"), 1, "4A-LABSCI"),
+                    (("part", "4A_G2"), 1, "4A-LABSCI")],
     # L'articolata: latino per gli ordinari, informatica per gli applicati,
     # nelle stesse tre ore.
     ("2C", "LAT"): [(("part", "2C_ORD"), 3, "2C-ART")],
@@ -276,9 +293,10 @@ TEACHERS = [  # id, nome, abbr., [(materia, [classi])], Mh/s, materia preferita
      [("MAT", ["3A", "4A", "5A"]), ("FIS", ["3A", "4A", "5A"])], 21, "MAT"),
     ("M04", "Sartori Gaia", "SARTO",
      [("MAT", ["1B", "2B", "3B", "4B", "5B"]), ("FIS", ["3B", "4B", "5B"])], 18, "MAT"),
-    # ⚠ 18 e non 17: l'ora di laboratorio sdoppiata in 3A la fa **due volte**.
+    # ⚠ 19 e non 17: le **due** ore di laboratorio sdoppiate — 3A (ondata 2) e
+    # 4A (ondata 4) — le fa due volte ciascuna.
     ("N01", "Tosi Alberto", "TOSI",
-     [("SCI", ["1A", "2A", "1C", "2C", "3A", "4A", "5A"])], 18, "SCI"),
+     [("SCI", ["1A", "2A", "1C", "2C", "3A", "4A", "5A"])], 19, "SCI"),
     ("N02", "Urbani Chiara", "URBAN",
      [("SCI", ["1B", "2B", "3B", "4B", "5B"])], 10, "SCI"),
     ("A01", "Vitali Renzo", "VITAL",
@@ -363,6 +381,75 @@ TIME_CONSTRAINTS = [
     # 10–21 ore la contiguità è gratis, e stringerla vuole una griglia più
     # densa — cioè l'ondata 7. Vedi `esiti-attesi.md`.
     ("max_gap_hours", "t", "CAVAL", "max_gap_hours", {"max_gap_minutes": 60}),
+]
+
+
+# 🔑 **L'asse Relazione** (ondata 4): i tredici tipi di `SubjectConstraint`,
+# una riga per tipo. Qui il portatore non è una risorsa ma una **coppia
+# (unità, materia)**: la riga vive su una classe, su una parte o su un
+# raggruppamento, e mette in relazione due materie — con A = B come caso
+# dominante, che è come le scuole scrivono davvero questi vincoli.
+#
+# ⚠ **La verifica di questa ondata non è la tacca dell'ondata 3, ed è più
+# forte.** Un vincolo di cardinalità si stringe di un'unità e diventa
+# `INFEASIBLE`; un divieto di relazione no — trentanove fasce libere assorbono
+# quasi ogni proibizione, e una riga può essere soddisfatta *per caso*. Il
+# testimone di questa ondata è quindi **puntato**: si impone con `pinned` la
+# configurazione che la riga vieta e si pretende `INFEASIBLE`, e si rifà lo
+# stesso solve **senza la riga** pretendendo che torni risolvibile. Sono due
+# affermazioni sul **modello**, non su quale ottimo la ricerca abbia scelto —
+# cioè esattamente ciò che all'ondata 3 mancava alla mutazione per rimozione.
+# Vedi `tests/test_alighieri_relazione.py` e `data/liceo-alighieri/vincoli.md`.
+#
+# (nome, unità, materia A, materia B, tipo, param)
+SUBJECT_CONSTRAINTS = [
+    # Mai matematica e fisica nella stessa mezza giornata: è la riga che le
+    # scuole scrivono per non concentrare le materie scientifiche.
+    ("same_half_day", ("c", "5A"), "MAT", "FIS",
+     "same_half_day_incompatible", None),
+    # Le due lingue del classico mai lo stesso giorno. ⚠ Il divieto non impone
+    # nessuno sparpagliamento: più ore della stessa materia possono stare nello
+    # stesso giorno, quindi da solo è sempre soddisfacibile — e per questo il
+    # suo testimone è puntato.
+    ("same_day", ("c", "4B"), "LAT", "GRE", "same_day_incompatible", None),
+    # Il greco del 3B mai a un giorno di distanza da sé stesso: tre ore che non
+    # possono stare su giorni adiacenti stanno **solo** su {lun, mer, ven}.
+    ("two_days", ("c", "3B"), "GRE", "GRE", "two_days_incompatible", None),
+    # Dopo le due ore di educazione fisica, non matematica.
+    ("forbidden_sequence", ("c", "4A"), "MOT", "MAT",
+     "forbidden_sequence", None),
+    # Al più tre ore di matematica in una mezza giornata: in 2A la matematica è
+    # 2 + 1 + 1 + 1, quindi il tetto morde solo sulle concentrazioni.
+    ("max_hours_half_day", ("c", "2A"), "MAT", "MAT",
+     "max_hours_half_day", 180),
+    # 🔑 Al più due ore di italiano al giorno in 3B — e questa riga si intreccia
+    # con l'**ondata 3**: l'italiano del 3B lo insegna GENTI, che ha
+    # `max_presence {days: 3}`. Portare il tetto a un'ora sola vorrebbe quattro
+    # giornate distinte per quattro ore, e GENTI ne lavora tre: è la tacca, ed
+    # è un argomento di conteggio che attraversa i due assi.
+    ("max_hours_day", ("c", "3B"), "ITA", "ITA", "max_hours_day", 120),
+    # La prima ora di latino della settimana precede la prima di greco.
+    ("weekly_order", ("c", "5B"), "LAT", "GRE", "weekly_order", None),
+    # Le due sessioni di fisica di 3A (il blocco da due ore e l'ora singola)
+    # concatenate: al più una mezza giornata di ritardo fra l'una e l'altra.
+    ("imposed_succession", ("c", "3A"), "FIS", "FIS",
+     "imposed_succession", 1),
+    # 🔑 Il latino del 1B distanziato di almeno **due** mezze giornate: cinque
+    # ore con passo ≥ 2 occupano un arco di almeno otto mezze giornate su
+    # dieci, cioè una sola ora di latino al giorno. A tre il passo vorrebbe un
+    # arco di dodici, e le mezze giornate sono dieci: la tacca è aritmetica.
+    ("half_day_gap", ("c", "1B"), "LAT", "LAT", "half_day_gap", 2),
+    # 🔑 I quattro `PARTS_*`, e i loro quattro portatori scelti perché **non si
+    # implichino**. Le due metà di 3A ruotano attorno all'ora di teoria — la
+    # prima fa laboratorio *prima*, la seconda *dopo* — mentre sulla classe
+    # intera vale la regola più debole: dentro una mezza giornata niente
+    # interlacciatura. In 4A resta solo quest'ultima, per giornata.
+    ("parts_before", ("p", "3A_G1"), "SCI", "SCI", "parts_before_class", None),
+    ("parts_after", ("p", "3A_G2"), "SCI", "SCI", "parts_after_class", None),
+    ("parts_h", ("c", "3A"), "SCI", "SCI",
+     "parts_before_or_after_class_h", None),
+    ("parts_ab", ("c", "4A"), "SCI", "SCI",
+     "parts_before_or_after_class_ab", None),
 ]
 
 
@@ -517,6 +604,16 @@ def build():
         ResourceTimeConstraint.objects.create(
             resource=per_abbr[ref] if kind == "t" else classes[ref],
             type=ResourceTimeConstraint.Type(tipo), params=params)
+
+    # L'asse Relazione (ondata 4). L'unità si nomina per tipo e nome — "c"
+    # classe, "p" parte, "g" raggruppamento — così la tabella resta leggibile.
+    unita = {"c": classes, "p": parts, "g": groups}
+    for _nome, (kind, ref), a, b, tipo, param in SUBJECT_CONSTRAINTS:
+        campo = {"c": "school_class", "p": "class_part", "g": "group"}[kind]
+        SubjectConstraint.objects.create(
+            **{campo: unita[kind][ref]}, subject_a=subjects[a],
+            subject_b=subjects[b], type=SubjectConstraint.Type(tipo),
+            param=param)
 
     year = SchoolYear.objects.create(
         start_date=dt.date(2026, 9, 14),

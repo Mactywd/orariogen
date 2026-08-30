@@ -11,7 +11,7 @@ from django.db.models import Q
 from domain.models import (
     Activity, Break, ClassPart, ClassPartition, Discipline, Group,
     ResourceTimeConstraint, Room, SchoolClass, Service, Site, SlotLabel,
-    StudyPlan, Subject, Teacher, TeachingAssignment,
+    StudyPlan, Subject, SubjectConstraint, Teacher, TeachingAssignment,
 )
 from tests import alighieri
 
@@ -34,24 +34,33 @@ def test_conteggi_delle_entita(dataset):
     assert SlotLabel.objects.count() == 8
     assert Break.objects.count() == 1
     # Ondata 2 — le quattro forme di sdoppiamento
-    assert ClassPartition.objects.count() == 12 + 2 + 1 + 1
-    assert ClassPart.objects.count() == 32
+    # ⚠ +1 partizione e +2 parti rispetto all'ondata 2: il laboratorio di 4A,
+    # che l'ondata 4 aggiunge per dare un portatore non implicato al quarto
+    # tipo `PARTS_*`.
+    assert ClassPartition.objects.count() == 12 + 2 + 2 + 1
+    assert ClassPart.objects.count() == 34
     assert Group.objects.count() == 2
     # Ondata 3: otto famiglie in dieci righe. `max_half_days` ne porta due (il
     # `MMG` e il `MG`) e `max_presence` anche (il tempo parziale e il
     # cappellano che serve alle sedi).
     assert ResourceTimeConstraint.objects.count() == 10
     assert len({r.type for r in ResourceTimeConstraint.objects.all()}) == 8
+    # Ondata 4: tredici tipi, tredici righe — qui uno per tipo, perché sulla
+    # relazione il portatore è una coppia (unità, materia) e non una risorsa.
+    assert SubjectConstraint.objects.count() == 13
+    assert ({r.type for r in SubjectConstraint.objects.all()}
+            == set(SubjectConstraint.Type.values))
 
 
-def test_340_attivita_per_361_ore_erogate(dataset):
-    """⚠ 361 sono le ore **erogate**, non quelle di un alunno. Lo scarto è
-    tutto negli sdoppiamenti dell'ondata 2: dodici ore di attività alternativa
-    che si affiancano all'IRC, tre di informatica che si affiancano al latino
-    nella 2C articolata, e l'ora di laboratorio di 3A insegnata due volte."""
-    assert Activity.objects.count() == 340
+def test_342_attivita_per_362_ore_erogate(dataset):
+    """⚠ 362 sono le ore **erogate**, non quelle di un alunno. Lo scarto è
+    tutto negli sdoppiamenti: dodici ore di attività alternativa che si
+    affiancano all'IRC, tre di informatica che si affiancano al latino nella
+    2C articolata, e le **due** ore di laboratorio insegnate due volte — 3A
+    dall'ondata 2, 4A dall'ondata 4."""
+    assert Activity.objects.count() == 342
     total = sum(Activity.objects.values_list("duration_minutes", flat=True))
-    assert total == 361 * 60
+    assert total == 362 * 60
 
 
 def test_ogni_cattedra_quadra_a_zero(dataset):
@@ -91,7 +100,8 @@ def test_copertura_a_classe_intera_quadra_col_piano(dataset):
                 subject=service.subject, classes=school_class))
             assert erogate == service.class_minutes, (school_class.name,
                                                       service.subject.code)
-    assert fuori == {("1A", "ING"), ("1B", "ING"), ("2C", "LAT"), ("3A", "SCI")} | {
+    assert fuori == {("1A", "ING"), ("1B", "ING"), ("2C", "LAT"),
+                     ("3A", "SCI"), ("4A", "SCI")} | {
         (c[0], m) for c in alighieri.CLASSES for m in ("IRC", "ALT")}
 
 
@@ -131,7 +141,7 @@ def test_ogni_attivita_ha_una_sede_e_le_sedi_sono_entrambe_abitate(dataset):
     assert not Activity.objects.filter(site=None).exists()
     per_sede = {s.name: Activity.objects.filter(site=s).count()
                 for s in Site.objects.all()}
-    assert per_sede == {"Centrale": 285, "Succursale": 55}
+    assert per_sede == {"Centrale": 287, "Succursale": 55}
 
 
 def test_almeno_un_docente_insegna_in_entrambe_le_sedi(dataset):
@@ -147,10 +157,10 @@ def test_i_blocchi_lunghi_rispettano_l_intervallo_mensa(dataset):
     """Il `Break` esiste per essere attraversato-e-vietato: senza attività che
     lo dichiarino, `structural:grid` non toglie una cella per causa sua."""
     lunghe = Activity.objects.filter(duration_slots__gt=1)
-    # MOT ×12, MAT biennio ×4, FIS triennio ×3, SCI triennio ×2 — ⚠ due e non
-    # tre: in 3A le scienze sono sdoppiate, e le due ore a classe intera che
-    # restano non fanno più un blocco.
-    assert lunghe.count() == 12 + 4 + 3 + 2
+    # MOT ×12, MAT biennio ×4, FIS triennio ×3, SCI triennio ×1 — ⚠ uno e non
+    # tre: in 3A e in 4A le scienze sono sdoppiate, e le due ore a classe
+    # intera che restano non fanno più un blocco. Resta 5A.
+    assert lunghe.count() == 12 + 4 + 3 + 1
     assert not lunghe.filter(respects_breaks=False).exists()
     assert not Activity.objects.filter(duration_slots=1,
                                        respects_breaks=True).exists()

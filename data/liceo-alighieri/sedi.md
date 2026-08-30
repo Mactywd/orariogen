@@ -16,7 +16,8 @@ minima del nostro modello.
 ## Chi attraversa
 
 🔑 Senza un docente che insegna in entrambe le sedi, due sedi sono due scuole e
-nessun vincolo di transizione ha soggetto. Sei cattedre su ventuno attraversano:
+nessun vincolo di transizione ha soggetto. **Otto cattedre su ventitré**
+attraversano:
 
 | Docente | Materie | Perché attraversa |
 |---|---|---|
@@ -26,12 +27,14 @@ nessun vincolo di transizione ha soggetto. Sei cattedre su ventuno attraversano:
 | **E01** Novelli | ING | le cinque della A più 1C |
 | **P01** Zanetti | MOT | le cinque della A più 1C |
 | **E02** Orlandi | ING | 2C più tutta la B |
+| **R02** Donati | ALT | l'alternativa, in **tutte e dodici** come l'IRC |
+| **P02** Bruni | MOT | 2C più tutta la B |
 
 ⚠ **L02** (lettere) e **M02** (matematica e fisica) sono invece *solo*
 succursale: una sezione staccata ha sempre qualche cattedra che non si muove,
 e senza di loro il vincolo di transizione sarebbe uniforme su tutti.
 
-R01 è il portatore designato di `max_site_changes` (ondata 5): dodici ore
+R01 è il portatore di `max_site_changes` (ondata 3): dodici ore
 sparse su due sedi sono il caso in cui un tetto giornaliero di cambi morde
 davvero.
 

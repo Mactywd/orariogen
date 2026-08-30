@@ -42,7 +42,7 @@ def test_su_schedule_vuoto_le_due_deficienze_e_nient_altro():
     env = alighieri.build()
     findings = check_schedule(env["schedule"])
     da_piazzare = [f for f in findings if f.code == "activity_unplaced"]
-    assert len(da_piazzare) == Activity.objects.count() == 340
+    assert len(da_piazzare) == Activity.objects.count() == 342
     assert {f.code for f in findings} - {"activity_unplaced"} == {
         "min_distribution", "free_guaranteed"}
 
@@ -61,7 +61,7 @@ def test_le_due_fasi_chiudono_pulite():
     apply(fase1, env["schedule"])
 
     richieste = Activity.objects.exclude(rooms=None).count()
-    assert richieste == 71
+    assert richieste == 73
     fase2 = solve_rooms(env["schedule"], workers=8)
     assert fase2.status == "OPTIMAL"
     assert len(fase2.assignments) == richieste

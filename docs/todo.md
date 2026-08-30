@@ -39,14 +39,16 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > ⚠ **E provando il prodotto invece dei test si è visto che il Fermi misura
 > pochissimo**: tre builder su ventisette fanno qualcosa, tredici tabelle su
 > trentatré sono vuote.
-> È L4, ed è ciò che va fatto prima di D2. **Ondate 1–3 su 7 fatte** il
-> 2026-08-30: l'anagrafica dell'Alighieri, i suoi sdoppiamenti e l'asse
-> Cardinalità, con la sonda della copertura diventata un test — **12 builder
-> su 27** contro i 3 del Fermi. 🔑 E il banco ha già prodotto il suo primo
-> difetto — **L5**, l'allineamento è un campo che nessun builder legge — che è
-> esattamente ciò per cui esiste; l'ondata 3 ne ha prodotto un secondo che
-> però è del **metodo**, non del motore: la verifica per mutazione va fatta
-> stringendo, non togliendo.
+> È L4, ed è ciò che va fatto prima di D2. **Ondate 1–4 su 7 fatte** il
+> 2026-08-30: l'anagrafica dell'Alighieri, i suoi sdoppiamenti, l'asse
+> Cardinalità e l'asse Relazione, con la sonda della copertura diventata un
+> test — **25 builder su 27** contro i 3 del Fermi. 🔑 E il banco ha già
+> prodotto il suo primo difetto — **L5**, l'allineamento è un campo che nessun
+> builder legge — che è esattamente ciò per cui esiste; l'ondata 3 ne ha
+> prodotto un secondo che però è del **metodo**, non del motore (la verifica
+> per mutazione va fatta stringendo, non togliendo), e l'ondata 4 ha mostrato
+> che quella correzione era **troppo larga**: con un pin la rimozione torna
+> misurabile.
 
 ---
 
@@ -251,8 +253,8 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       sono **una** collocazione, non due che si somigliano. Da noi
       `Activity.alignment_ident` esiste dal giorno dello schema e **nessun
       builder e nessun checker lo legge**.
-      Misurato sul dataset completo: dei **15** allineamenti dichiarati, **13**
-      escono dal solve senza una sola coincidenza — i due livelli di inglese di
+      Misurato sul dataset completo (ondata 4): dei **16** allineamenti
+      dichiarati, **14** escono dal solve senza una sola coincidenza — i due livelli di inglese di
       1A/1B sparsi su sei celle, il latino e l'informatica della 2C articolata
       mai in parallelo.
       ⚠ **Non è cosmetico**: senza allineamento metà classe resta a scuola in
@@ -319,8 +321,32 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       docente e *ogni* classe resta `OPTIMAL` — 40 fasce contro cattedre da
       10–21 ore, la contiguità è gratis. Misurato e fissato da un test che
       asserisce l'`OPTIMAL`; si stringe all'ondata 7, con la griglia.
-      Restano le ondate 4–7: asse Relazione, sedi e peso didattico, quote e
-      qualità, accettazione.
+      **Ondata 4 fatta il 2026-08-30** — l'asse Relazione
+      ([`data/liceo-alighieri/relazioni.md`](../data/liceo-alighieri/relazioni.md)):
+      i **tredici tipi** di `SubjectConstraint`, uno per riga, e la sonda passa
+      da 12 a **25 su 27**. Due fasi ancora `OPTIMAL` a zero scarti (15 545
+      variabili, 11 783 constraint; 73 aule su 73). I due builder che restano
+      sono nominati: `structural:unavailability` e
+      `structural:didactic_weight`, entrambi dell'ondata 5.
+      🔑 **Il testimone puntato, e la regola 4 che torna misurabile.** Sui
+      divieti di relazione la tacca dell'ondata 3 non si applica — *una
+      proibizione non sparpaglia*: vietare il greco a un giorno di distanza da
+      sé stesso non impedisce di metterne tre ore lo stesso giorno, e la tacca
+      che sembrava aritmetica torna `OPTIMAL` (misurato). Al suo posto si
+      **impone con `pinned` la configurazione vietata** e si pretende
+      `INFEASIBLE` con la riga e `OPTIMAL` senza: due proprietà del modello,
+      in due direzioni, nessuna dipendente dall'ottimo che la ricerca sceglie.
+      **13 su 13**, più tre tacche dove il tipo ha un parametro — e una delle
+      tre attraversa i due assi (il tetto orario di una materia diventa
+      impossibile per la riga `max_presence` di un docente, scritta
+      un'ondata prima).
+      ⚠ **Il dataset è cresciuto, ed è dichiarato**: un secondo laboratorio
+      sdoppiato in **4A**, perché i quattro tipi `PARTS_*` vogliono quattro
+      portatori che non si implichino a vicenda e con la sola 3A non esistono.
+      +1 partizione, +2 parti, +2 attività, N01 da 18 a 19 ore, quadratura
+      `+/- = 0` intatta.
+      Restano le ondate 5–7: sedi e peso didattico, quote e qualità,
+      accettazione.
 
 - [x] **L1 — il buco misurato sulla mezza giornata.** Il perimetro è ora un
       parametro d'istituto, separato per classi e per docenti

@@ -1,7 +1,7 @@
 # L'Alighieri: il banco a scuola intera
 
 **Data**: 2026-08-30
-**Stato**: approvata — **ondate 1, 2 e 3 di 7 fatte** il 2026-08-30
+**Stato**: approvata — **ondate 1, 2, 3 e 4 di 7 fatte** il 2026-08-30
 **Apre**: la copertura del modello a scala reale — **ventiquattro builder su
 ventisette** non hanno mai visto un dataset
 
@@ -282,6 +282,25 @@ significa solo «l'Alighieri ha righe in tutte le tabelle».
 > sostanza del punto 4 resta: *una famiglia che il dataset non può violare è
 > presente e non esercitata*.
 
+> ⚠ **Secondo emendamento, del 2026-08-30 (ondata 4): la tacca non basta, e
+> la rimozione torna — puntata.** La tacca vale dove c'è un parametro da
+> stringere e un carico fisso da far scoppiare, cioè sull'asse Cardinalità.
+> Sull'asse Relazione no: **una proibizione non sparpaglia**, e un divieto fra
+> materie resta soddisfacibile per concentrazione — misurato, la tacca che
+> sembrava aritmetica (`two_days_incompatible` su quattro ore invece di tre)
+> torna `OPTIMAL`, perché niente obbliga quattro ore della stessa materia a
+> stare su quattro giornate distinte. Dei tredici tipi solo tre hanno una
+> tacca.
+>
+> Al suo posto, e per **tutti** i tipi: si impone con `pinned` la
+> configurazione che la riga vieta, e si pretende `INFEASIBLE` **con** la riga
+> e `OPTIMAL` a zero scarti **senza**. Il primo emendamento diceva che la
+> rimozione non è misurabile, ed è vero *finché il solver è libero*: col pin le
+> due esecuzioni non rispondono più «quale orario» ma con due verdetti sul
+> modello. Il secondo ramo è obbligatorio, non decorativo — senza, un pin
+> illegale per un'altra ragione qualunque direbbe `INFEASIBLE` e non
+> proverebbe niente.
+
 E ha una forma **economica e automatica**, che diventa un test della suite: la
 sonda di §2.1 — avvolgere `restrict` e `build` di ogni builder e contare celle
 tolte e constraint postati durante `build_model` — deve riportare **zero
@@ -356,6 +375,7 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
    `structural:coverage` che per costruzione non ne ha uno).
    🔑 **Difetto trovato — il primo del banco**: `Activity.alignment_ident` è un
    campo che nessun builder e nessun checker legge, e 13 allineamenti su 15
+   (16 e 14 dopo l'ondata 4)
    escono dal solve senza una coincidenza. Non riparato (§8), fissato da un
    test, aperto come **L5** in `docs/todo.md`.
 3. ✅ **L'asse Cardinalità** (§3.1) (2026-08-30): otto famiglie in **dieci
@@ -375,7 +395,31 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
    ore. Si stringe all'ondata 7, con la griglia; fino ad allora un test
    asserisce l'`OPTIMAL`.
    ⚠ **§6.4 è stata corretta da questa ondata** — vedi l'emendamento in §6.
-4. **L'asse Relazione** (§3.2): tredici tipi, idem.
+4. ✅ **L'asse Relazione** (§3.2) (2026-08-30): **tredici tipi in tredici
+   righe** — qui il portatore è una coppia *(unità, materia)* e non una
+   risorsa, quindi non serve il doppione che all'ondata 3 serviva. La sonda
+   passa da **12 a 25 su 27**; i due che restano sono
+   `structural:unavailability` e `structural:didactic_weight`, entrambi
+   dell'ondata 5. Due fasi ancora `OPTIMAL` a zero scarti: 15 545 variabili,
+   11 783 constraint, 73 aule su 73.
+   🔑 **La tacca di §6.4 non si applica a quest'asse, e la ragione è che una
+   proibizione non sparpaglia**: il disegno prevedeva una quarta tacca
+   (`two_days_incompatible` dal greco di 3 ore al latino di 4, perché quattro
+   giornate non adiacenti non stanno in cinque), l'aritmetica era giusta e la
+   premessa no — niente obbliga quattro ore della stessa materia a stare su
+   quattro giornate distinte. Misurato: `OPTIMAL`.
+   🔑 **Al suo posto il testimone puntato, e §6.4 torna misurabile nella sua
+   forma originale.** Imponendo con `pinned` la configurazione vietata, la
+   rimozione della riga smette di chiedere «quale orario» e chiede
+   `INFEASIBLE`/`OPTIMAL` — due proprietà del modello. **13 su 13**, in
+   entrambe le direzioni, più tre tacche dove il tipo ha un parametro (una
+   delle quali attraversa i due assi: il tetto orario di una materia diventa
+   impossibile per la riga `max_presence` di un docente).
+   ⚠ **Il dataset è cresciuto, dichiarato**: un secondo laboratorio sdoppiato
+   in 4A, perché i quattro `PARTS_*` vogliono portatori che non si implichino
+   a vicenda — un ordine per giornata su un'unità rende veri per costruzione
+   gli omogenei su ogni sotto-unità. +1 partizione, +2 parti, +2 attività,
+   N01 da 18 a 19 ore, `+/- = 0` intatta.
 5. **Sedi, peso didattico, personale e materiali** (§3.4, §3.5).
 6. **Quote, criteri di qualità e firme di settimana** (§3.5, §4.1) — qui si
    attende il **rosso** sul debito delle firme.

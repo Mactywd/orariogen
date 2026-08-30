@@ -14,10 +14,16 @@ gruppo`, con il `raggruppamento` trasversale a più classi. Vedi
 |---|---|---|---|
 | IRC / alternativa | tutte e 12 | `RELIGIONE` | `_REL`, `_ALT` |
 | Classe articolata | 2C | `ARTICOLAZIONE` | `2C_ORD`, `2C_APP` |
-| Effettivo ridotto | 3A | `LABSCI` | `3A_G1`, `3A_G2` |
+| Effettivo ridotto | 3A **e 4A** | `LABSCI` ×2 | `3A_G1`/`3A_G2`, `4A_G1`/`4A_G2` |
 | Raggruppamento trasversale | 1A + 1B | `INGLESE` ×2 | `ING1-BASE`, `ING1-AVANZ` |
 
-Totale: **16 partizioni, 32 parti, 2 raggruppamenti**.
+Totale: **17 partizioni, 34 parti, 2 raggruppamenti**.
+
+⚠ **Il secondo laboratorio è dell'ondata 4, e la ragione non è di
+anagrafica.** I quattro tipi `PARTS_*` dell'asse Relazione vogliono quattro
+portatori che non si implichino a vicenda, e con una sola classe sdoppiata non
+esistono: un ordine per giornata su un'unità rende veri per costruzione gli
+omogenei su ogni sua sotto-unità. Vedi [relazioni.md](relazioni.md).
 
 ## 1. IRC e attività alternativa — su tutte e dodici
 
@@ -58,12 +64,13 @@ piano è uno scostamento.
 Informatica la insegna **I01**, tre ore. ⚠ È uno **spezzone**, ed è ciò che
 un'articolata produce davvero in una scuola piccola.
 
-## 3. Lo sdoppiamento a effettivo ridotto — 3A
+## 3. Lo sdoppiamento a effettivo ridotto — 3A e 4A
 
 Tre ore di scienze: **due a classe intera, una a metà classe** in laboratorio.
+Due volte, in 3A (ondata 2) e in 4A (ondata 4), con la stessa forma.
 
-🔑 **E il docente quell'ora la fa due volte.** N01 passa da 17 a 18 ore mentre
-il quadro orario di 3A non cambia di un minuto: è il costo dello sdoppiamento,
+🔑 **E il docente quell'ora la fa due volte.** N01 passa da 17 a 19 ore mentre
+i quadri orari di 3A e 4A non cambiano di un minuto: è il costo dello sdoppiamento,
 ed è il motivo per cui il monte ore di un docente **non si legge dal quadro
 orario**. È anche ciò che dà un senso ad `Al./Rid.` — i due gruppi da 13 stanno
 sotto il tetto d'istituto di 15, che le materie ereditano (ADR-003).
@@ -103,10 +110,10 @@ complessa**: in EDT le attività allineate sono **una** collocazione. Da noi
 `Activity.alignment_ident` è un campo, e **nessun builder e nessun checker lo
 legge**.
 
-Il dataset dichiara **15 allineamenti** su 38 attività — le dodici coppie
-IRC/alternativa, il latino contro l'informatica della 2C, l'ora di laboratorio
-di 3A, i due livelli di inglese. Misurato sul solve completo: **13 su 15 escono
-senza una sola coincidenza.** I due livelli di inglese finiscono su sei celle
+Il dataset dichiara **16 allineamenti** su 40 attività — le dodici coppie
+IRC/alternativa, il latino contro l'informatica della 2C, le due ore di
+laboratorio di 3A e 4A, i due livelli di inglese. Misurato sul solve completo:
+**14 su 16 escono senza una sola coincidenza.** I due livelli di inglese finiscono su sei celle
 diverse, e il latino e l'informatica della 2C non sono mai in parallelo — cioè
 metà classe resta a scuola in un'ora in cui non ha lezione.
 

@@ -26,6 +26,14 @@ significa solo «l'Alighieri ha righe in tutte le tabelle».
 > mordeva. Al suo posto si **stringe di una tacca** e si pretende
 > `INFEASIBLE` — una proprietà del modello, non del testimone. Vedi
 > [l'ondata 3](#ondata-3--lasse-cardinalità) e [vincoli.md](vincoli.md).
+>
+> ⚠ **E l'ondata 4 lo ha corretto una seconda volta, allargandolo.** La tacca
+> vale dove c'è un parametro da stringere; sui divieti di relazione non c'è, e
+> *una proibizione non sparpaglia*. Al suo posto il **testimone puntato**: si
+> impone con `pinned` la configurazione vietata e si pretende `INFEASIBLE` con
+> la riga e `OPTIMAL` senza. Così la rimozione — la forma originale del punto
+> 4 — torna misurabile. Vedi [l'ondata 4](#ondata-4--lasse-relazione) e
+> [relazioni.md](relazioni.md).
 
 E ha una forma economica e automatica che sta a monte della mutazione: la
 **sonda** ([`tests/sonda.py`](../../tests/sonda.py)), che avvolge `restrict` e
@@ -90,6 +98,10 @@ produrre uno scostamento.
 | I due livelli fra loro | conviventi | ✅ |
 | Copertura sul dataset intero | solo `activity_unplaced` | ✅ 340 |
 | Due fasi | `OPTIMAL`, zero scarti, 71 aule su 71 | ✅ |
+
+⚠ Come per l'ondata 1, i numeri di questa tabella sono **il verbale di quella
+misura**: l'ondata 4 li ha mossi (342 attività, 34 parti, 73 richieste d'aula,
+N01 a 19 ore). Lo stato corrente sta nel [README](README.md).
 
 ### ⚠ Un atteso smentito, e la smentita è del motore
 
@@ -187,7 +199,84 @@ una regressione, è la forma in cui l'analisi preventiva inganna chi la legge
 distrattamente: un orario vuoto non è «conforme tranne che per le attività da
 piazzare».
 
-## Ondate 4–7
+## Ondata 4 — l'asse Relazione
 
-Da scrivere prima di ciascuna, nell'ordine della spec §9: asse Relazione, sedi
-e peso didattico, quote e criteri di qualità, criterio di accettazione.
+Tredici tipi, tredici righe, e l'atteso scritto dal disegno di
+[relazioni.md](relazioni.md). ⚠ **Qui l'atteso ha due parti**, e la seconda è
+la novità dell'ondata: la forma che la riga garantisce nell'orario, *e* il
+**testimone puntato** — la configurazione che la riga vieta, imposta con
+`pinned`, che deve rendere il modello `INFEASIBLE` con la riga e `OPTIMAL`
+senza.
+
+| Cosa | Atteso | Osservato |
+|---|---|---|
+| Tredici tipi, uno per riga | nessun tipo scoperto | ✅ |
+| MAT e FIS di 5A | mai nella stessa mezza giornata | ✅ |
+| LAT e GRE di 4B | mai lo stesso giorno | ✅ giorni {0, 2} contro {1, 3} |
+| GRE di 3B | nessuna coppia di giornate a distanza 1 | ⚠ ✅ ma **tutte e tre lo stesso giorno** — vedi sotto |
+| MOT → MAT in 4A | nessuna successione immediata | ✅ |
+| MAT di 2A | ≤ 180′ per mezza giornata | ✅ max 120′ |
+| ITA di 3B | ≤ 120′ al giorno | ✅ esattamente 120′ ×2 |
+| LAT e GRE di 5B | la prima ora di latino precede la prima di greco | ✅ (0,1) contro (0,3) |
+| Le due sessioni di FIS di 3A | a ≤ 1 mezza giornata l'una dall'altra | ✅ stessa mezza giornata |
+| LAT di 1B | passo ≥ 2 mezze giornate | ✅ **arco 0→9**, un'ora al giorno |
+| I quattro `PARTS_*` | l'ordine parte/classe dentro il secchio | ✅ |
+| Testimone puntato | 13 su 13, in **due** direzioni | ✅ `INFEASIBLE` / `OPTIMAL` a zero scarti |
+| Sonda | 13 builder nuovi | ✅ **25 su 27** (era 12) |
+| Due fasi | `OPTIMAL`, zero scarti, 73 aule su 73 | ✅ 15 545 var, 11 783 constraint |
+
+E l'atteso sul **bordo**, dove il tipo ha un parametro da stringere:
+
+| Tipo | Tacca | Atteso | Osservato |
+|---|---|---|---|
+| `max_hours_half_day` | 180′ → 60′ | `INFEASIBLE` | ✅ 0,7 s |
+| `max_hours_day` | 120′ → 60′ | `INFEASIBLE` | ✅ 2,6 s |
+| `half_day_gap` | 2 → 3 | `INFEASIBLE` | ✅ 2,1 s |
+| `two_days_incompatible` | GRE (3 h) → LAT (4 h) | `INFEASIBLE` | ❌ **`OPTIMAL`** |
+
+### ⚠ Un'attesa smentita, e la sbagliata era l'attesa
+
+Il disegno contava così: quattro ore di latino a due a due non adiacenti
+vogliono quattro giornate, e l'insieme indipendente massimo di un cammino di
+cinque nodi è tre. Il conteggio è giusto; la **premessa** no. *Niente obbliga
+quattro ore della stessa materia a stare su quattro giornate distinte*, e
+infatti il solver le impila — come impila le tre ore di greco del 3B, tutte
+sullo stesso venerdì.
+
+🔑 **È il fatto generale dell'asse Relazione, e va scritto una volta sola:
+una proibizione non sparpaglia.** `same_day_incompatible` fra due materie è
+sempre soddisfacibile da solo (A si concentra in un giorno, B in un altro);
+`two_days_incompatible` con A = B pure; e trentanove fasce libere assorbono
+quasi ogni altro divieto. È il motivo per cui la regola del bordo qui non è la
+tacca dell'ondata 3 ma il **testimone puntato** — che vale per tutti e tredici
+i tipi, parametro o no. Un test asserisce l'`OPTIMAL` di quella tacca, così
+diventerà rosso all'ondata 7.
+
+### 🔑 E la regola 4 torna misurabile, nella forma puntata
+
+L'[emendamento dell'ondata 3](#ondata-3--lasse-cardinalità) diceva che
+*togliere la riga* non è misurabile perché il solver restituisce un ottimo
+arbitrario. Resta vero **finché il solver è libero**. Imponendo con `pinned`
+la configurazione vietata, le due esecuzioni non rispondono più «quale
+orario» ma `INFEASIBLE` e `OPTIMAL`: due proprietà del modello, in due
+direzioni, nessuna delle quali dipende dal testimone che torna. La rimozione
+torna quindi a essere il test che la regola 4 voleva — con il pin come
+condizione, e con il ramo «senza la riga» come controllo obbligatorio, senza
+il quale un pin illegale per un'altra ragione direbbe `INFEASIBLE` e non
+proverebbe niente.
+
+### ⚠ E una riga di dataset che l'ondata ha dovuto aggiungere
+
+I quattro tipi `PARTS_*` vogliono quattro portatori che **non si implichino**:
+un ordine per giornata su un'unità rende veri per costruzione gli omogenei su
+ogni sotto-unità e su ogni mezza giornata. Con la sola 3A sdoppiata, due dei
+quattro sarebbero stati *presenti e implicati* — cioè il difetto che la regola
+4 esiste per non avere. Da qui il secondo laboratorio, in **4A**: +1
+partizione, +2 parti, +2 attività, N01 da 18 a 19 ore, la quadratura `+/- = 0`
+intatta. È la mossa del cappellano dell'ondata 3, e come quella è scritta
+invece che nascosta.
+
+## Ondate 5–7
+
+Da scrivere prima di ciascuna, nell'ordine della spec §9: sedi e peso
+didattico, quote e criteri di qualità, criterio di accettazione.

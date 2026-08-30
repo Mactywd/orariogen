@@ -86,7 +86,7 @@ indistinguibile dal default.
 **345 ore-alunno** = 4×27 (biennio scientifico: 1A, 2A, 1C, 2C) + 3×30 (triennio
 scientifico) + 2×27 (biennio classico) + 3×31 (triennio classico).
 
-**361 ore erogate** = 345 + 12 (l'attività alternativa, una per classe) + 3
-(l'informatica della 2C articolata) + 1 (l'ora di laboratorio di 3A, insegnata
-due volte). ⚠ Sono i due numeri da non confondere: il primo è ciò che un alunno
+**362 ore erogate** = 345 + 12 (l'attività alternativa, una per classe) + 3
+(l'informatica della 2C articolata) + 2 (le ore di laboratorio di 3A e 4A,
+insegnate due volte). ⚠ Sono i due numeri da non confondere: il primo è ciò che un alunno
 riceve, il secondo ciò che qualcuno insegna.
