@@ -39,6 +39,18 @@ d'istituto (15) — cioè la cascata di [ADR-003](../../docs/decisioni.md)
 esercitata invece che dichiarata. Materializzarlo sulla materia toglierebbe
 l'unico posto del dataset in cui l'ereditarietà si vede lavorare.
 
-⚠ `didactic_weight` resta al default **1** su tutte: i tetti di peso didattico
-sono `None` in `InstituteSettings`, come in EDT dove i quattro tetti d'istituto
-sono a `nessuno`. Li accende l'ondata 5.
+## Il peso didattico (ondata 5)
+
+⚠ Fino all'ondata 4 `didactic_weight` restava al default **1** su tutte, e i
+quattro tetti d'istituto erano `None` — come in EDT, dove sono a `nessuno`, e
+come sul Fermi, che resta così. È per questo che `structural:didactic_weight`
+non aveva mai visto un dato.
+
+L'ondata 5 dichiara una politica di scuola: **MAT, LAT e GRE pesano 2**, cioè
+le materie d'indirizzo dei due corsi. Tutte le altre restano a 1, e i tetti
+sono in [risorse.md](risorse.md).
+
+🔑 E il peso si conta **per unità-studente**, non per classe
+([ADR-011](../../docs/decisioni.md)): con le partizioni dell'ondata 2, una
+classe non ha *un* peso settimanale, ne ha uno per parte. Il tetto di classe
+del 3B (40) è il peso di 3B_REL e di 3B_ALT, non quello del 3B.

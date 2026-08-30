@@ -41,7 +41,16 @@ davvero.
 ## Cosa esercita
 
 - `structural:site_transition` — **muto sul Fermi**, che ha zero righe `Site`.
-- `max_site_changes` (ondata 5).
+- `max_site_changes` (ondata 3).
 - Il filtro delle aule per sede nella seconda fase: nessuna attività della
   succursale può chiedere un'aula della centrale, e un test lo verifica.
 - [ADR-019](../../docs/decisioni.md) — *dentro una fascia non si viaggia*.
+  🔑 **Misurato all'ondata 5**, e il portatore non è un docente: è il carrello
+  di portatili, l'unica risorsa del banco senza sede e a capienza cumulativa.
+  A capienza 1 la regola coincide riga per riga con la vecchia, quindi non
+  c'era modo di vederla prima. Vedi [risorse.md](risorse.md).
+
+⚠ E lì l'ondata 5 ha trovato **L6**: `structural:site_transition` posta la
+clausola «due sedi sulla stessa fascia» su *ogni* chiave di occupazione,
+carrelli compresi — cioè pretende un tempo di viaggio da una risorsa che non
+viaggia.

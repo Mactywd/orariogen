@@ -276,7 +276,129 @@ partizione, +2 parti, +2 attività, N01 da 18 a 19 ore, la quadratura `+/- = 0`
 intatta. È la mossa del cappellano dell'ondata 3, e come quella è scritta
 invece che nascosta.
 
-## Ondate 5–7
+## Ondata 5 — le risorse, il peso e le indisponibilità
 
-Da scrivere prima di ciascuna, nell'ordine della spec §9: sedi e peso
-didattico, quote e criteri di qualità, criterio di accettazione.
+Tre famiglie in una sola ondata, e stanno insieme per una ragione: sono
+**tutto ciò che resta** perché la sonda arrivi al registro intero. I due
+builder che l'ondata 4 lasciava fuori — `structural:unavailability` e
+`structural:didactic_weight` — sono qui, e con loro le due risorse di
+piazzamento che nessun dataset aveva mai avuto.
+
+⚠ **Il contratto è misto, ed è la prima volta.** Le indisponibilità e i tetti
+di peso *per giornata e per mezza giornata* sono divieti sul piazzamento,
+quindi si provano col **testimone puntato** dell'ondata 4. Lo spezzone di
+RICCI è invece un conteggio (tre ore in tre fasce), quindi ammette la
+**tacca** dell'ondata 3. E il tetto **settimanale** non ammette né l'una né
+l'altro, e il perché è la cosa più istruttiva dell'ondata — vedi sotto.
+
+| Cosa | Atteso | Osservato |
+|---|---|---|
+| Righe di indisponibilità | 55 (37 + 3 + 5 + 3 + 2 + 5) | ✅ |
+| Livelli usati | tutti e tre, su tre tipi di risorsa | ✅ |
+| Risorse nuove | 1 tecnico, 1 materiale | ✅ |
+| Attività col tecnico | 7 (3 blocchi di FIS + 4 ore di laboratorio) | ✅ |
+| Attività col carrello | 9, con quantità 2 / 2 / 1 | ⚠ **13**, e la capienza 4 invece di 3 — vedi sotto |
+| Materie con peso 2 | 3 (MAT, LAT, GRE) | ✅ |
+| Sonda | **27 su 27** — il registro intero | ✅ |
+| Due fasi | `OPTIMAL`, zero scarti, 73 aule su 73 | ✅ 15 233 var, 12 251 constraint, ~7 s |
+
+E l'atteso **riga per riga**, che è dove l'ondata si gioca:
+
+| Riga | Contratto | Atteso | Osservato |
+|---|---|---|---|
+| `ricci` (rossa, docente) | tacca | una fascia rossa in più → `INFEASIBLE` | ✅ 1,2 s |
+| `orientamento` (rossa, classe) | testimone puntato | `INFEASIBLE` / `OPTIMAL` | ✅ 0,8 s / 8,1 s |
+| `palestra` (rossa, aula) | testimone puntato | `INFEASIBLE` / `OPTIMAL` | ✅ 0,7 s / 6,8 s |
+| `permesso` (gialla, docente) | testimone puntato **e** override | `INFEASIBLE`; `OPTIMAL` con `ignora_opzionali` | ✅ e ⚠ `INFEASIBLE` autorizzando le **aule** |
+| `manutenzione` (gialla, aula) | testimone puntato **e** override | idem, sull'altra categoria | ✅ e ⚠ `INFEASIBLE` autorizzando i **docenti** |
+| `preferenza` (verde, docente) | contro-testimone | `OPTIMAL`: il verde **non** vieta | ✅ |
+| `max_weight_morning` 9 | testimone puntato | `INFEASIBLE` / `OPTIMAL` | ✅ (peso 10) |
+| `max_weight_afternoon` 5 | testimone puntato | `INFEASIBLE` / `OPTIMAL` | ✅ (peso 6) |
+| `max_weight_day` 12 | testimone puntato | `INFEASIBLE` / `OPTIMAL` | ✅ (peso 13) |
+| tetto settimanale 3B = 40 | tacca | 39 → `INFEASIBLE` | ✅ 1,3 s |
+| tecnico di laboratorio | testimone puntato | due laboratori insieme → `INFEASIBLE` | ✅ |
+| carrelli | testimone puntato | i due livelli d'inglese insieme (2 + 2) → `INFEASIBLE` | ❌ **e per fortuna** — vedi sotto |
+
+### ⚠ Un'attesa smentita, e la sbagliata era il **dataset**
+
+Il disegno dava tre carrelli, così che i due livelli d'inglese (due l'uno) non
+potessero stare nella stessa fascia. Il testimone sarebbe stato pulito, e il
+dataset **rotto**: stare nella stessa fascia è *il senso* di un raggruppamento
+trasversale — gli stessi alunni si dividono per livello nella stessa ora — e
+lo ha detto per primo un test dell'ondata 2, diventando rosso.
+
+Correzione: **quattro** carrelli, e il carrello anche sulle quattro ore di
+laboratorio a mezza classe (che sono piccoli gruppi come gli altri). Il
+testimone diventa a tre attività — `2 + 2 + 2 > 4` — e la forma dell'ondata 2
+resta. 🔑 Il criterio generale, che vale per le ondate 6 e 7: **un'ondata che
+rompe una forma dell'ondata precedente per accendere un builder sta misurando
+sé stessa.**
+
+### ⚠ E una misura che ha cambiato due test delle ondate 3 e 4
+
+I tetti di peso per giornata e mezza giornata sono ~510 constraint da migliaia
+di letterali l'uno, e sono il primo vincolo del banco che cambia il **regime di
+ricerca**: stesso modello, **439 s** con un lavoratore contro **7 s** con otto.
+I due test che cercavano con `workers=1` per riproducibilità sono passati a
+`workers=8`; le loro asserzioni sono invarianti e non celle, quindi non
+dipendono da quale ottimo torni.
+
+### ⚠ Il tetto settimanale non ha un testimone puntato, e non è una lacuna
+
+Un pin non lo può violare: la somma dei pesi di un'unità-studente lungo la
+settimana **non dipende da dove le attività vanno**. È il caso che
+`CLAUDE.md` chiama *il tetto inevadibile*, e l'unica leva che il modello ha
+per rispettarlo è **scartare**. Quindi il suo contratto è la tacca, e a
+`allow_unplaced=False` la tacca dice `INFEASIBLE`. Vale la pena scriverlo
+perché è la differenza fra un vincolo che *forma* l'orario e uno che si limita
+ad ammetterlo o rifiutarlo — e i due non si provano allo stesso modo.
+
+### 🔑 L'atteso che riguarda il carrello — e il ramo che si è avverato è il secondo
+
+Il carrello è l'unica risorsa del banco che **non ha una sede**: è della
+scuola, e serve l'inglese alla centrale e l'informatica in succursale. Se il
+modello lo tratta come tratta un docente o un'aula, allora due attività di
+sedi diverse non potranno mai condividere una fascia sul carrello — e questo
+sarebbe **sbagliato**, perché quattro carrelli non sono un corpo solo.
+L'atteso era doppio, e scritto prima di misurarlo:
+
+- con capienza abbondante e due attività di sedi diverse sulla stessa fascia,
+  il modello dovrebbe essere `OPTIMAL` (la capienza basta) — **atteso**;
+- se invece è `INFEASIBLE`, il colpevole è `structural:site_transition`, che
+  posta la clausola «due sedi sulla stessa fascia» su *ogni* chiave di
+  occupazione, e il banco ha trovato il suo secondo difetto.
+
+**Osservato: il secondo.** `INFEASIBLE` a capienza 4 (domanda 3) e ancora
+`INFEASIBLE` a capienza 9, quindi non è capienza; e `OPTIMAL` a zero scarti
+appena le due attività dichiarano la **stessa** sede. È **L6** in
+`docs/todo.md`, non riparato per la regola della spec §8, e fissato da un test
+che asserisce il comportamento corrente.
+
+### ⚠ E un difetto che il banco ha trovato *scegliendo dove* mettere una riga
+
+Cercando l'aula su cui mettere l'indisponibilità gialla si è visto che le due
+fasi la leggono in modo diverso: `structural:room_pool` conta i posti come se
+l'aula fosse libera, `RoomsContext._filtra` la toglie dalle candidate. Su
+un'aula a candidata unica non si vede (il pre-filtro toglie la cella prima);
+su un'aula a più candidate la fase 1 piazza e la fase 2 **rinuncia** — cioè
+esattamente ciò che ADR-021 esiste per non far succedere. È **L6bis**, e il
+dataset porta la sua gialla su `LAB-SUCC` proprio per non ospitarlo: un banco
+che porta un difetto noto smette di misurare le regressioni.
+
+### 🔑 E il ramo di controllo dell'ondata 4 ha fatto il suo mestiere
+
+L'ondata 5 ha spento un testimone dell'ondata 4, e lo ha **detto**. Il pin di
+`forbidden_sequence` metteva le due ore di scienze motorie della 4A al lunedì
+alle otto; la riga `palestra` rende quella cella indisponibile. Da quel
+momento il primo `assert` del testimone restava verde per il motivo
+sbagliato — `INFEASIBLE` per il pre-filtro, non per la riga osservata — e il
+**secondo** è diventato rosso.
+
+⚠ È esattamente il caso per cui la spec ha reso obbligatorio il ramo «senza la
+riga»: senza di esso il testimone sarebbe rimasto verde e vuoto, e nessuno se
+ne sarebbe accorto. Il pin si è spostato al martedì.
+
+## Ondate 6–7
+
+Da scrivere prima di ciascuna, nell'ordine della spec §9: quote, criteri di
+qualità e firme di settimana; poi il criterio di accettazione e i comandi.

@@ -253,7 +253,7 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       sono **una** collocazione, non due che si somigliano. Da noi
       `Activity.alignment_ident` esiste dal giorno dello schema e **nessun
       builder e nessun checker lo legge**.
-      Misurato sul dataset completo (ondata 4): dei **16** allineamenti
+      Misurato sul dataset completo (ondate 4–5): dei **16** allineamenti
       dichiarati, **14** escono dal solve senza una sola coincidenza — i due livelli di inglese di
       1A/1B sparsi su sei celle, il latino e l'informatica della 2C articolata
       mai in parallelo.
@@ -345,8 +345,91 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       portatori che non si implichino a vicenda e con la sola 3A non esistono.
       +1 partizione, +2 parti, +2 attività, N01 da 18 a 19 ore, quadratura
       `+/- = 0` intatta.
-      Restano le ondate 5–7: sedi e peso didattico, quote e qualità,
-      accettazione.
+      **Ondata 5 fatta il 2026-08-30** — risorse, peso e indisponibilità
+      ([`data/liceo-alighieri/risorse.md`](../data/liceo-alighieri/risorse.md)):
+      le **sei righe di indisponibilità** nei tre livelli e su tre tipi di
+      risorsa (docente, classe, aula), i **tetti di peso didattico** (MAT, LAT
+      e GRE a 2; 9 / 5 / 12 d'istituto e uno di classe a 40), il **tecnico di
+      laboratorio** e i **quattro carrelli di portatili** — cioè le due
+      risorse di piazzamento che nessun dataset del progetto aveva mai avuto.
+      🔑 La sonda arriva a **27 su 27**, il registro intero: il criterio di
+      accettazione della spec (§6) è raggiunto all'ondata 5 invece che alla 7.
+      Non chiude il pezzo — la sonda dice che un builder *fa qualcosa*, non
+      che ciò che fa morda — ma da qui il cricchetto non deve più salire, deve
+      restare fermo. Due fasi ancora `OPTIMAL` a zero scarti (15 233 variabili,
+      12 251 constraint; 73 aule su 73). ⚠ Le variabili **scendono** per la
+      prima volta: l'indisponibilità è un pre-filtro del dominio.
+      🔑 **E il contratto è misto, per la prima volta**: le indisponibilità e i
+      tetti per giornata e mezza giornata si provano col testimone puntato
+      dell'ondata 4, lo spezzone di RICCI (tre ore in tre fasce) con la tacca
+      dell'ondata 3, e il tetto **settimanale** con la sola tacca — perché è
+      indipendente dal piazzamento e nessun pin lo può violare. È *il tetto
+      inevadibile* di `CLAUDE.md`, e la differenza fra un vincolo che **forma**
+      l'orario e uno che si limita ad ammetterlo.
+      ⚠ **Un'attesa smentita, e la sbagliata era il dataset**: a tre carrelli i
+      due livelli d'inglese non potevano più stare nella stessa fascia, che è
+      *il senso* di un raggruppamento trasversale — lo ha detto un test
+      dell'ondata 2, diventando rosso. Quattro carrelli, e il testimone diventa
+      a tre attività. La regola generale, per le ondate 6 e 7: **un'ondata che
+      rompe una forma dell'ondata precedente per accendere un builder sta
+      misurando sé stessa.**
+      ⚠ **E una misura che ha cambiato due test**: i tetti di peso sono il
+      primo vincolo del banco a cambiare il *regime di ricerca* — stesso
+      modello, **439 s** con un lavoratore contro **7 s** con otto — quindi i
+      due test delle ondate 3 e 4 che cercavano con `workers=1` per
+      riproducibilità sono passati a `workers=8` (le loro asserzioni sono
+      invarianti, non celle).
+      🔑 **E il ramo di controllo dell'ondata 4 ha fatto il suo mestiere**: la
+      riga rossa sulla palestra ha reso indisponibile la cella su cui il
+      testimone puntato di `forbidden_sequence` metteva le due ore di scienze
+      motorie, e da quel momento il primo `assert` restava verde *per il motivo
+      sbagliato* (`INFEASIBLE` per il pre-filtro, non per la riga osservata)
+      mentre il ramo «senza la riga» diventava rosso. È il caso per cui la spec
+      ha reso obbligatorio quel ramo: senza, un testimone si sarebbe svuotato
+      in silenzio.
+      🔑 Ha prodotto **due difetti**: L6 e L6bis, qui sotto.
+      Restano le ondate 6–7: quote, criteri di qualità e firme di settimana;
+      poi il criterio di accettazione e i comandi.
+
+- [ ] **L6 — una risorsa senza sede non può servire due sedi, e non è la
+      capienza.** 🔑 **Trovato dall'ondata 5 dell'Alighieri, il 2026-08-30**,
+      costruendo la sua unica risorsa senza sede: quattro carrelli di portatili
+      sono della scuola, non di un edificio, e servono l'inglese alla centrale
+      e l'informatica in succursale. Ma `SiteTransitionBuilder` posta la
+      clausola «due sedi sulla stessa fascia» su **ogni** chiave di
+      occupazione, e pretende in più `site_transition_slots` fasce libere fra
+      due sedi diverse: per un *insieme* di quattro carrelli entrambe le cose
+      sono false — un insieme non è un corpo solo, e non viaggia.
+      Misurato in tre esecuzioni: `INFEASIBLE` a capienza 4 con domanda 3,
+      `INFEASIBLE` ancora a capienza **9** (quindi non è capienza), `OPTIMAL` a
+      zero scarti appena le due attività dichiarano la **stessa** sede.
+      ⚠ Da decidere prima di riparare: la sede è una proprietà
+      dell'**attività**, non della risorsa, quindi «questa chiave viaggia» non
+      è deducibile dal tipo. Il candidato naturale è `simultaneous_capacity > 1`
+      — un pool non viaggia — ma vale anche per l'aula col `Numero di aule` di
+      EDT, che invece un luogo ce l'ha. Fissato da un test che asserisce il
+      comportamento corrente (`tests/test_alighieri_risorse.py`).
+      🔑 E lo stesso carrello è **l'unica risorsa del progetto che possa
+      mostrare [ADR-019](decisioni.md)** — *dentro una fascia non si viaggia*:
+      a capienza 1 la regola coincide riga per riga con la vecchia, quindi
+      serviva una chiave a capienza cumulativa toccata da due sedi. Misurata
+      su un orario scritto a mano, perché il solver quella configurazione la
+      vieta.
+
+- [ ] **L6bis — il giallo su un'aula a più candidate costa una rinuncia.**
+      Trovato dall'ondata 5 *scegliendo dove* mettere l'indisponibilità gialla
+      di un'aula. Le due fasi leggono l'opzionale in modo diverso:
+      `structural:room_pool` conta i posti dell'aula come se fosse libera (il
+      suo commento lo dichiara: l'opzionale è violabile per definizione),
+      `RoomsContext._filtra` la toglie dalle candidate come farebbe per una
+      rossa. Su un'aula a candidata unica non si vede — il pre-filtro di
+      `structural:unavailability`, che il giallo lo rispetta, toglie la cella
+      prima; su un'aula a più candidate la fase 1 piazza e la fase 2
+      **rinuncia**, cioè esattamente ciò che [ADR-021](decisioni.md) esiste per
+      non far succedere. ⚠ Le tre letture dello stesso giallo sono tre: il
+      checker lo classifica `Severity.OPTIONAL`, il pre-filtro lo rispetta come
+      una rossa, `room_pool` lo ignora. Due su tre sono d'accordo, e la terza è
+      quella che paga. Fissato da un test.
 
 - [x] **L1 — il buco misurato sulla mezza giornata.** Il perimetro è ora un
       parametro d'istituto, separato per classi e per docenti

@@ -1,7 +1,7 @@
 # L'Alighieri: il banco a scuola intera
 
 **Data**: 2026-08-30
-**Stato**: approvata — **ondate 1, 2, 3 e 4 di 7 fatte** il 2026-08-30
+**Stato**: approvata — **ondate 1–5 di 7 fatte** il 2026-08-30
 **Apre**: la copertura del modello a scala reale — **ventiquattro builder su
 ventisette** non hanno mai visto un dataset
 
@@ -420,7 +420,42 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
    a vicenda — un ordine per giornata su un'unità rende veri per costruzione
    gli omogenei su ogni sotto-unità. +1 partizione, +2 parti, +2 attività,
    N01 da 18 a 19 ore, `+/- = 0` intatta.
-5. **Sedi, peso didattico, personale e materiali** (§3.4, §3.5).
+5. ✅ **Sedi, peso didattico, personale e materiali** (§3.4, §3.5)
+   (2026-08-30): **sei righe di indisponibilità** nei tre livelli e su tre
+   tipi di risorsa, i **tetti di peso didattico** (MAT/LAT/GRE a 2; 9 / 5 / 12
+   d'istituto e uno di classe a 40), il **tecnico di laboratorio** e i
+   **quattro carrelli di portatili**. La sonda arriva a **27 su 27**, il
+   registro intero: il criterio di accettazione di §6 è raggiunto qui invece
+   che all'ondata 7 — e non chiude il pezzo, perché la sonda dice che un
+   builder *fa qualcosa*, non che ciò che fa morda. Due fasi ancora `OPTIMAL`
+   a zero scarti: 15 233 variabili, 12 251 constraint, 73 aule su 73.
+   ⚠ **Le variabili scendono per la prima volta**: l'indisponibilità è un
+   pre-filtro del dominio, non un constraint.
+   🔑 **Il contratto è misto**, ed è la prima ondata in cui succede: il
+   testimone puntato dell'ondata 4 dove la riga vieta una configurazione, la
+   tacca dell'ondata 3 dove è un conteggio (tre ore in tre fasce), e **solo**
+   la tacca per il tetto settimanale — che è indipendente dal piazzamento, e
+   che quindi nessun pin può violare.
+   ⚠ **Un'attesa smentita, e la sbagliata era il dataset**: a tre carrelli i
+   due livelli d'inglese non stavano più nella stessa fascia, che è *il senso*
+   di un raggruppamento trasversale; l'ha detto un test dell'ondata 2
+   diventando rosso. Quattro carrelli. 🔑 **Un'ondata che rompe una forma
+   dell'ondata precedente per accendere un builder sta misurando sé stessa.**
+   ⚠ E i tetti di peso sono il primo vincolo del banco a cambiare il **regime
+   di ricerca** — 439 s a un lavoratore contro 7 s a otto — quindi i due test
+   delle ondate 3 e 4 che usavano `workers=1` sono passati a `workers=8`.
+   🔑 **E il ramo di controllo del testimone puntato ha fatto il suo mestiere**:
+   una riga rossa dell'ondata 5 ha reso indisponibile la cella su cui un
+   testimone dell'ondata 4 poggiava, e il primo `assert` di quel testimone
+   restava verde per il motivo sbagliato mentre il ramo «senza la riga»
+   diventava rosso. È il caso per cui §6 lo ha reso obbligatorio.
+   🔑 **Due difetti nuovi**, dichiarati e non riparati (§8): **L6**, una
+   risorsa senza sede non può servire due sedi (e non è la capienza: misurato
+   `INFEASIBLE` anche a capienza 9, `OPTIMAL` a stessa sede); **L6bis**, il
+   giallo su un'aula a più candidate costa una rinuncia, perché fase 1 e fase 2
+   lo leggono in modo diverso. Il primo porta con sé la misura di **ADR-019**,
+   che nessun dataset poteva dare: serviva una chiave a capienza cumulativa
+   toccata da due sedi.
 6. **Quote, criteri di qualità e firme di settimana** (§3.5, §4.1) — qui si
    attende il **rosso** sul debito delle firme.
 7. **Il criterio di accettazione e i comandi**: il test della sonda (§6, zero

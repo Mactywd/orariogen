@@ -9,9 +9,10 @@ import pytest
 from django.db.models import Q
 
 from domain.models import (
-    Activity, Break, ClassPart, ClassPartition, Discipline, Group,
-    ResourceTimeConstraint, Room, SchoolClass, Service, Site, SlotLabel,
-    StudyPlan, Subject, SubjectConstraint, Teacher, TeachingAssignment,
+    Activity, ActivityMaterialRequirement, Break, ClassPart, ClassPartition,
+    Discipline, Group, Material, ResourceTimeConstraint, ResourceUnavailability,
+    Room, SchoolClass, Service, Site, SlotLabel, StaffMember, StudyPlan,
+    Subject, SubjectConstraint, Teacher, TeachingAssignment,
 )
 from tests import alighieri
 
@@ -50,6 +51,12 @@ def test_conteggi_delle_entita(dataset):
     assert SubjectConstraint.objects.count() == 13
     assert ({r.type for r in SubjectConstraint.objects.all()}
             == set(SubjectConstraint.Type.values))
+    # Ondata 5: le indisponibilità nei tre livelli, e le due risorse di
+    # piazzamento che nessun dataset aveva — il personale e i materiali.
+    assert ResourceUnavailability.objects.count() == 55
+    assert StaffMember.objects.count() == 1
+    assert Material.objects.count() == 1
+    assert ActivityMaterialRequirement.objects.count() == 13
 
 
 def test_342_attivita_per_362_ore_erogate(dataset):

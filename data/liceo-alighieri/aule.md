@@ -13,7 +13,7 @@ seconda fase non assegna mai un'aula di una sede a un'attività dell'altra.
 | LAB-SCI | 30 | 1 | scienze |
 | **LAB-INF** | 25 | 1 | **condiviso**: fisica, scienze e disegno |
 | AUL-DIS | 30 | 1 | disegno |
-| PALESTRA | 60 | **2** | scienze motorie — due classi insieme |
+| PALESTRA | 60 | **2** | scienze motorie — due classi insieme; 🔴 **indisponibile** il lunedì mattina |
 | AULA-MAGNA | 100 | 1 | — |
 
 ## Succursale (4)
@@ -21,7 +21,7 @@ seconda fase non assegna mai un'aula di una sede a un'attività dell'altra.
 | Aula | Capienza | Qtà | Uso |
 |---|---:|---:|---|
 | C101, C102 | 26 | 1 | aule preferenziali di 1C, 2C |
-| LAB-SUCC | 28 | 1 | fisica, scienze **e** informatica: il laboratorio unico |
+| LAB-SUCC | 28 | 1 | fisica, scienze **e** informatica: il laboratorio unico; 🟡 manutenzione lun 08–10 |
 | PAL-SUCC | 50 | 1 | scienze motorie |
 
 ## Le due asimmetrie, che sono deliberate
@@ -34,9 +34,11 @@ già fatta — zero gradi di libertà, e una misura che non può fallire.
 🔑 **La succursale ha un laboratorio solo, e nessun ripiego.** Fisica e scienze
 di 1C e 2C, più le tre ore di informatica della 2C articolata — **undici** ore
 a settimana — si contendono `LAB-SUCC`, senza il `LAB-INF` su cui la centrale
-ripiega. È il posto in cui la stretta si farà
-sentire per prima quando le ondate 3–6 aggiungeranno i vincoli, ed è per questo
-che le due sedi non sono simmetriche.
+ripiega. È il posto in cui la stretta si fa
+sentire per prima, ed è per questo che le due sedi non sono simmetriche.
+Dall'ondata 5 le tre ore d'informatica sono anche **inchiodate** al mercoledì
+pomeriggio, perché il docente che le fa è uno spezzone da tre ore che viene un
+pomeriggio solo.
 
 ⚠ **`PALESTRA` a `Qtà` = 2** è il `Numero di aule` di EDT (colonna `Qtà`), non
 un gruppo di aule e non una sotto-aula: la correzione documentata in
@@ -59,3 +61,16 @@ laboratorio a mezza classe porta dentro 13 alunni, non 26.
 
 Categoria e tipologie non esistono nel nostro modello, e non sono un debito:
 `docs/edt/aule.md` documenta che non vincolano.
+
+## Le indisponibilità delle aule (ondata 5)
+
+Il meccanismo rosso / giallo / verde è **generico sulla risorsa**, quindi vale
+sulle aule come sui docenti: `PALESTRA` è rossa il lunedì mattina (concessa
+alla scuola media) e `LAB-SUCC` è gialla nelle prime due ore del lunedì
+(manutenzione).
+
+⚠ **La gialla sta su un'aula a candidata unica, e non per caso.** Su un'aula
+con più candidate — `LAB-INF`, per dire — la fase 1 e la fase 2 leggono
+l'opzionale in modo diverso, e il prezzo è una rinuncia: è il difetto
+**L6bis**, che ha un test suo invece di stare nel dataset. Vedi
+[risorse.md](risorse.md).

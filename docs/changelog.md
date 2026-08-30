@@ -15,6 +15,118 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (notte) — L'Alighieri, ondata 5: le risorse che mancavano, e i due modi di provare una riga** —
+  Le **sei righe di indisponibilità** nei tre livelli, i **tetti di peso
+  didattico**, il **tecnico di laboratorio** e i **quattro carrelli di
+  portatili**. La sonda dei builder arriva a **27 su 27**: il registro intero,
+  cioè il criterio di accettazione della spec (§6), raggiunto all'ondata 5
+  invece che alla 7. Due fasi ancora `OPTIMAL` a zero scarti — **15 233
+  variabili, 12 251 constraint**, **73 aule su 73**, ~7 s. Dettaglio in
+  [`data/liceo-alighieri/risorse.md`](../data/liceo-alighieri/risorse.md).
+
+  ⚠ **Le variabili scendono, ed è la prima volta.** L'indisponibilità è un
+  **pre-filtro del dominio**, non un constraint: 55 righe tolgono celle, e con
+  esse i letterali di avvio che ci vivevano (15 545 → 15 233). I constraint
+  salgono comunque, per i tetti di peso. È una differenza di meccanismo che i
+  test asseriscono per nome — un pin dentro una cella indisponibile finisce
+  **fuori dominio** (`pin_fuori_dominio`), mentre un pin che sfora un tetto di
+  peso no.
+
+  🔑 **Il contratto dell'ondata è misto, per la prima volta, e quale prova
+  valga lo decide la natura della riga.** Le indisponibilità e i tetti per
+  giornata e mezza giornata *formano* l'orario: vietano configurazioni, quindi
+  si provano col **testimone puntato** dell'ondata 4. Lo spezzone di RICCI —
+  tre ore in tre fasce — è un conteggio, quindi ammette la **tacca**
+  dell'ondata 3. E il tetto **settimanale** non ammette né l'uno né l'altra:
+  la somma dei pesi di un'unità-studente lungo la settimana non dipende da dove
+  le attività vanno, quindi nessun pin la può violare — è *il tetto
+  inevadibile* che `CLAUDE.md` porta fra i punti aperti, e resta la sola tacca
+  (40 regge, 39 è `INFEASIBLE`). Vale la pena averlo scritto: è la differenza
+  fra un vincolo che **forma** l'orario e uno che si limita ad ammetterlo o
+  rifiutarlo.
+
+  🔑 **E i tre livelli di indisponibilità non fanno la stessa cosa, il che è
+  tre affermazioni e non una.** La rossa vieta (testimone puntato, su una
+  **classe** e su un'**aula**: è ciò che significa «generico sulla risorsa»).
+  La gialla vieta finché non la si autorizza — e l'autorizzazione è **per tipo
+  di risorsa**, mai per la singola riga (A4): misurato nei due versi, con una
+  gialla su un docente e una su un'aula, autorizzando l'una categoria e
+  vedendo l'altra restare `INFEASIBLE`. La verde non vieta affatto
+  (contro-testimone: si impone la cella preferita libera e si pretende
+  `OPTIMAL`; se un giorno restringesse quel test diventerebbe rosso, ed è il
+  verso giusto — sarebbe il solver a farsi più severo di EDT).
+
+  ⚠ **Un'attesa smentita, e stavolta la sbagliata era il dataset.** Il disegno
+  dava **tre** carrelli, così che i due livelli d'inglese (due l'uno) non
+  potessero stare nella stessa fascia: il testimone sarebbe stato pulito e il
+  dataset rotto, perché stare nella stessa fascia è *il senso* di un
+  raggruppamento trasversale — gli stessi alunni si dividono per livello nella
+  stessa ora. Lo ha detto per primo un test dell'ondata 2, diventando rosso.
+  Correzione: **quattro** carrelli, e il carrello anche sulle quattro ore di
+  laboratorio a mezza classe; il testimone diventa a tre attività,
+  `2 + 2 + 2 > 4`. 🔑 La regola generale, che vale per le ondate 6 e 7:
+  **un'ondata che rompe una forma dell'ondata precedente per accendere un
+  builder sta misurando sé stessa.**
+
+  ⚠ **E una misura che ha cambiato due test delle ondate precedenti.** I tetti
+  di peso per giornata e mezza giornata sono ~510 constraint da migliaia di
+  letterali l'uno, e sono il primo vincolo del banco a cambiare il **regime di
+  ricerca**: stesso modello, **439 s** con un lavoratore contro **7 s** con
+  otto (senza i tetti: 7 s in entrambi i casi). I due test che cercavano con
+  `workers=1` per riproducibilità sono passati a `workers=8` — le loro
+  asserzioni sono invarianti e non celle, quindi non dipendono da quale ottimo
+  torni.
+
+  🔑 **Due difetti nuovi, e nessuno dei due riparato** (spec §8: il banco non
+  modifica il motore; si dichiarano e si fissano con un test che asserisce il
+  comportamento corrente).
+
+  **L6 — una risorsa senza sede non può servire due sedi, e non è la
+  capienza.** Quattro carrelli sono della scuola, non di un edificio: servono
+  l'inglese alla centrale e l'informatica in succursale. Ma
+  `SiteTransitionBuilder` posta la clausola «due sedi sulla stessa fascia» su
+  **ogni** chiave di occupazione, e pretende in più `site_transition_slots`
+  fasce libere fra due sedi diverse — cioè un tempo di viaggio da una risorsa
+  che non viaggia. La dimostrazione che il colpevole è la sede sta in tre
+  esecuzioni: `INFEASIBLE` a capienza 4 con domanda 3; `INFEASIBLE` ancora a
+  capienza **9**, quindi non è capienza; `OPTIMAL` a zero scarti appena le due
+  attività dichiarano la **stessa** sede.
+  🔑 E lo stesso carrello è **l'unica risorsa del progetto che possa mostrare
+  [ADR-019](decisioni.md)** — *dentro una fascia non si viaggia*: a capienza 1
+  la regola coincide riga per riga con la vecchia, quindi serviva una chiave a
+  capienza cumulativa toccata da due sedi, che nessun dataset aveva. Misurata
+  su un orario scritto a mano, perché il solver quella configurazione la
+  vieta: `MaxSiteChangesChecker` conta **zero cambi**, e
+  `SiteTransitionChecker` nomina comunque l'impossibilità. Due domande diverse,
+  due risposte diverse — che è esattamente ciò che l'ADR decide.
+
+  Suite: **910 verdi**, 17 skip, **545 s** (era 891 / 345 s — i diciannove
+  test nuovi sono quasi tutti due solve dell'Alighieri l'uno, che è il prezzo
+  del testimone puntato).
+
+  🔑 **E il ramo di controllo dell'ondata 4 ha fatto il suo mestiere.** La riga
+  `palestra` (rossa il lunedì mattina) ha reso indisponibile la cella su cui il
+  testimone puntato di `forbidden_sequence` metteva le due ore di scienze
+  motorie della 4A. Da quel momento il primo `assert` di quel testimone restava
+  verde **per il motivo sbagliato** — `INFEASIBLE` per il pre-filtro invece che
+  per la riga osservata — e il secondo, il ramo «senza la riga», è diventato
+  rosso. È il caso per cui la spec ha reso obbligatorio quel ramo: senza, un
+  testimone si sarebbe svuotato in silenzio. Il pin si è spostato al martedì.
+
+  **L6bis — il giallo su un'aula a più candidate costa una rinuncia.** Trovato
+  *scegliendo dove* mettere l'indisponibilità gialla di un'aula. Lo stesso
+  giallo ha **tre** letture nel codice: il checker lo classifica
+  `Severity.OPTIONAL`, il pre-filtro di `structural:unavailability` lo rispetta
+  come una rossa, e `structural:room_pool` lo ignora contando i posti
+  dell'aula come se fosse libera. Due su tre sono d'accordo; la terza paga. Su
+  un'aula a **candidata unica** non si vede — il pre-filtro toglie la cella
+  prima; su un'aula a più candidate la fase 1 piazza e la fase 2 **rinuncia**,
+  cioè esattamente ciò che [ADR-021](decisioni.md) esiste per non far
+  succedere. ⚠ È il motivo per cui la gialla del dataset sta su `LAB-SUCC` e
+  non su `LAB-INF`: **un banco che porta un difetto noto smette di misurare le
+  regressioni** — la rinuncia comparirebbe e sparirebbe a seconda di quale
+  ottimo la fase 1 restituisce, e nessuno saprebbe più leggere il numero.
+
 - **2026-08-30 (notte) — L'Alighieri, ondata 4: l'asse Relazione, e la rimozione che torna misurabile se la si punta** —
   I **tredici tipi** di `SubjectConstraint` in tredici righe, e la sonda dei
   builder passa da **12 a 25 su 27**. Due fasi ancora `OPTIMAL` a zero scarti —

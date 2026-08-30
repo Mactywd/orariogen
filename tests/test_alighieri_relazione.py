@@ -92,7 +92,14 @@ def _pin(nome):
         g = cl("3B", "GRE")
         return {g[0].pk: (0, 0), g[1].pk: (1, 0)}
     if nome == "forbidden_sequence":   # matematica subito dopo le due ore di MOT
-        return {cl("4A", "MOT", 2)[0].pk: (0, 0), cl("4A", "MAT")[0].pk: (0, 2)}
+        # ⚠ **Martedì e non lunedì, e l'ha imposto l'ondata 5**: la palestra è
+        # rossa il lunedì mattina, e su un'aula a candidata unica quella riga
+        # toglie la cella *prima* che il modello nasca. Il pin finiva fuori
+        # dominio, il primo `assert` restava verde per il motivo sbagliato e il
+        # secondo — il ramo di controllo — è diventato rosso. È il ramo di
+        # controllo che ha fatto il suo mestiere: senza, l'ondata 5 avrebbe
+        # spento un testimone dell'ondata 4 in silenzio.
+        return {cl("4A", "MOT", 2)[0].pk: (1, 0), cl("4A", "MAT")[0].pk: (1, 2)}
     if nome == "max_hours_half_day":   # quattro ore di matematica in una mattina
         m = cl("2A", "MAT")
         return {cl("2A", "MAT", 2)[0].pk: (0, 0), m[0].pk: (0, 2), m[1].pk: (0, 3)}
@@ -152,10 +159,12 @@ def test_le_tredici_forme_dichiarate():
     giornate: cinque ore di latino con passo ≥ 2 stanno in un arco di almeno
     otto mezze giornate su dieci, cioè un'ora al giorno e non di più.
 
-    `workers=1` rende la ricerca riproducibile: qui si osserva *quale* ottimo
-    torna."""
+    ⚠ **`workers=1` è stato tolto dall'ondata 5**, che con i tetti di peso
+    ha portato lo stesso modello da 7 s a 439 s con un lavoratore solo. Le
+    asserzioni qui sotto sono invarianti e non celle, quindi non dipendono da
+    quale ottimo torni."""
     env = alighieri.build()
-    soluzione = solve(env["schedule"], workers=1)
+    soluzione = solve(env["schedule"], workers=8)
     assert soluzione.status == "OPTIMAL"
     assert list(soluzione.unplaced) == []
     apply(soluzione, env["schedule"])

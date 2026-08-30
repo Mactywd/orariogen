@@ -4,6 +4,11 @@
 > stanno fra loro — sta in [relazioni.md](relazioni.md), e la prova che le sue
 > righe mordono è **diversa**: su un divieto la tacca di questo file non si
 > applica, perché una proibizione non sparpaglia.
+>
+> Le indisponibilità, i tetti di peso didattico e le due risorse di
+> piazzamento che mancavano stanno invece in [risorse.md](risorse.md)
+> (ondata 5), che usa **entrambe** le prove — la tacca dove c'è un conteggio,
+> il testimone puntato dove c'è un divieto.
 
 Le otto famiglie di `ResourceTimeConstraint`, in **dieci righe**. La tabella è
 la parte del banco che paga l'intero pezzo: prima di questa ondata il dataset

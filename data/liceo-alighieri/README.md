@@ -26,7 +26,7 @@ stimato — e lascia tredici tabelle su trentatré vuote, `ClassPartition`,
 `ClassPart` e `Group` comprese, cioè voci ✅ dello scope v1 che nessun dataset
 rappresenta.
 
-## Stato: ondate 1–4 di 7
+## Stato: ondate 1–5 di 7
 
 1. ✅ **L'anagrafica** — sedi, indirizzi, materie, piani di studi e servizi,
    classi, docenti, aule, attività.
@@ -38,6 +38,10 @@ rappresenta.
 4. ✅ **L'asse Relazione** — i tredici tipi di `SubjectConstraint`, uno per
    riga, ognuno provato col **testimone puntato**. Vedi
    [relazioni.md](relazioni.md).
+5. ✅ **Risorse, peso e indisponibilità** — le sei righe di indisponibilità nei
+   tre livelli, i tetti di peso didattico, il tecnico di laboratorio e i
+   carrelli di portatili. 🔑 La sonda arriva al **registro intero**. Vedi
+   [risorse.md](risorse.md).
 
 Le famiglie restanti arrivano dalle ondate successive, e ognuna aggiorna
 `esiti-attesi.md` *prima* del codice che le esercita.
@@ -60,6 +64,9 @@ Le famiglie restanti arrivano dalle ondate successive, e ognuna aggiorna
 | Partizioni / parti / raggruppamenti | 17 / 34 / 2 |
 | Righe di vincolo orario | 10 (8 famiglie) |
 | Righe di vincolo di materia | 13 (13 tipi) |
+| Righe di indisponibilità | 55 (6 righe logiche, 3 livelli, 3 tipi di risorsa) |
+| Personale / materiali | 1 tecnico / 4 carrelli di portatili |
+| Peso didattico | 3 materie a 2; tetti 9 / 5 / 12 e uno di classe a 40 |
 | **Ore-alunno** | **345** — 27 nei bienni, 30 e 31 nei trienni |
 | **Ore erogate** | **362** |
 | **Attività** | **342** |
@@ -98,15 +105,24 @@ somma grossolana non basta più — dove entrano parti e raggruppamenti l'unità
 vera è l'**atomo** (ADR-020), e il predicato che la usa è
 `structural:coverage`, verificato sul dataset intero.
 
-## Misure, ondata 4
+## Misure, ondata 5
 
 | | |
 |---|---|
-| Modello fase 1 | **15 545** variabili, **11 783** constraint (ondata 3: 15 372 / 8 758) |
-| Fase 1 | `OPTIMAL`, **zero scarti**, ~6 s |
+| Modello fase 1 | **15 233** variabili, **12 251** constraint (ondata 4: 15 545 / 11 783) |
+| Fase 1 | `OPTIMAL`, **zero scarti**, ~7 s |
 | Richieste d'aula | 73 |
 | Fase 2 | `OPTIMAL`, **73 su 73**, zero rinunce |
-| Sonda dei builder | **25 su 27** (ondata 3: 12; ondata 2: 4; Fermi: 3) |
+| Sonda dei builder | **27 su 27** — il registro intero (ondata 4: 25; ondata 3: 12; ondata 2: 4; Fermi: 3) |
+
+⚠ **Le variabili sono *scese*, ed è la prima volta.** Le indisponibilità sono
+un pre-filtro del dominio: 55 righe tolgono celle, e con esse i letterali di
+avvio che ci vivevano. I constraint salgono comunque, per i tetti di peso.
+
+⚠ **E i tetti di peso cambiano il regime di ricerca** — stesso modello,
+**439 s** con un lavoratore contro **7 s** con otto. È il primo vincolo del
+banco a farlo, e ha portato due test delle ondate 3 e 4 da `workers=1` a
+`workers=8`. Dettaglio in [risorse.md](risorse.md).
 
 ⚠ **L'ondata 2 non aveva allargato la sonda, ed era corretto così.** Partizioni,
 parti e raggruppamenti non hanno un builder proprio: entrano nel modello
@@ -120,14 +136,14 @@ L'ondata 3 la allarga invece di **otto** in un colpo e l'ondata 4 di
 **tredici**: una riga per famiglia, e ogni riga sceglie il proprio portatore
 perché quella famiglia abbia un soggetto vero.
 
-⚠ **I due che restano sono nominati, non dimenticati**:
-`structural:unavailability` — il banco non ha ancora una riga di
-indisponibilità — e `structural:didactic_weight`, i cui quattro tetti in
-`InstituteSettings` sono `None` com'è fedele a EDT. Sono l'ondata 5. Il
-criterio di accettazione della spec è ventisette su ventisette all'ondata 7, e
-il cricchetto che ci arriva è
-[`tests/test_alighieri_sonda.py`](../../tests/test_alighieri_sonda.py): ogni
-ondata deve allargare l'insieme dichiarato lì.
+🔑 **E l'ondata 5 la chiude**: le indisponibilità svegliano
+`structural:unavailability`, i tetti di peso `structural:didactic_weight`, e
+l'insieme diventa il registro intero. Il criterio di accettazione della spec
+(ventisette su ventisette) è quindi raggiunto **all'ondata 5** invece che alla
+7 — ma non chiude il pezzo: la sonda dice che ogni builder *fa qualcosa*, non
+che ciò che fa morda. Da qui in avanti il cricchetto
+([`tests/test_alighieri_sonda.py`](../../tests/test_alighieri_sonda.py)) non
+deve più salire, deve **restare fermo**.
 
 ⚠ E il dataset **non è ancora stretto** nel senso della spec (una sola aula o
 un solo docente in meno e compaiono gli scarti). Ma lo è **famiglia per
@@ -135,7 +151,9 @@ famiglia**, con due prove diverse perché i due assi vogliono prove diverse:
 sulla cardinalità otto righe su nove non sopportano una tacca più stretta
 (la nona — il D.T.B. — no, ed è misurato: [vincoli.md](vincoli.md)); sulla
 relazione tredici su tredici non sopportano il **testimone puntato**, cioè la
-configurazione vietata imposta con `pinned` ([relazioni.md](relazioni.md)).
+configurazione vietata imposta con `pinned` ([relazioni.md](relazioni.md)); e
+l'ondata 5 usa **entrambe** le prove, scegliendo secondo la natura della riga
+([risorse.md](risorse.md)).
 
 ## Indice del dataset
 
@@ -148,6 +166,7 @@ configurazione vietata imposta con `pinned` ([relazioni.md](relazioni.md)).
 - [gruppi.md](gruppi.md) — 🔑 le quattro forme di sdoppiamento, e il debito che hanno trovato
 - [vincoli.md](vincoli.md) — 🔑 le dieci righe dell'asse Cardinalità, e perché stanno al bordo
 - [relazioni.md](relazioni.md) — 🔑 i tredici tipi dell'asse Relazione, e il testimone puntato
+- [risorse.md](risorse.md) — 🔑 indisponibilità, peso didattico, tecnico e carrelli; e i due difetti trovati
 - [esiti-attesi.md](esiti-attesi.md) — 🔑 cosa deve succedere, scritto prima di eseguire
 
 Per la **semantica** delle entità (non i dati) vedi [`docs/edt/`](../../docs/edt/).

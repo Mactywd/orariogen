@@ -99,11 +99,15 @@ def test_le_dieci_righe_ci_sono():
 def test_le_otto_forme_dichiarate():
     """L'orario prodotto, letto famiglia per famiglia.
 
-    ⚠ `workers=1` non è un dettaglio di velocità: rende la ricerca
-    riproducibile, e qui si osserva *quale* ottimo torna, non solo che ne
-    torni uno."""
+    ⚠ **`workers=1` è stato tolto dall'ondata 5, ed è una misura.** Fino a
+    lì questo test cercava con un lavoratore solo per rendere la ricerca
+    riproducibile. I tetti di peso didattico per giornata e per mezza giornata
+    hanno cambiato il regime: **7 s a otto lavoratori, 439 s a uno**, sullo
+    stesso modello. Ciò che questo test asserisce sono comunque **invarianti**
+    — nessuna riga guarda una cella particolare — quindi il portafoglio
+    parallelo non toglie niente."""
     env = alighieri.build()
-    soluzione = solve(env["schedule"], workers=1)
+    soluzione = solve(env["schedule"], workers=8)
     assert soluzione.status == "OPTIMAL"
     assert list(soluzione.unplaced) == []
     apply(soluzione, env["schedule"])

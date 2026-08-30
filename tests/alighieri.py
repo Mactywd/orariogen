@@ -26,6 +26,12 @@ rappresentava. Quattro forme, tutte diverse fra loro — vedi `EROGAZIONI` e
 quella famiglia abbia un soggetto vero — vedi `TIME_CONSTRAINTS` e
 `data/liceo-alighieri/vincoli.md`.
 
+**Ondata 5 — le risorse, il peso e le indisponibilità.** Il tecnico di
+laboratorio e i carrelli di portatili (due delle cinque risorse di
+piazzamento, e le uniche due che nessun dataset aveva), i tetti di peso
+didattico e le sei righe di `ResourceUnavailability` nei tre livelli — vedi
+`INDISPONIBILITA` e `data/liceo-alighieri/risorse.md`.
+
 **Ondata 4 — l'asse Relazione.** I tredici tipi di `SubjectConstraint`, uno
 per riga — vedi `SUBJECT_CONSTRAINTS` e `data/liceo-alighieri/relazioni.md`.
 ⚠ È l'ondata che ha fatto **crescere il dataset**: i quattro tipi `PARTS_*`
@@ -39,9 +45,10 @@ import datetime as dt
 
 from domain import weeks
 from domain.models import (
-    Activity, Break, ClassPart, ClassPartition, CompetitionClass, Discipline,
-    Group, InstituteSettings, Period, ResourceTimeConstraint, Room, Schedule,
-    SchoolClass, SchoolYear, Service, Site, SlotLabel, StudyPlan, Subject,
+    Activity, ActivityMaterialRequirement, Break, ClassPart, ClassPartition,
+    CompetitionClass, Discipline, Group, InstituteSettings, Material, Period,
+    ResourceTimeConstraint, ResourceUnavailability, Room, Schedule, SchoolClass,
+    SchoolYear, Service, Site, SlotLabel, StaffMember, StudyPlan, Subject,
     SubjectConstraint, Teacher, TeachingAssignment, TimeGrid,
 )
 
@@ -453,6 +460,112 @@ SUBJECT_CONSTRAINTS = [
 ]
 
 
+# 🔑 **L'ondata 5**: le due risorse che nessun dataset aveva, i tetti di peso
+# didattico e le indisponibilità.
+
+#: Il **peso didattico** (ADR-011). ⚠ In una base reale del prodotto i quattro
+#: tetti d'istituto sono a «nessuno» e ogni materia pesa 1 — il Fermi è fedele,
+#: e `structural:didactic_weight` non ha quindi mai visto un dato. Qui la
+#: scuola dichiara una politica: le **materie d'indirizzo** pesano due, e i
+#: tetti tengono la giornata dell'alunno sotto controllo.
+PESI_DIDATTICI = {"MAT": 2, "LAT": 2, "GRE": 2}
+
+#: I tre tetti d'istituto, e nessuno è vacuo: una mezza giornata di cinque
+#: fasce tutte d'indirizzo pesa 10 (> 9), un pomeriggio di tre ne pesa 6
+#: (> 5), una giornata piena di otto fasce con cinque d'indirizzo ne pesa 13
+#: (> 12). ⚠ Il tetto **settimanale** d'istituto resta `None`: al suo posto
+#: c'è quello della classe, che secondo il checker **prevale**, ed è l'unico
+#: modo di esercitare quel ramo.
+TETTI_PESO = {"morning": 9, "afternoon": 5, "day": 12}
+
+#: Il tetto settimanale **della classe**, sul 3B: 40 è esattamente il peso
+#: settimanale delle sue due unità-studente (39 di classe + l'ora di IRC o di
+#: alternativa). ⚠ È un tetto **indipendente dal piazzamento** — la somma non
+#: dipende da dove le attività vanno — quindi non ha un testimone puntato: o
+#: l'orario esiste, o non esiste. La sua verifica è la tacca.
+TETTO_SETTIMANALE_CLASSE = ("3B", 40)
+
+#: 🔑 Le **altre due risorse di piazzamento**: il tecnico di laboratorio e i
+#: carrelli di portatili. `Resource` le prevede da sempre (cinque tipi, come
+#: nel pannello dell'attività di EDT) e nessun dataset ne aveva una: né il
+#: Fermi né l'Alighieri fino a qui.
+TECNICO = ("TECN", "Tecnico di laboratorio", "Centrale")
+#: Quattro carrelli, dodici portatili l'uno. La capienza simultanea è il
+#: numero di carrelli; la **quantità** di ogni richiesta è quanti ne serve
+#: quell'unità — ed è il campo che rende l'occupazione *cumulativa* invece
+#: che binaria.
+#:
+#: ⚠ **Quattro e non tre, e il numero l'ha deciso l'ondata 2.** A tre i due
+#: livelli d'inglese (due carrelli l'uno) non potrebbero più stare nella
+#: stessa fascia — e stare nella stessa fascia è *il senso* di un
+#: raggruppamento trasversale, non un dettaglio. Un banco che rompesse una
+#: forma dell'ondata precedente per accendere un builder starebbe misurando
+#: sé stesso.
+CARRELLI = ("CARRELLO", 4)
+POSTI_PER_CARRELLO = 12
+
+#: 🔑 Le **indisponibilità**, rosse gialle e verdi, e su tre tipi di risorsa
+#: diversi: il meccanismo è generico sulla risorsa (`docs/edt/vincoli.md`), e
+#: un dataset che le mettesse solo sui docenti non lo mostrerebbe.
+#:
+#: ⚠ I tre livelli **non** si comportano allo stesso modo, ed è il punto:
+#: la rossa vieta, la gialla vieta *ma* può essere autorizzata per **tipo** di
+#: risorsa (`ignora_opzionali`, mai per la singola — A4), la verde non vieta
+#: affatto. Le sei righe qui sotto sono scelte perché ciascuna delle tre
+#: affermazioni sia misurabile: vedi `tests/test_alighieri_risorse.py`.
+#:
+#: (nome, "t"|"c"|"r", portatore, livello, celle)
+INDISPONIBILITA = [
+    # 🔑 Lo **spezzone in un pomeriggio solo**: RICCI ha tre ore e viene un
+    # pomeriggio a settimana. Le tre ore stanno in tre fasce, quindi la riga è
+    # al bordo — una fascia rossa in più e l'orario non esiste. È l'unica
+    # famiglia dell'ondata che ammette la tacca dell'ondata 3.
+    ("ricci", "t", "RICCI", "hard",
+     [(d, s) for d in range(5) for s in range(8) if not (d == 2 and s >= 5)]),
+    # Il pomeriggio di orientamento della 5A: la classe non c'è.
+    ("orientamento", "c", "5A", "hard", [(2, s) for s in (5, 6, 7)]),
+    # La palestra è concessa alla scuola media il lunedì mattina. ⚠ Vale come
+    # vincolo di **fase 1** perché è candidata unica per le scienze motorie
+    # alla centrale: con due candidate l'aula non entra nei token.
+    ("palestra", "r", "PALESTRA", "hard", [(0, s) for s in range(5)]),
+    # Il permesso del venerdì pomeriggio: **gialla**, cioè rispettata come una
+    # rossa finché non si autorizza il motore a ignorarla.
+    ("permesso", "t", "SARTO", "optional", [(4, s) for s in (5, 6, 7)]),
+    # La manutenzione del laboratorio della succursale: gialla su un'**aula**,
+    # cioè su un tipo di risorsa diverso — è ciò che rende visibile che
+    # l'autorizzazione è per categoria e non per riga.
+    # 🔑 **E su un'aula a candidata unica, non per caso.** Su un'aula con più
+    # candidate la fase 1 e la fase 2 leggono il giallo in modo diverso, e il
+    # prezzo è una rinuncia: è il difetto **L6bis**, che ha un test suo
+    # (`tests/test_alighieri_risorse.py`) invece di stare nel dataset — un
+    # banco che porta un difetto noto smette di misurare le regressioni.
+    ("manutenzione", "r", "LAB-SUCC", "optional", [(0, 0), (0, 1)]),
+    # La preferenza: AMATO non vorrebbe la prima ora. **Verde**, quindi non
+    # vieta niente — il suo posto è un livello di qualità, non un pre-filtro.
+    ("preferenza", "t", "AMATO", "preference", [(d, 0) for d in range(5)]),
+]
+
+
+def _serve_tecnico(subject_code, block, unita):
+    """Il tecnico sta in laboratorio: le due ore di fisica del triennio
+    scientifico e le ore di scienze a mezza classe. ⚠ È **uno**, quindi due
+    laboratori non possono essere simultanei — che è il vincolo vero delle
+    scuole, e nel nostro modello è occupazione come tutte le altre."""
+    return (subject_code == "FIS" and block == 2) or (subject_code == "SCI"
+                                                      and unita is not None)
+
+
+def _carrelli(subject_code, unita, alunni):
+    """Quanti carrelli servono a un'attività: uno ogni dodici alunni, e solo
+    dove si lavora a piccoli gruppi — i due livelli di inglese, l'informatica
+    della classe articolata e le ore di laboratorio a mezza classe. ⚠ Metterli
+    anche sulle lezioni a classe intera li renderebbe una risorsa contesa da
+    trenta attività, cioè un vincolo di esclusione mutua travestito da
+    materiale."""
+    if unita is None or subject_code not in ("ING", "INF", "SCI"):
+        return 0
+    return -(-alunni // POSTI_PER_CARRELLO)
+
 def _band(year):
     return "biennio" if year <= 2 else "triennio"
 
@@ -481,6 +594,11 @@ def build():
     settings = InstituteSettings.load()
     settings.default_max_reduced_students = 15
     settings.site_transition_slots = 1
+    # I tetti di peso didattico (ondata 5). ⚠ Il settimanale resta `None`:
+    # sul 3B lo porta la **classe**, ed è il ramo che prevale.
+    settings.max_weight_morning = TETTI_PESO["morning"]
+    settings.max_weight_afternoon = TETTI_PESO["afternoon"]
+    settings.max_weight_day = TETTI_PESO["day"]
     settings.save()
 
     sites = {name: Site.objects.create(name=name) for name in SITES}
@@ -503,7 +621,8 @@ def build():
         disciplines[code] = d
     for code, (name, disc) in SUBJECTS.items():
         subjects[code] = Subject.objects.create(
-            code=code, name=name, discipline=disciplines[disc])
+            code=code, name=name, discipline=disciplines[disc],
+            didactic_weight=PESI_DIDATTICI.get(code, 1))
 
     plans = {}
     quadri = [(f"{t}{y}", f"{label} - {y} anno", y, CURRICULUM[(t, _band(y))])
@@ -533,6 +652,9 @@ def build():
             name=name, study_plan=plans[f"{track}{year}"], year=year,
             site=sites[site], preferred_room=rooms[HOME_ROOM[name]],
             expected_students=students,
+            max_weekly_weight_per_student=(
+                TETTO_SETTIMANALE_CLASSE[1]
+                if name == TETTO_SETTIMANALE_CLASSE[0] else None),
         )
         tracks[name], class_sites[name] = track, site
 
@@ -550,6 +672,25 @@ def build():
         gruppo = Group.objects.create(name=nome)
         gruppo.parts.set([parts[m] for m in membri])
         groups[nome] = gruppo
+
+    # Le due risorse dell'ondata 5. Il tecnico ha una sede (sta alla
+    # centrale, dove sono i laboratori); i carrelli no — sono della scuola, e
+    # girano fra le due sedi. ⚠ Quel `site=None` è ciò che rende il carrello
+    # il portatore di una domanda che nessun'altra risorsa poneva: vedi
+    # `data/liceo-alighieri/risorse.md`.
+    codice, ruolo, sede_tecnico = TECNICO
+    tecnico = StaffMember.objects.create(name=codice, role=ruolo,
+                                         site=sites[sede_tecnico])
+    nome_carrelli, quanti_carrelli = CARRELLI
+    carrelli = Material.objects.create(name=nome_carrelli,
+                                       simultaneous_capacity=quanti_carrelli)
+
+    def _alunni(unita):
+        if unita is None:
+            return None
+        if unita[0] == "part":
+            return parts[unita[1]].expected_students
+        return sum(p.expected_students for p in groups[unita[1]].parts.all())
 
     teachers = {}
     year_mask = weeks.full_mask(WEEKS_IN_YEAR)
@@ -594,6 +735,14 @@ def build():
                             activity.groups.add(groups[unita[1]])
                         for room_name in SPECIAL_ROOMS[site].get(subject_code, ()):
                             activity.rooms.add(rooms[room_name])
+                        if _serve_tecnico(subject_code, block, unita):
+                            activity.staff.add(tecnico)
+                        quanti = _carrelli(subject_code, unita,
+                                           _alunni(unita) or 0)
+                        if quanti:
+                            ActivityMaterialRequirement.objects.create(
+                                activity=activity, material=carrelli,
+                                quantity=quanti)
         teachers[tid] = t
 
     # L'asse Cardinalità (ondata 3). Il portatore si nomina per abbreviazione
@@ -615,6 +764,17 @@ def build():
             subject_b=subjects[b], type=SubjectConstraint.Type(tipo),
             param=param)
 
+    # Le indisponibilità (ondata 5). La risorsa si nomina per abbreviazione,
+    # per nome di classe o per nome d'aula: la tabella resta leggibile, e i
+    # tre tipi accanto sono ciò che mostra che il meccanismo è **generico**.
+    portatori = {"t": per_abbr, "c": classes, "r": rooms}
+    for _nome, kind, ref, livello, celle in INDISPONIBILITA:
+        risorsa = portatori[kind][ref]
+        for day, slot in celle:
+            ResourceUnavailability.objects.create(
+                resource=risorsa, day=day, slot=slot,
+                level=ResourceUnavailability.Level(livello))
+
     year = SchoolYear.objects.create(
         start_date=dt.date(2026, 9, 14),
         end_date=dt.date(2026, 9, 14) + dt.timedelta(weeks=WEEKS_IN_YEAR) - dt.timedelta(days=1),
@@ -628,5 +788,6 @@ def build():
         "grid": grid, "sites": sites, "plans": plans, "classes": classes,
         "parts": parts, "groups": groups,
         "teachers": teachers, "subjects": subjects, "rooms": rooms,
+        "tecnico": tecnico, "carrelli": carrelli,
         "year": year, "period": period, "schedule": schedule,
     }

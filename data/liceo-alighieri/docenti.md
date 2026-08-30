@@ -47,6 +47,12 @@ L06 (ondata 3): dodici ore su cinque giorni si comprimono a tre.
 in una scuola piccola: il nostro modello lo rappresenta senza dire niente,
 perché `Mh/s` è un numero e non una cattedra.
 
+🔑 **E dall'ondata 5 quello spezzone ha anche un orario**: I01 completa altrove
+e viene un pomeriggio solo — indisponibile ovunque tranne il mercoledì
+14–17. Tre ore in tre fasce, cioè la riga di indisponibilità **al bordo** del
+dataset: una fascia rossa in più e l'orario non esiste. Vedi
+[risorse.md](risorse.md).
+
 ⚠ Al Fermi i part-time ci sono (D09 a 6 h, D15 a 9 h) ma **non portano alcun
 vincolo**: la tabella `ResourceTimeConstraint` è vuota, quindi otto famiglie su
 otto non hanno mai visto un dato. È metà della ragione per cui questo dataset
@@ -85,3 +91,12 @@ seconda, P01 i giorni liberi garantiti, R02 «solo mezza giornata al giorno»,
 R01 le due giornate del cappellano più il tetto ai cambi di sede, L03 il
 D.T.B. Il perché di ciascun portatore — e perché la riga sta **al bordo** —
 sta in [vincoli.md](vincoli.md).
+
+## Le indisponibilità che portano (ondata 5)
+
+Tre cattedre su ventitré, una per livello, perché i tre livelli non fanno la
+stessa cosa: **I01** la rossa (lo spezzone qui sopra), **M04** una gialla il
+venerdì pomeriggio (il permesso, rispettata come una rossa finché non si
+autorizza il motore a ignorarla — e l'autorizzazione è **per categoria**, mai
+per la singola riga), **L01** una verde sulla prima ora (una preferenza, che
+non vieta niente). Vedi [risorse.md](risorse.md).

@@ -48,8 +48,19 @@ non vincolo**, come in EDT. Le aule della sezione B sono da 24 posti per 22
 alunni, quelle della A da 28 per 26: margine stretto ma sufficiente, così che
 il criterio abbia qualcosa da misurare senza che nulla lo forzi.
 
-⚠ `max_weekly_weight_per_student` resta `NULL` su tutte: lo accende l'ondata 5,
-con i tetti d'istituto.
+## Il peso didattico (ondata 5)
+
+`max_weekly_weight_per_student` è valorizzato su **una** classe, il **3B**, a
+**40** — che è esattamente il peso settimanale delle sue due unità-studente
+(39 di classe più l'ora di IRC o di alternativa). Le altre undici restano
+`NULL`, e non per completezza mancata: il tetto settimanale d'istituto è a sua
+volta `None`, quindi il 3B è l'unico posto in cui si esercita il ramo *«il
+tetto della classe prevale su quello d'istituto»*.
+
+⚠ È un tetto **indipendente dal piazzamento**, e quindi si prova in modo
+diverso da tutti gli altri: nessun pin lo può violare, perché la somma dei
+pesi lungo la settimana non dipende da dove le attività vanno. Resta la
+tacca — 39 è `INFEASIBLE`. Vedi [risorse.md](risorse.md).
 
 ## Il vincolo orario che una classe porta
 
@@ -58,3 +69,9 @@ La **2A** porta il `MMG`, il tetto di mezze giornate lavorate
 due pomeriggi e non tre. È lo stesso vincolo del docente applicato alla
 classe — `docs/edt/classi.md` — e sta al bordo: a sei mezze giornate il
 dataset non regge. Vedi [vincoli.md](vincoli.md).
+
+## L'indisponibilità che una classe porta (ondata 5)
+
+La **5A** non c'è il mercoledì pomeriggio: è il pomeriggio di orientamento, ed
+è la prova che il meccanismo rosso / giallo / verde è **generico sulla
+risorsa** e non un attributo dei docenti. Vedi [risorse.md](risorse.md).

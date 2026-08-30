@@ -57,7 +57,10 @@ data/
                        perché ognuna sta **al bordo** del risolvibile,
                        relazioni.md i tredici tipi dell'asse Relazione e il
                        **testimone puntato** — la configurazione vietata
-                       imposta, che i divieti non sopportano
+                       imposta, che i divieti non sopportano —
+                       risorse.md le indisponibilità nei tre livelli, i tetti
+                       di peso, il tecnico e i carrelli, e i due difetti che
+                       hanno trovato
   liceo-fermi/         dataset della scuola di esempio, in markdown tabellare
     README.md          parametri, dimensionamento, indice del dataset
     discipline.md
@@ -104,10 +107,10 @@ domain/                l'app Django del modello di dominio v1
                         operazioni insiemistiche, e il perimetro che restringe
                         l'azione mai il conteggio
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture,
-                       tests/alighieri.py il **banco** (L4, ondate 1–4) e
+                       tests/alighieri.py il **banco** (L4, ondate 1–5) e
                        tests/sonda.py il **cricchetto della copertura** —
                        quali builder fanno davvero qualcosa su un dataset,
-                       asserito come insieme e non come numero, e i due test degli assi — tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla, e tests/test_alighieri_relazione.py, dove si prova **puntandola**: la configurazione vietata imposta con `pinned`, INFEASIBLE con la riga e OPTIMAL senza; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisette builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+                       asserito come insieme e non come numero, e i test degli assi — tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla, tests/test_alighieri_relazione.py, dove si prova **puntandola**: la configurazione vietata imposta con `pinned`, INFEASIBLE con la riga e OPTIMAL senza, e tests/test_alighieri_risorse.py, dove il contratto è **misto** (indisponibilità nei tre livelli, tetti di peso, tecnico e carrelli) e dove stanno i due difetti L6 e L6bis; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisette builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -196,7 +199,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **seconda fase**). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **891 test verdi**, 17 skip tutti misurati e attribuiti
+> minimo. **910 test verdi**, 17 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -518,24 +521,29 @@ e ne ha aperta una quarta — **L4**, il dataset «Alighieri»: il Fermi esercit
 `ClassPartition`/`ClassPart`/`Group` comprese, cioè le voci ✅ di scope v1 che
 nessun dataset rappresenta.
 [Spec](docs/superpowers/specs/2026-08-30-alighieri-banco-a-scuola-intera-design.md)
-approvata, sette ondate, **le prime quattro sono fatte**: `data/liceo-alighieri/` +
+approvata, sette ondate, **le prime cinque sono fatte**: `data/liceo-alighieri/` +
 `tests/alighieri.py` — 12 classi su due indirizzi e **due sedi**, 23 cattedre a
 `+/- = 0`, **345 ore-alunno e 362 erogate**, 342 attività, griglia **5 × 8** con
 la mensa; **17 partizioni / 34 parti / 2 raggruppamenti**, cioè IRC-alternativa
 su tutte e dodici, la 2C **articolata** con un piano proprio, due laboratori a
 mezza classe e i livelli di inglese che attraversano due classi; **dieci righe
 di vincolo orario** per le otto famiglie dell'asse Cardinalità e **tredici
-righe di vincolo di materia** per i tredici tipi dell'asse Relazione. Due fasi
-`OPTIMAL` senza scarti né rinunce, copertura pulita — 15 545 variabili e 11 783
+righe di vincolo di materia** per i tredici tipi dell'asse Relazione; **55
+righe di indisponibilità** nei tre livelli e su tre tipi di risorsa, i **tetti
+di peso didattico** e le due risorse di piazzamento che nessun dataset aveva —
+un tecnico di laboratorio e quattro carrelli di portatili. Due fasi
+`OPTIMAL` senza scarti né rinunce, copertura pulita — 15 233 variabili e 12 251
 constraint, 73 aule su 73.
 🔑 **Accanto al Fermi, non al posto suo**: il Fermi vale perché non è stato
 progettato per superare i nostri test.
 🔑 E la **sonda è ora un test** (`tests/sonda.py`): l'insieme dei builder che
-fanno qualcosa è un cricchetto che ogni ondata deve allargare — **25 su 27**
-dopo l'ondata 4, contro i 12 dell'ondata 3, i 4 dell'ondata 1 e i 3 del Fermi,
-e 27 su 27 è il criterio di accettazione. I due che restano sono nominati:
-`structural:unavailability` e `structural:didactic_weight`, entrambi
-dell'ondata 5. ⚠ L'ondata 2 **non** lo allarga, ed è corretto: gli
+fanno qualcosa è un cricchetto che ogni ondata deve allargare — **27 su 27**
+dopo l'ondata 5, contro i 25 dell'ondata 4, i 12 della 3, i 4 della 1 e i 3 del
+Fermi. È **il registro intero**, cioè il criterio di accettazione della spec,
+raggiunto all'ondata 5 invece che alla 7: non chiude il pezzo — la sonda dice
+che un builder *fa qualcosa*, non che ciò che fa morda — ma da qui il
+cricchetto non deve più salire, deve **restare fermo**. ⚠ L'ondata 2 **non** lo
+allarga, ed è corretto: gli
 sdoppiamenti non hanno un builder proprio, entrano dalle chiavi di occupazione
 (1440 → **3440** constraint) e da `structural:coverage`, che per costruzione un
 builder non ce l'ha.
@@ -567,7 +575,29 @@ ottimo aveva scelto la ricerca, col pin dice due verdetti sul modello — ed è
 **13 su 13** in entrambe le direzioni, più tre tacche dove il tipo ha un
 parametro, una delle quali attraversa i due assi (un tetto orario di materia
 diventa impossibile per la riga `max_presence` di un docente, scritta
-un'ondata prima). ⚠ Il «stretto ma
+un'ondata prima).
+🔑 **E l'ondata 5 usa entrambe le prove insieme**, scegliendo secondo la natura
+della riga: testimone puntato dove vieta una configurazione, tacca dove è un
+conteggio, e **solo** la tacca per il tetto di peso settimanale, che è
+indipendente dal piazzamento — nessun pin lo può violare, perché la somma dei
+pesi lungo la settimana non dipende da dove le attività vanno. È *il tetto
+inevadibile* dei punti aperti, e la differenza fra un vincolo che **forma**
+l'orario e uno che si limita ad ammetterlo.
+🔑 E ha lasciato **due regole di metodo** per le ondate 6 e 7: un'ondata che
+rompe una forma dell'ondata precedente per accendere un builder sta misurando
+sé stessa (i carrelli, misurato); e il ramo «senza la riga» del testimone
+puntato è ciò che impedisce a un testimone di svuotarsi in silenzio (la
+palestra ha spento un pin dell'ondata 4, e il controllo lo ha detto).
+⚠ E i tetti di peso sono il primo vincolo del banco a cambiare il **regime di
+ricerca** — 439 s con un lavoratore contro 7 s con otto — quindi i due test
+delle ondate 3 e 4 che usavano `workers=1` sono passati a `workers=8`.
+🔑 **Due difetti nuovi, nessuno riparato** (spec §8): **L6**, una risorsa
+**senza sede** non può servire due sedi e non è la capienza (misurato:
+`INFEASIBLE` anche a capienza 9, `OPTIMAL` a stessa sede) — e con esso la
+misura di **ADR-019**, che voleva una chiave a capienza cumulativa toccata da
+due sedi e che nessun dataset poteva dare; **L6bis**, il giallo su un'aula a
+più candidate costa una rinuncia, perché `structural:room_pool` lo ignora
+mentre la fase 2 lo rispetta. ⚠ Il «stretto ma
 risolvibile» della spec resta quindi verificato **famiglia per famiglia**, non
 ancora sul dataset intero: quello è l'ondata 7. **L1**:
 il perimetro su cui si misura il buco è ora un parametro d'istituto, separato
