@@ -38,7 +38,8 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > ⚠ **L4 è nato da una misura che ha corretto ciò che il progetto credeva di
 > sé**: provando il prodotto invece dei test, il Fermi esercitava **tre builder
 > su ventisette** e lasciava tredici tabelle su trentatré vuote. Ora la sonda
-> dice **27 su 27**, ed è un test che deve **restare fermo**, non salire.
+> dice **28 su 28** — il registro è cresciuto di uno con L5 — ed è un test che
+> deve **restare fermo**, non salire.
 > 🔑 E il banco ha fatto il mestiere per cui esiste: ha prodotto **cinque
 > difetti** — L5, L6, L6bis, L7 e L8 — nessuno riparato mentre lo si misurava,
 > tutti fissati da un test. Ha anche corretto **due volte** il proprio metodo
@@ -713,25 +714,6 @@ nuovo, non per fastidio.
   `days_per_cycle`. Costo: un campo maschera sulla griglia e un filtro nei due
   posti. Non adesso perché nessun dato lo esercita — sul Fermi il sabato non c'è
   proprio. 👁 2026-08-29.
-- ⚖ **L'indisponibilità gialla di un'aula: la fase 1 la conta piena, la fase 2
-  la toglie.** `structural:room_pool` (ADR-021) azzera i posti di un'aula
-  **rossa** e lascia pieni quelli di una gialla, perché un finding `HARD` per
-  un ostacolo violabile sarebbe falso; `RoomContext._filtra` invece toglie
-  anche le gialle, salvo l'opzione di calcolo. Resta quindi un angolo in cui la
-  fase 1 riempie una fascia che la fase 2 non serve. Costo: passare
-  `ignora_opzionali` al builder e accettare che builder e checker leggano
-  diversamente, o portare l'opzione dentro il checker. Non adesso perché
-  nessun dato lo esercita — le due basi non hanno indisponibilità d'aula.
-- ⚖ **I criteri di qualità ignorano le firme di settimana.** Contano su una
-  settimana sola (`v.occupied(...)` senza `signature`), mentre i vincoli le
-  distinguono già — `MaxGapBuilder` posta un budget per firma. Su una scuola con
-  attività quindicinali il numero che il rendiconto stampa non è quello di
-  nessuna settimana reale. Trovato il 2026-08-30 scrivendo L3, dal criterio di
-  piazzamento `Riduci i buchi quindicinali`: EDT ha un criterio apposta, e
-  averlo vuol dire che il fenomeno lo conosce. Costo: il ciclo sulle firme
-  dentro ogni criterio, e una decisione su cosa il livello minimizzi (la somma
-  sulle settimane, o la peggiore). Non adesso perché nessuna delle due basi ha
-  attività quindicinali.
 - ⚖ **Sei delle dodici voci del menu `Estrai`**, ognuna per una ragione scritta
   accanto al registro: tre riguardano la fascia variabile e il sezionamento
   (fuori per ADR-010), una la formazione classi, due sono filtri di forma e non

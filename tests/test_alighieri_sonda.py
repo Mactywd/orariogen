@@ -24,8 +24,9 @@ pytestmark = pytest.mark.django_db
 # tipi di `SubjectConstraint` dall'ondata 4, idem; e gli ultimi due
 # dall'ondata 5 — le indisponibilità e i tetti di peso didattico.
 #
-# 🔑 **27 su 27 è il criterio di accettazione della spec (§6), ed è raggiunto
-# qui invece che all'ondata 7.** Non chiude il pezzo: la sonda dice che ogni
+# 🔑 **Il registro intero è il criterio di accettazione della spec (§6), ed è
+# raggiunto qui invece che all'ondata 7.** Erano 27 su 27 all'ondata 5; sono 28
+# su 28 da L5, che al registro ha aggiunto `structural:alignment`. Non chiude il pezzo: la sonda dice che ogni
 # builder *fa qualcosa*, non che ciò che fa morda — quello lo dicono la tacca
 # e il testimone puntato, famiglia per famiglia. Ma da adesso in poi il
 # cricchetto non deve più salire: deve **restare fermo**, e un'ondata che lo
