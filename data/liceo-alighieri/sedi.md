@@ -50,7 +50,10 @@ davvero.
   A capienza 1 la regola coincide riga per riga con la vecchia, quindi non
   c'era modo di vederla prima. Vedi [risorse.md](risorse.md).
 
-⚠ E lì l'ondata 5 ha trovato **L6**: `structural:site_transition` posta la
-clausola «due sedi sulla stessa fascia» su *ogni* chiave di occupazione,
-carrelli compresi — cioè pretende un tempo di viaggio da una risorsa che non
-viaggia.
+⚠ E lì l'ondata 5 ha trovato **L6**, chiuso il 2026-08-31:
+`structural:site_transition` postava la clausola «due sedi sulla stessa
+fascia» su *ogni* chiave di occupazione, carrelli compresi — cioè pretendeva
+un tempo di viaggio da una risorsa che non viaggia. Ora è un tetto di
+**capienza** (`carico di qua + carico di là <= posti`), che a capienza 1
+coincide riga per riga con la clausola di prima. Vedi
+[risorse.md](risorse.md).

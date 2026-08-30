@@ -23,16 +23,39 @@ di cui è vero: le congelate contribuiscono termini costanti a una somma da
 minimizzare, e non esiste il «pretendere una riparazione» perché non esiste
 alcuna pretesa.
 
-⚠ **Le firme di settimana: un'approssimazione dichiarata.** Queste quantità si
-calcolano sull'**unione** delle settimane (`signature` omessa). Il precedente
-di `MaxGapBuilder` — che trattava tutte le attività come co-attive dichiarandolo
-conservativo, e non lo era — **non si applica**, e la ragione è il ruolo, non
-una svista ripetuta: là l'errore stava in un vincolo hard, e un vincolo hard
-sbagliato ammette orari che il checker boccia. Qui la quantità entra solo in un
-`Minimize`. Un obiettivo approssimato **ordina male** orari tutti legali; non ne
-ammette uno illegale. Il costo dell'alternativa è la ragione della scelta: le
-firme sono una dimensione moltiplicativa (~0,3 s per firma, misurato sulla fase
-5) e un anno reale ne ha 35-40.
+🔑 **Le firme di settimana, dal 2026-08-31 (L7).** Queste quantità si
+calcolavano sull'**unione** delle settimane (`signature` omessa), ed era il
+difetto che l'ora quindicinale del banco ha reso misurabile: il 5B con
+l'italiano alla prima e alla quarta fascia, la metà di laboratorio alla
+seconda e quella di teoria alla terza, ha un buco di 60 minuti in *ogni*
+settimana dell'anno — la 2 nelle settimane pari, la 1 nelle dispari — e
+sull'unione (0-1-2-3 occupate) di buchi non ce n'è nessuno. Lo stesso orario
+valeva 60 minuti per `check_schedule` e **zero** per il criterio `gaps`.
+
+Ora ogni criterio si calcola **per firma** (`firme()` qui sotto) e il valore
+del livello è quello della **settimana peggiore** (`peggiore()`).
+
+⚠ **Il massimo, e non la somma**, e la ragione è la regola della casa: *dove
+il checker esiste, la definizione si legge da lì*. Il checker produce un
+verdetto **per firma** e porta le settimane in un campo a parte
+(`Finding.weeks`); la sua unità è la settimana. Sommare le firme direbbe 120
+dove il checker dice 60, cioè misurerebbe qualcos'altro — e il numero
+dipenderebbe da quante firme ha il dataset invece che da com'è l'orario.
+Pesare per il numero di settimane sarebbe la quantità annuale, vera ma di
+un'altra unità: romperebbe la stessa identità, e con essa
+`Arbitrato.tolleranza`, che è un numero **nell'unità del criterio** e che
+l'utente scrive a mano.
+
+⚠ Il prezzo è dichiarato: sul massimo, migliorare una firma che non è la
+peggiore non muove il livello. Non è la perdita che sembra — il massimo
+trascina comunque *tutte* le firme fino al proprio pavimento — ma all'ottimo
+una firma già sotto il massimo non ha più incentivo a scendere.
+
+⚠ E il costo: le firme sono una dimensione moltiplicativa. È mitigato dalla
+deduplicazione di `firme()`, la stessa di `ResourceBuilder` — due firme con
+le stesse attività attive *sulle chiavi del criterio* sono un calcolo solo — e
+su un dataset a firma unica, cioè ogni dataset senza corsi quindicinali né
+sostituzioni, non c'è nessun costo e nessun numero cambia.
 
 🔑 **E l'invariante «solo definizioni» incassa qui un dividendo non previsto.**
 Perché un criterio non posta vincoli di ammissibilità, lo si può valutare su un
@@ -84,6 +107,39 @@ def chiavi_di(ctx, popolazione):
         (k for k in viste
          if k in kinds and (ammessi is None or kinds[k] in ammessi)),
         key=str)
+
+
+def firme(ctx, chiavi):
+    """Le firme di settimana che un criterio su `chiavi` deve distinguere.
+
+    Deduplica come `ResourceBuilder`: due firme che hanno le stesse attività
+    attive **su quelle chiavi** producono la stessa espressione, quindi si
+    calcolano una volta sola. Su un dataset a firma unica restituisce una voce
+    e il criterio è, riga per riga, quello di prima."""
+    ammesse = set(chiavi)
+    viste = {}
+    for rep, _settimane in ctx.signatures:
+        attive = frozenset(
+            aid for aid in ctx.states[rep].activities
+            if aid in ctx.activities and (set(ctx.tokens[aid]) & ammesse))
+        viste.setdefault(attive, rep)
+    return sorted(viste.values())
+
+
+def peggiore(model, nome, per_firma):
+    """`(espressione, massimo)` del criterio a partire da una voce per firma.
+
+    Il valore è quello della **settimana peggiore**: con una firma sola è
+    l'espressione stessa, senza una variabile in più — la proprietà
+    conservativa che tiene fermi tutti i numeri già misurati."""
+    if not per_firma:
+        return 0, 0
+    massimo = max(m for _e, m in per_firma)
+    if len(per_firma) == 1:
+        return per_firma[0][0], massimo
+    var = model.NewIntVar(0, massimo, f"qualita_max_{nome}")
+    model.AddMaxEquality(var, [e for e, _m in per_firma])
+    return var, massimo
 
 
 def _nome(riga):

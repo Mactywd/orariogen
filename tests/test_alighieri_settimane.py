@@ -185,28 +185,36 @@ def _testimone_dei_buchi(env):
         params={"max_gap_minutes": 0})
 
 
-def test_l7_il_criterio_i_buchi_li_conta_ed_e_il_contro_testimone(db):
-    """Il ramo di controllo, e senza di esso il test qui sotto varrebbe zero.
+def test_l7_il_criterio_distingue_le_due_firme(db):
+    """Il ramo di controllo, e senza di esso il test più sotto varrebbe poco.
 
-    Stesso orario, ma con la metà di teoria **non piazzata**: l'unione diventa
-    0-1-3 e il buco della fascia 2 c'è anche lì. Il criterio dice **180**, e
-    questo prova che i minuti mancanti nell'altro testimone sono la firma di
-    settimana, non un criterio spento o una chiave che non c'è.
+    Stesso orario, ma con la metà di **laboratorio** non piazzata. Le due
+    settimane smettono di somigliarsi:
 
-    ⚠ 180 e non 60 perché le chiavi sono **tre**: la classe 5B e le sue due
-    parti IRC/alternativa, che `chiavi_di` conta per conto proprio — *«il
-    contatore `A.iso.` di EDT è dichiarato per docente/classe/gruppo»*. Un
-    buco nell'ora di un'unità-studente è un buco per ognuna delle unità che
-    stanno in quell'ora."""
+    | Settimana | Fasce occupate | Buchi |
+    |---|---|---|
+    | pari | 0, 3 (il laboratorio non c'è) | 2 (le fasce 1 e 2) |
+    | dispari | 0, 2, 3 | 1 (la fascia 1) |
+
+    Il criterio dice **360**, cioè la peggiore delle due: due ore di buco su
+    tre chiavi. Sull'unione avrebbe detto 180, come nell'altro testimone —
+    è la prova che le due firme adesso si contano davvero una per una, e non
+    che il criterio conti *qualcosa*.
+
+    ⚠ 180 per ora di buco, e non 60, perché le chiavi sono **tre**: la classe
+    5B e le sue due parti IRC/alternativa, che `chiavi_di` conta per conto
+    proprio — *«il contatore `A.iso.` di EDT è dichiarato per
+    docente/classe/gruppo»*. Un buco nell'ora di un'unità-studente è un buco
+    per ognuna delle unità che stanno in quell'ora."""
     env = alighieri.build()
     _testimone_dei_buchi(env)
-    _, teoria = _quindicinali()
-    env["schedule"].placements.filter(activity=teoria).delete()
+    lab, _ = _quindicinali()
+    env["schedule"].placements.filter(activity=lab).delete()
     ctx = SolverContext.build(env["schedule"])
     riga = QualityCriterion(kind=QualityCriterion.Kind.GAPS,
                             population=QualityCriterion.Population.CLASSES,
                             rank=1)
-    assert _valori_di_base(ctx, [riga]) == {"gaps_classes": 180}
+    assert _valori_di_base(ctx, [riga]) == {"gaps_classes": 360}
 
 
 def test_l7_il_checker_vede_il_buco_in_ogni_settimana(db):
@@ -224,29 +232,28 @@ def test_l7_il_checker_vede_il_buco_in_ogni_settimana(db):
     assert len(buchi[0].weeks) == alighieri.WEEKS_IN_YEAR
 
 
-def test_l7_il_criterio_gaps_dice_zero_ed_e_il_difetto(db):
-    """⚠ **L7: i criteri di qualità ignorano le firme di settimana.**
+def test_l7_il_criterio_gaps_conta_la_settimana_peggiore(db):
+    """🔑 **L7, chiuso il 2026-08-31.**
 
     Sullo stesso orario, la stessa quantità — «la durata totale dei buchi»,
     che il criterio calcola *senza tetto* e il D.T.B. *col tetto*, e che il
     docstring di `criteria.buchi` dichiara letteralmente essere la stessa —
-    vale **60 minuti in ogni settimana** per il checker e **zero** per il
-    criterio. Il criterio somma le occupazioni sull'**unione** delle
+    valeva **60 minuti in ogni settimana** per il checker e **zero** per il
+    criterio: il criterio sommava le occupazioni sull'**unione** delle
     settimane, e nell'unione le fasce 0-1-2-3 sono contigue.
 
-    🔑 E non è un difetto nuovo: è **lo stesso** che `MaxGapBuilder` aveva
+    🔑 E non era un difetto nuovo: era **lo stesso** che `MaxGapBuilder` aveva
     fino al 2026-08-24, descritto per esteso nel docstring di
     `Vocabulary.covered` — *«un'occupazione che cade dentro il buco ma viene
     da un'altra firma alza il conteggio senza spostare prima/ultima occupata,
     e chiude nel modello unione un buco che, settimana per settimana, resta
-    aperto»*. Il builder passa `signature`; i criteri no.
+    aperto»*. Il builder passava `signature`; i criteri no.
 
-    ⚠ `quality.py` lo dichiara come approssimazione, con l'argomento che un
-    obiettivo approssimato *ordina male orari tutti legali* e non ne ammette
-    uno illegale. L'argomento regge; ciò che non reggeva era «nessuno dei due
-    dataset lo esercita», e da oggi non è più vero. Il debito è **L7** in
-    `docs/todo.md`, non riparato qui (spec §8): questo test diventerà rosso il
-    giorno in cui si chiude, ed è il modo giusto di chiuderlo."""
+    Ora i criteri passano la firma, e il livello è la **settimana peggiore**.
+    Le due firme hanno un buco l'una — 180 minuti su tre chiavi, come nel
+    contro-testimone qui sopra — quindi il massimo è 180: lo stesso numero che
+    il checker conta, che è la ragione per cui l'aggregazione è il massimo e
+    non la somma (vedi il blocco sulle firme in testa a `quality.py`)."""
     env = alighieri.build()
     _testimone_dei_buchi(env)
     ctx = SolverContext.build(env["schedule"])
@@ -255,5 +262,4 @@ def test_l7_il_criterio_gaps_dice_zero_ed_e_il_difetto(db):
     riga = QualityCriterion(kind=QualityCriterion.Kind.GAPS,
                             population=QualityCriterion.Population.CLASSES,
                             rank=1)
-    valori = _valori_di_base(ctx, [riga])
-    assert valori == {"gaps_classes": 0}   # la verità è 180, ogni settimana
+    assert _valori_di_base(ctx, [riga]) == {"gaps_classes": 180}

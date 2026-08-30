@@ -578,6 +578,34 @@ def _derive_occupation(w):
     return 1
 
 
+@deriver("structural:alignment", {"alignment_split"})
+def _derive_alignment(w):
+    """Allinea coppie di attivita' che nel testimone stanno **gia'** sulla
+    stessa cella.
+
+    E' la forma piu' semplice di derivazione non vacua: due attivita' che
+    condividono una cella non condividono nessun token (`structural:occupation`
+    lo garantisce), quindi allinearle non chiede niente di nuovo al testimone
+    — che resta legale per costruzione — ma vincola il solver, che dopo
+    `sporca()` deve rimetterle **insieme**.
+
+    ⚠ Non e' un mutante: non tocca sedi, materie ne' collocazioni, solo un
+    campo che nessun'altra famiglia legge."""
+    per_cella = defaultdict(list)
+    for aid, cella in w.placement.items():
+        per_cella[cella].append(aid)
+    creati = 0
+    for _cella, aids in sorted(per_cella.items()):
+        if len(aids) < 2:
+            continue
+        creati += 1
+        Activity.objects.filter(pk__in=sorted(aids)[:2]).update(
+            alignment_ident=f"ALI{creati}")
+        if creati == 3:
+            break
+    return creati
+
+
 @deriver("structural:room_pool", {"room_group_peak"})
 def _derive_room_pool(w):
     """Un gruppo di aule **esattamente capiente** per il testimone.
@@ -2586,12 +2614,42 @@ def sporca(w, seed, quota=6):
     codici = _codici_di_tutte_le_famiglie()
     rng = random.Random(f"sporca-{seed}")
     tutte = list(w.placement)
+    # ⚠ **Un'attivita' allineata non si sposta da sola** (L5, 2026-08-31):
+    # muoverne una rompe l'attivita' complessa, e il ripack diventerebbe uno
+    # stato che il modello ha **ragione** di rifiutare — la prova A
+    # («rimettile dove stavano») risponderebbe INFEASIBLE, e il banco
+    # misurerebbe la propria incoerenza invece del modello. E' la stessa
+    # regola con cui il ripack evita i conflitti di occupazione, su un'altra
+    # famiglia strutturale. Misurato: la prima stesura le muoveva, e i semi 6
+    # e 9 diventavano rossi.
+    #
+    # ⚠ E si **muovono insieme**, non si escludono: toglierle dal ripack lo
+    # indebolisce quanto basta a non produrre piu' violazioni, e `sporca`
+    # torna `None` su altri due semi (misurato: 1 e 27). Un gruppo puo'
+    # toccare due volte: muoverlo di nuovo e' innocuo, saltarlo indeboliva il
+    # ripack (misurato: i semi 27 e 30).
+
+    #
+    # ⚠ Gli ident si rileggono dal database: i derivatori li scrivono con
+    # `update()`, e gli oggetti in `w.activities` sono quelli caricati alla
+    # costruzione del testimone — chiederlo a loro dice sempre «nessuno».
+    per_ident = defaultdict(list)
+    for aid, ident in (Activity.objects.exclude(alignment_ident="")
+                       .values_list("id", "alignment_ident")):
+        per_ident[ident].append(aid)
+    gruppo_di = {aid: sorted(g) for g in per_ident.values() for aid in g}
     ordine = list(tutte)
     rng.shuffle(ordine)
     for aid in ordine[:max(1, len(ordine) // quota)]:
-        celle = celle_libere(w, aid)
-        if celle:
-            muovi(w, aid, rng.choice(celle))
+        gruppo = gruppo_di.get(aid, [aid])
+        celle = set(celle_libere(w, gruppo[0]))
+        for altro in gruppo[1:]:
+            celle &= set(celle_libere(w, altro))
+        if not celle:
+            continue
+        scelta = rng.choice(sorted(celle))
+        for membro in gruppo:
+            muovi(w, membro, scelta)
 
     prima = _findings(w.schedule, codici)
     if not prima:

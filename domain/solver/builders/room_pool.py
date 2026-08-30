@@ -82,6 +82,16 @@ def _pools(dichiarati):
     return sorted(pools, key=lambda s: (len(s), sorted(s)))
 
 
+def _chiusa(ctx, state, room_id, day, slot):
+    """L'aula e' chiusa in quella cella? Rossa sempre, gialla se nessuno ha
+    autorizzato a scavalcarla per la **categoria** di risorsa (A4)."""
+    livello = state.unavailability.get((room_id, day, slot))
+    if livello == "hard":
+        return True
+    return (livello == "optional"
+            and state.kinds.get(room_id) not in ctx.ignora_opzionali)
+
+
 @register("structural:room_pool")
 class RoomPoolBuilder(Builder):
     def build(self, ctx, model):
@@ -124,14 +134,22 @@ class RoomPoolBuilder(Builder):
         ids = {aid for aid, _lit in dentro}
         if not any(aid in ctx.free for aid in ids):
             return          # un fatto, non una decisione
-        # ⚠ L'indisponibilita' **rossa** azzera i posti dell'aula, l'opzionale
-        # no: e' violabile per definizione, e toglierla qui renderebbe hard un
-        # ostacolo che non lo e'. Stessa regola del checker, cosi' che
-        # l'oracolo differenziale confronti due letture identiche.
-        capienza = sum(
-            0 if state.unavailability.get((r, day, slot)) == "hard"
-            else state.capacity.get(r, 1)
-            for r in pool)
+        # 🔑 **Il giallo chiude il posto come il rosso** (L6bis, 2026-08-31).
+        # Qui c'era il contrario — «l'opzionale e' violabile per definizione» —
+        # e costava una rinuncia: la fase 2 (`RoomsContext._filtra`) l'aula
+        # gialla la toglie dalle candidate, quindi contarne i posti qui
+        # significava promettere alla fase 2 un'aula che non potra' usare.
+        # Stessa regola del checker, cosi' che l'oracolo differenziale
+        # confronti due letture identiche.
+        #
+        # L'autorizzazione a scavalcare il giallo esiste ed e' per **tipo** di
+        # risorsa (A4), non per la singola: `ignora_opzionali`, la stessa che
+        # legge `UnavailabilityBuilder._ignorata`. Con quella accesa il posto
+        # torna a contare, coerentemente con cio' che fara' la fase 2 se la si
+        # lancia con lo stesso override.
+        capienza = sum(0 if _chiusa(ctx, state, r, day, slot)
+                       else state.capacity.get(r, 1)
+                       for r in pool)
         if len(ids) <= capienza:
             return          # non potrebbe superarla nemmeno tutte insieme
         firma = (pool, day, slot, frozenset(ids))

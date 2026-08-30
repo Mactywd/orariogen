@@ -168,70 +168,81 @@ dell'ondata 2 lo ha detto per primo, diventando rosso.
 
 ---
 
-## 4. I due difetti che l'ondata ha trovato
+## 4. I due difetti che l'ondata ha trovato — chiusi il 2026-08-31
 
-Come per l'allineamento dell'ondata 2 (**L5**), non si riparano qui: la spec
-(§8) vieta al banco di modificare il motore. Si dichiarano, e un test asserisce
-il comportamento **corrente**, così diventa rosso il giorno della riparazione.
+Erano dichiarati e non riparati, perché la spec (§8) vietava al banco di
+modificare il motore; ognuno aveva un test che asseriva il comportamento
+**corrente**, per diventare rosso il giorno della riparazione. Quel giorno è
+arrivato: i test sono stati capovolti, e qui resta il racconto con le misure
+di prima e di dopo.
 
-### L6 — il carrello non può servire due sedi, e non è la capienza
+### L6 — un insieme non viaggia
 
 Il carrello è l'unica risorsa del banco **senza sede**: quattro carrelli sono
 della scuola, non di un edificio, e servono l'inglese alla centrale e
-l'informatica in succursale. Ma `structural:site_transition` posta la clausola
-«due sedi sulla stessa fascia» su **ogni** chiave di occupazione, e per un
-insieme di quattro carrelli quella clausola è falsa: un insieme non è un corpo
-solo, e non viaggia.
+l'informatica in succursale. Ma `structural:site_transition` postava la
+clausola «due sedi sulla stessa fascia» su **ogni** chiave di occupazione, e
+per un insieme di quattro carrelli quella clausola è falsa: un insieme non è
+un corpo solo, e non viaggia.
 
-La dimostrazione che il colpevole è la sede e non la capienza sta in tre
-esecuzioni:
+La dimostrazione che il colpevole era la sede e non la capienza stava in tre
+esecuzioni, e la seconda è quella che decideva:
 
-| | Esito |
-|---|---|
-| capienza 4, domanda 2 + 1 = 3, sedi diverse | `INFEASIBLE` |
-| capienza **9**, stessa cella, sedi diverse | `INFEASIBLE` — quindi non è capienza |
-| capienza 4, stessa cella, **stessa sede** | `OPTIMAL`, zero scarti |
+| | Prima | Dopo |
+|---|---|---|
+| capienza 4, domanda 2 + 1 = 3, sedi diverse | `INFEASIBLE` | `OPTIMAL`, zero scarti |
+| capienza **3**, cioè esattamente la domanda | — | `OPTIMAL`: il bordo |
+| capienza **2**, stessa cella | — | `INFEASIBLE`: i posti non bastano |
+| capienza **9**, stessa cella, sedi diverse | `INFEASIBLE` — quindi non era capienza | — |
 
-⚠ E non è solo la clausola sulla stessa fascia: con
-`site_transition_slots = 1` il modello pretende una **fascia libera** fra
-un'ora d'inglese alla centrale e un'ora d'informatica in succursale sullo
-stesso carrello — cioè un tempo di viaggio per una risorsa che non viaggia.
-Misurato: con la sede tolta a una delle due attività il modello torna
-risolvibile ma scarta un'ora, perché le tre ore d'informatica non stanno più
-nelle tre fasce che restano.
+🔑 **La riparazione non toglie il vincolo: ne cambia la domanda.** «Due sedi si
+toccano?» era la domanda sbagliata; quella giusta è «**ci stanno**?», cioè
+`carico(sa, s) + carico(sb, t) <= posti`. A capienza 1 — ogni docente, ogni
+classe, ogni parte, ogni atomo — la nuova regola coincide **riga per riga**
+con la vecchia clausola: due carichi valgono almeno due, un posto solo non li
+regge, e la coppia resta vietata. Cambia solo dove la vecchia diceva una cosa
+falsa, cioè sull'aula col `Numero di aule` e sul materiale con quantità.
 
-🔑 **E il carrello è anche l'unica risorsa del progetto che possa mostrare
-[ADR-019](../../docs/decisioni.md)** — *dentro una fascia non si viaggia*. La
-regola dice che una fascia contribuisce l'**insieme** delle sedi che la
-occupano, e che due sedi simultanee valgono **zero** cambi; a capienza 1
-coincide riga per riga con la vecchia, quindi serviva una chiave a capienza
-cumulativa toccata da due sedi, che nessun dataset aveva. Scrivendo l'orario a
-mano — il solver quella configurazione la vieta, per il difetto qui sopra — si
-vede la doppia risposta: `MaxSiteChangesChecker` conta **zero cambi**, e
-`SiteTransitionChecker` nomina comunque l'impossibilità. Sono due domande
-diverse con due risposte diverse, che è esattamente ciò che l'ADR decide.
+🔑 **E il carrello resta l'unica risorsa del progetto che possa mostrare
+[ADR-019](../../docs/decisioni.md)** — *dentro una fascia non si viaggia*.
+`MaxSiteChangesChecker` conta **zero cambi** su due sedi simultanee, e ora
+`SiteTransitionChecker` non nomina più nemmeno l'impossibilità, perché
+impossibile non è: tre carrelli reggono due impegni. L'impossibilità torna
+appena i posti non bastano — un carrello solo per due sedi — ed è il ramo di
+controllo del test.
 
-### L6bis — il giallo su un'aula a più candidate costa una rinuncia
+⚠ La vecchia versione di questo paragrafo diceva *«e `SiteTransitionChecker`
+nomina comunque l'impossibilità: sono due domande diverse con due risposte
+diverse»*. Le due domande restano diverse; era la seconda risposta a essere
+sbagliata.
 
-Le due fasi leggono l'indisponibilità **opzionale** di un'aula in modo diverso:
+### L6bis — il giallo lo legge anche la fase 1
 
-- `structural:room_pool` (fase 1) conta i posti dell'aula come se fosse
-  libera — il suo commento lo dichiara, e la ragione è che l'opzionale è
-  violabile per definizione;
-- `RoomsContext._filtra` (fase 2) toglie l'aula dalle candidate esattamente
-  come farebbe per una rossa, se non si autorizza l'override.
+Le tre letture della stessa indisponibilità **opzionale** su un'aula erano
+tre, e due andavano d'accordo:
 
-Su un'aula a **candidata unica** non si vede: l'aula è un token, e il
-pre-filtro di `structural:unavailability` — che il giallo lo rispetta — toglie
-la cella prima che si arrivi lì. Su un'aula a più candidate la fase 1 piazza e
-la fase 2 **rinuncia**, che è esattamente ciò che
-[ADR-021](../../docs/decisioni.md) esiste per non far succedere.
+- `structural:unavailability` (il pre-filtro) la rispetta come una rossa;
+- `RoomsContext._filtra` (fase 2) toglie l'aula dalle candidate, se non si
+  autorizza l'override;
+- `structural:room_pool` (fase 1) ne contava i posti **come se fosse libera**,
+  perché «l'opzionale è violabile per definizione».
 
-⚠ **È il motivo per cui la gialla del dataset sta su `LAB-SUCC`**, a candidata
-unica, invece che su `LAB-INF`. Un banco che portasse un difetto noto smette
-di misurare le regressioni: la rinuncia comparirebbe e sparirebbe a seconda di
-quale ottimo la fase 1 restituisce, e nessuno saprebbe più leggere il numero.
-Il difetto vive quindi in un test, che se lo costruisce la riga.
+Su un'aula a **candidata unica** non si vedeva: l'aula è un token, e il
+pre-filtro toglieva la cella prima che si arrivasse lì. Su un'aula a più
+candidate la fase 1 piazzava e la fase 2 **rinunciava**, che è esattamente ciò
+che [ADR-021](../../docs/decisioni.md) esiste per non far succedere.
+
+Ora la fase 1 il giallo lo conta, e chi paga decide: l'ostacolo è duro
+*finché non lo si autorizza*, che è la frase letterale della documentazione.
+Due attività di fisica delle sole `{LAB-FIS, LAB-INF}` imposte sulla fascia
+gialla sono `INFEASIBLE` **prima**, invece di diventare una rinuncia dopo; con
+`ignora_opzionali=(ROOM,)` il posto torna a contare e lo stesso pin è
+`OPTIMAL`, in entrambe le fasi.
+
+⚠ **La gialla del dataset resta su `LAB-SUCC`**, a candidata unica. La ragione
+per cui ci stava — non portare un difetto noto dentro il banco — è caduta, ma
+quella riga prova l'interazione col pre-filtro, e spostarla ora vorrebbe dire
+cambiare un dato per comodità invece che per una lettura.
 
 ---
 
@@ -243,5 +254,5 @@ Il difetto vive quindi in un test, che se lo costruisce la riga.
 | `structural:didactic_weight` | testimone puntato ×3 (mattina, pomeriggio, giornata), tacca (settimana) |
 | `structural:occupation`, ramo **personale** | testimone puntato (due laboratori, un tecnico) |
 | `structural:occupation`, ramo **cumulativo** | testimone puntato (`2 + 2 + 2 > 4`) |
-| `structural:site_transition` su una risorsa senza sede | ⚠ difetto **L6** |
+| `structural:site_transition` su una risorsa senza sede | tacca sulla capienza (4 / 3 / 2) — era il difetto **L6** |
 | ADR-019 | misurato nell'analisi, su un orario scritto a mano |

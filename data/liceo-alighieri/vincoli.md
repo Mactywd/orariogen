@@ -31,7 +31,7 @@ non avevano mai visto una riga di dato.
 | `arrival_departure` | A01 Vitali (20 h) | `days 5`, `not_before_slot 1` | **la prima fascia libera tutti i giorni** |
 | `free_guaranteed` | P01 Zanetti (12 h) | `free_days 2`, `free_half_days 2` | due giornate libere **scelte dal solver**, più due mezze giornate |
 | `max_half_days` (`MMG`) | classe **2A** | `max_half_days 7` | 28 fasce in sette mezze giornate ⇒ **due pomeriggi, non tre** |
-| `max_half_days` (`MG`) | R02 Donati (12 h) | `only_half_day_per_day` | mai mattina **e** pomeriggio nello stesso giorno |
+| `max_half_days` (`MG`) | P02 Bruni (12 h) | `only_half_day_per_day` | mai mattina **e** pomeriggio nello stesso giorno ⚠ era su R02 Donati: vedi [gruppi.md](gruppi.md) |
 | `max_presence` | R01 Colombo (12 h) | `days 2`, `max_minutes 480` | il **cappellano viene due giorni** — vedi sotto |
 | `max_site_changes` | R01 Colombo | `per_day 1`, `per_week 1` | al più **un** cambio di sede, in tutta la settimana |
 | `max_gap_hours` (`D.T.B.`) | L03 Cavalli (21 h) | `max_gap_minutes 60` | al più **un'ora di buco** in tutta la settimana |

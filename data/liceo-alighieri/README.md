@@ -45,7 +45,8 @@ rappresenta.
 6. ✅ **Quote, qualità e firme di settimana** — l'ora quindicinale del 5B (la
    seconda firma, e la quinta forma di erogazione), le due forme di
    alleggerimento e la gerarchia completa dei criteri di qualità. 🔑 E il
-   debito **L7**, che da sospetto diventa misura. Vedi
+   difetto **L7**, che da sospetto diventa misura — e che il 2026-08-31 è
+   stato chiuso. Vedi
    [quindicinale-e-quote.md](quindicinale-e-quote.md).
 7. ✅ **I comandi** — la domanda che sta a valle di tutte le altre: i cinque
    comandi diagnostici hanno qualcosa di vero da dire su questa scuola? Vedi
@@ -133,6 +134,13 @@ vera è l'**atomo** (ADR-020), e il predicato che la usa è
 | Richieste d'aula | 73, invariate |
 | Fase 2 | `OPTIMAL`, **73 su 73**, zero rinunce |
 | Sonda dei builder | **27 su 27**, **ferma** — il cricchetto non deve più salire |
+
+⚠ **Dopo la chiusura dei cinque difetti** (2026-08-31) il modello è **14 785
+variabili e 13 996 constraint**: l'allineamento ne aggiunge (i gruppi si
+vincolano) e il vincolo di sede ne toglie (i letterali `site_occupied` di
+`SiteTransitionBuilder` lasciano il posto a somme di celle). Fase 1 `OPTIMAL`
+a zero scarti in ~8 s, fase 2 ancora 73 su 73, e la sonda sale a **28 su 28**
+col ventottesimo builder.
 | Con i sei criteri di qualità | `solve` da 9 a **82 s** |
 
 🔑 **Una seconda firma di settimana non raddoppia il modello.** L'attesa
@@ -199,23 +207,46 @@ su ciò che c'è. Il dettaglio, con le due attese smentite, sta in
 | Comando | Fermi | Alighieri |
 |---|---|---|
 | `analyze`, classifica | 3 righe, **1** causale | 63 righe, **15** causali (variante satura) |
-| `analyze`, fase 5 | — | **1** insieme deficiente quando si stringe il laboratorio della succursale |
+| `analyze`, fase 5 | — | **2** insiemi deficienti, uno dentro l'altro, quando si stringe il laboratorio della succursale |
 | `extract` | — | tutti e **sei** i rilevatori con almeno un'attività |
 | `place_and_fix` | **1** attività spostata | **3**, e almeno due per costruzione |
 | `solve --popolazione` | — | il tetto morde **solo in tensione**: 0 e 60 `INFEASIBLE`, 180 `FEASIBLE` |
 | `assign_rooms` | 8 rinunce senza ADR-021 | `INFEASIBLE` col gruppo di aule, rinuncia senza |
-| §4, «stretto ma risolvibile» | — | ✅ **verificato**: `LAB-SUCC` spento costa 11 scarti, un docente le sue ore |
+| §4, «stretto ma risolvibile» | — | ✅ **verificato**: `LAB-SUCC` spento costa 14 scarti — le sue undici ore più le tre allineate |
 
 Sedici test in
 [`tests/test_alighieri_comandi.py`](../../tests/test_alighieri_comandi.py), e
-la suite passa da 930 a **946 verdi**.
+la suite passa da 930 a **946 verdi** (**953** dopo la chiusura dei cinque
+difetti).
 
 🔑 **E misurando il bordo l'ondata ha trovato il quinto difetto del banco,
-`L8`**: spegnendo la palestra il modello risponde `INFEASIBLE` invece di
+`L8`**: spegnendo la palestra il modello rispondeva `INFEASIBLE` invece di
 scartare, per una sola riga — `free_guaranteed` conta le mezze giornate libere
 **solo sui giorni lavorati**, e con un giorno solo il massimo è uno. Una
-famiglia così può diventare insoddisfacibile *perché si lavora meno*, e lì lo
-scarto non è una via d'uscita.
+famiglia così poteva diventare insoddisfacibile *perché si lavora meno*, e lì
+lo scarto non era una via d'uscita.
+
+## 🔑 I cinque difetti sono chiusi (2026-08-31)
+
+Il banco ha prodotto cinque difetti e nessuno l'ha riparato, perché la spec
+(§8) vietava di modificare il motore mentre lo si misurava. Sono stati
+riparati dopo, tutti insieme, e ogni test che ne fissava il comportamento
+sbagliato è stato **capovolto**: L5 (l'allineamento genera l'attività
+complessa, ventottesimo builder), L6 (un insieme non viaggia: il vincolo di
+sede è un tetto di capienza), L6bis (il giallo lo conta anche la fase 1), L7
+(i criteri di qualità contano per firma, e il livello è la settimana
+peggiore), L8 (la soglia delle mezze giornate libere è quella raggiungibile).
+
+⚠ **E uno di essi ha corretto il dataset in quattro punti, non solo il
+motore.** Leggere l'allineamento ha reso visibile che il banco ne dichiarava
+di impossibili (le due metà di uno sdoppiamento, che hanno lo stesso docente)
+e ne fondeva tre in uno (un ident per coppia di servizi invece che per
+attività complessa); che l'articolata parallela, lo spezzone di RICCI
+concentrato in un pomeriggio e il tetto di peso d'indirizzo erano insieme
+incompatibili; e che il `MG` sull'insegnante di alternativa aveva perso il
+**soggetto**, perché il suo orario è ora quello del cappellano. Vedi
+[gruppi.md](gruppi.md) e
+[quindicinale-e-quote.md](quindicinale-e-quote.md).
 
 ⚠ **Due attese smentite, e sono di natura diversa.** La classifica dei vincoli
 a riposo dà tre causali e non cinque, e la sbagliata era **l'attesa**: su un
@@ -233,11 +264,11 @@ abbastanza spazio da non competere.
 - [classi.md](classi.md) — le 12 classi
 - [docenti.md](docenti.md) — le 23 cattedre
 - [aule.md](aule.md) — le 20 aule, per sede
-- [gruppi.md](gruppi.md) — 🔑 le quattro forme di sdoppiamento, e il debito che hanno trovato
+- [gruppi.md](gruppi.md) — 🔑 le quattro forme di sdoppiamento, e l'allineamento (L5) con le tre dichiarazioni false che ha corretto nel dato
 - [vincoli.md](vincoli.md) — 🔑 le dieci righe dell'asse Cardinalità, e perché stanno al bordo
 - [relazioni.md](relazioni.md) — 🔑 i tredici tipi dell'asse Relazione, e il testimone puntato
-- [risorse.md](risorse.md) — 🔑 indisponibilità, peso didattico, tecnico e carrelli; e i due difetti trovati
-- [quindicinale-e-quote.md](quindicinale-e-quote.md) — 🔑 l'ora quindicinale, le due forme di alleggerimento, la gerarchia della qualità e il difetto L7
+- [risorse.md](risorse.md) — 🔑 indisponibilità, peso didattico, tecnico e carrelli; e i due difetti trovati, L6 e L6bis, con le misure di prima e di dopo
+- [quindicinale-e-quote.md](quindicinale-e-quote.md) — 🔑 l'ora quindicinale, le due forme di alleggerimento, la gerarchia della qualità e L7, con l'aggregazione scelta fra tre
 - [comandi.md](comandi.md) — 🔑 cosa i cinque comandi sanno dire su questo banco, e le due attese smentite
 - [esiti-attesi.md](esiti-attesi.md) — 🔑 cosa deve succedere, scritto prima di eseguire
 

@@ -27,14 +27,21 @@ def test_capienza_pulita():
     assert analyze_capacity() == []
 
 
-def test_su_schedule_vuoto_le_due_deficienze_e_nient_altro():
-    """⚠ **Fino all'ondata 2 qui c'era scritto «solo `activity_unplaced`», e
-    l'ondata 3 l'ha reso falso.** Non è una regressione: due delle otto
-    famiglie di cardinalità sono *deficienze* — `min_distribution` chiede
-    almeno quattro giornate qualificanti, `free_guaranteed` almeno due mezze
-    giornate libere **fra quelle lavorate** — e a orario vuoto valgono zero.
-    Sono i due checker `PLACEMENT_MONOTONE = False` fra le righe del dataset,
-    e per loro piazzare **ripara**.
+def test_su_schedule_vuoto_la_deficienza_e_una_sola():
+    """⚠ **Questa riga è stata falsa due volte, e ogni volta per una ragione
+    diversa.** Fino all'ondata 2 diceva «solo `activity_unplaced`», e l'ondata
+    3 l'ha smentita: `min_distribution` chiede almeno quattro giornate
+    qualificanti e a orario vuoto ne trova zero. Poi diceva «le **due**
+    deficienze», contando anche `free_guaranteed` — e **L8** l'ha smentita a
+    sua volta, il 2026-08-31.
+
+    🔑 Non è una regressione, è la riparazione: la soglia delle mezze giornate
+    libere è ora `min(richieste, giorni lavorati)`, e su un orario vuoto i
+    giorni lavorati sono **zero**. Chi non lavora non ha bisogno che gli si
+    garantisca del tempo libero, e il checker ha smesso di dire il contrario.
+    `free_guaranteed` resta `PLACEMENT_MONOTONE = False` — piazzare può ancora
+    aggiungere e togliere violazioni — ma non è più massimamente violato a
+    orario vuoto.
 
     Sta scritto come test perché è la forma in cui l'analisi preventiva mente
     a chi la legge distrattamente: un orario vuoto non è «conforme tranne che
@@ -44,7 +51,7 @@ def test_su_schedule_vuoto_le_due_deficienze_e_nient_altro():
     da_piazzare = [f for f in findings if f.code == "activity_unplaced"]
     assert len(da_piazzare) == Activity.objects.count() == 343
     assert {f.code for f in findings} - {"activity_unplaced"} == {
-        "min_distribution", "free_guaranteed"}
+        "min_distribution"}
 
 
 def test_le_due_fasi_chiudono_pulite():

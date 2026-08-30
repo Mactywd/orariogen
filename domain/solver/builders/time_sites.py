@@ -109,7 +109,23 @@ due fasce perche' la clausola venga postata, e quella clausola ha **entrambi**
 i letterali forzati a 1 dalle congelate. `INFEASIBLE` per colpa del solo
 passato, cioe' la meta' vietata del criterio di ADR-018. Trovato dal banco che
 congela (`tests/test_solver_frozen.py`, seme 38) il 2026-08-26; il guardiano
-vero e' `_sede_congelata` qui sotto.
+vero e' `_sede_congelata`, che dal 2026-08-31 vive dentro `_posta_il_tetto`
+nella sua forma generale — «le sole congelate hanno gia' superato il tetto» —
+invece che come una condizione booleana su due sedi.
+
+⚠ **E la prima stesura di L6 lo aveva tolto del tutto**, credendo che
+`residual_cap` lo contenesse. E' falso, e l'ha detto il banco che congela
+(semi 6 e 9, `INFEASIBLE` sulla prova A): col residuo clampato a zero, ogni
+**libera** viene cacciata dalle celle in cui la coppia e' gia' rotta —
+comprese quelle in cui gia' stava. Vedi il docstring di `_posta_il_tetto` per
+la differenza con `structural:occupation`, che invece clampa e fa bene.
+
+🔑 **E il divieto e' diventato un tetto** (L6, 2026-08-31). «Due sedi sulla
+stessa chiave» era la domanda sbagliata per una chiave a capienza cumulativa:
+un insieme di quattro carrelli non e' un corpo e non viaggia. La condizione e'
+`carico(sa, s) + carico(sb, t) <= capienza`, che a capienza 1 — ovunque salvo
+l'aula col `Numero di aule` e il materiale con quantita' — coincide riga per
+riga con la vecchia disgiunzione. Il checker conta allo stesso modo.
 
 ⚠ **Minor 2 (review Task 9): filtro a costo zero sul numero di clausole —
 applicato, ma misurato a effetto nullo sul Fermi.** Entrambi i builder
@@ -144,7 +160,7 @@ un'intera famiglia di vincoli in piu', non un'ottimizzazione."""
 from domain.models import RelaxationQuota, ResourceTimeConstraint
 from domain.solver.builders.base import ResourceBuilder
 from domain.solver.registry import Builder, register
-from domain.solver.residual import any_free
+from domain.solver.residual import any_free, split
 
 T = ResourceTimeConstraint.Type
 
@@ -180,6 +196,22 @@ def _coppie_di_sede(ctx, key, day, s, t, sa, sb, rep, sedi):
         for sito in sedi:
             lits.append(v.site_occupied(key, day, m, sito, signature=rep).Not())
     return lits
+
+
+def _termini_di_sede(ctx, key, day, slot, site_id, rep):
+    """I termini `(quantita', id, letterale)` con cui le attivita' di sede
+    `site_id` impegnano la chiave in quella cella.
+
+    E' la stessa lettura di `OccupationBuilder` — `material_quantity` dove
+    c'e', 1 altrove — filtrata per sede, e la coincidenza e' voluta: il
+    vincolo di sede e' diventato un tetto di **capienza** (L6), quindi deve
+    contare i posti nello stesso modo di chi la capienza la conta di
+    mestiere. Stessa selezione di `Vocabulary.site_occupied`, che qui non
+    serve piu' come booleano ma resta la definizione di riferimento."""
+    active = ctx.states[rep].activities
+    return [(ctx.material_quantity.get((aid, key), 1), aid, lit)
+            for aid, lit in ctx.by_cell.get((key, day, slot), ())
+            if ctx.activities[aid].site_id == site_id and aid in active]
 
 
 def _frozen_site_changes(ctx, key, day, rep, sedi):
@@ -290,20 +322,43 @@ class MaxSiteChangesBuilder(ResourceBuilder):
             model.Add(sum(tutti) <= max(per_settimana, consumo_settimana) + margine)
 
 
-def _sede_congelata(ctx, key, day, slot, site_id, rep):
-    """La sede `site_id` e' occupata in quella cella da una **congelata**?
+def _posta_il_tetto(ctx, model, key, day, qua, la, rep, cap):
+    """`carico(sa, s) + carico(sb, t) <= capienza`, con ADR-018.
 
-    Rispecchia letteralmente la selezione dei letterali di
-    `Vocabulary.site_occupied` (domain/solver/vocabulary.py): stessa lettura
-    di `ctx.by_cell`, stesso filtro su `site_id`, stesso filtro di attivita'
-    attiva nella firma. Se la selezione divergesse anche di un letterale il
-    residuo sarebbe peggiore del difetto — e' la regola della casa sul modo di
-    leggere `B`, applicata qui a una costante invece che a una soglia."""
-    active = ctx.states[rep].activities
-    return any(aid not in ctx.free
-               and ctx.activities[aid].site_id == site_id
-               and aid in active
-               for aid, _ in ctx.by_cell.get((key, day, slot), ()))
+    A capienza 1 e' la vecchia clausola `AddBoolOr([¬site(s, sa),
+    ¬site(t, sb)])`: due carichi valgono almeno 2 e non ci stanno mai.
+    Sopra la capienza 1 dice invece la cosa vera — un insieme non viaggia,
+    basta che i due gruppi non chiedano piu' membri di quanti ce ne siano.
+
+    ⚠ **Il tetto non si posta quando le sole congelate lo hanno gia'
+    superato**, ed e' la generalizzazione della vecchia guardia
+    `_sede_congelata` — non la sua eliminazione. La prima stesura di L6 la
+    tolse credendo che `residual_cap` la contenesse: **e' falso, e il banco
+    che congela lo ha detto** (`tests/test_solver_frozen.py`, semi 6 e 9,
+    `INFEASIBLE` sulla prova A). Con due congelate di sede diversa gia' in
+    violazione, il residuo clampato vale zero e vieta a ogni **libera** di
+    stare in quelle celle — comprese quelle in cui gia' sta. Cioe' pretende
+    che le libere riparino il passato, che e' la meta' vietata di ADR-018.
+
+    🔑 La differenza con `structural:occupation`, che invece **clampa**, e' la
+    forma del finding: la' la causale nomina *tutte* le attivita' della cella,
+    quindi una libera che si aggiunge cambia la chiave e il finding e' nuovo;
+    qui la causale nomina una **coppia**, e la coppia (libera, congelata)
+    esisteva gia' nella baseline. Vietarla sarebbe piu' stretto dell'oracolo.
+
+    Con una sola delle due sedi congelata il tetto si posta, e il residuo vale
+    zero: una libera non puo' realizzare la coppia. E' un divieto su una
+    decisione del solver, che ADR-018 concede anche quando produce
+    `INFEASIBLE`."""
+    termini = (_termini_di_sede(ctx, key, day, qua[0], qua[1], rep)
+               + _termini_di_sede(ctx, key, day, la[0], la[1], rep))
+    liberi, consumo = split(ctx, termini)
+    if not liberi:
+        return          # un fatto, non una decisione
+    if consumo > cap:
+        return          # gia' rotto dal passato: vedi il docstring
+    model.Add(sum(quantita * lit for quantita, lit in liberi)
+              <= cap - consumo)
 
 
 @register("structural:site_transition")
@@ -312,22 +367,37 @@ class SiteTransitionBuilder(Builder):
     libere. Vale su **ogni** chiave di occupazione, non su una riga di
     vincolo: e' strutturale, come l'occupazione.
 
-    ADR-018 si applica in **due** forme, e per mesi ce n'e' stata una sola.
-    La regola dell'implicazione (`any_free`): se nessuna delle attivita' che
-    toccano le due fasce e' libera, il vincolo e' un fatto sul passato e non si
-    posta. ⚠ E — aggiunta il 2026-08-26 — il salto della **singola coppia gia'
-    realizzata dalle congelate**: se `sa` e `sb` sono entrambe forzate da
-    attivita' congelate (`_sede_congelata`), la clausola avrebbe entrambi i
-    letterali a 1 ed e' insoddisfacibile comunque vada il piazzamento delle
-    libere. La prima forma non copre la seconda: basta **una** libera che
-    tocchi una delle due fasce — anche senza sede, anche incapace di riparare
-    niente — perche' `any_free` sia vero e la clausola venga postata.
-    Con una sola delle due sedi forzata la clausola resta, ed e' un divieto su
-    una decisione del solver: ADR-018 lo concede anche quando produce
-    `INFEASIBLE` (stesso caso 3 di `ImposedSuccessionBuilder` con finestra
-    vuota).
+    🔑 **E' un tetto di capienza, non un divieto** (L6, 2026-08-31). Il
+    tragitto lo fa un **corpo**; una chiave a capienza cumulativa e' un
+    *insieme*, e un insieme non viaggia — quattro carrelli di portatili
+    servono l'inglese alla centrale mentre l'informatica e' in succursale
+    senza che nessuno si sposti. La condizione giusta non e' «le due sedi non
+    si toccano» ma «i due carichi ci stanno»: `carico(sa, s) + carico(sb, t)
+    <= capienza`, perche' i membri impegnati di qua non possono essere gli
+    stessi di la'.
 
-    `build` posta due famiglie di clausole: `s == t` (due sedi diverse sulla
+    A capienza 1 — cioe' su ogni docente, classe, parte e atomo — la
+    formulazione coincide riga per riga con la vecchia clausola
+    `AddBoolOr([¬site(s, sa), ¬site(t, sb)])`: due carichi valgono almeno 2,
+    la capienza e' 1, la coppia resta sempre vietata. (Piu' d'un'attivita'
+    della stessa sede nella stessa cella la vieta gia' `structural:occupation`
+    a capienza 1, quindi la somma lineare non e' piu' stretta della
+    disgiunzione.) Il gemello e' `SiteTransitionChecker`, che conta allo
+    stesso modo — ed e' quella coincidenza a tenere in piedi l'oracolo
+    differenziale.
+
+    ADR-018 si applica in **due** forme, e adesso e' una sola espressione. La
+    regola dell'implicazione (`any_free`): se nessuna delle attivita' che
+    toccano le due fasce e' libera, il vincolo e' un fatto sul passato e non
+    si posta. E il salto della coppia **gia' realizzata dalle congelate**: se
+    il carico congelato supera da solo la capienza, il tetto e' un fatto sul
+    passato e non si posta — e' la vecchia guardia `_sede_congelata` nella sua
+    forma generale. ⚠ Toglierla e affidarsi al clamp del residuo **non
+    funziona**, e non e' un'opinione: il banco che congela risponde
+    `INFEASIBLE` sulla prova A (semi 6 e 9), perche' `libere <= 0` caccia le
+    libere dalle celle in cui gia' stanno. Vedi `_posta_il_tetto`.
+
+    `build` posta due famiglie di tetti: `s == t` (due sedi diverse sulla
     stessa fascia, indipendente da `needed` — Important 1, Ruling 33) e
     `s < t` (le coppie a distanza insufficiente, vacua se `needed == 0`).
     Vedi il docstring del modulo per i dettagli e i limiti."""
@@ -342,6 +412,7 @@ class SiteTransitionBuilder(Builder):
         for rep, _ in ctx.signatures:
             active = ctx.states[rep].activities
             for key in chiavi:
+                cap = ctx.capacity.get(key, 1)
                 for day in range(ctx.grid.days_per_cycle):
                     per_fascia = [_sedi_raggiungibili(ctx, key, day, s)
                                   for s in range(ctx.grid.slots_per_day)]
@@ -349,48 +420,40 @@ class SiteTransitionBuilder(Builder):
                     # s == t (Important 1, riparazione Ruling 33): due sedi
                     # diverse sulla STESSA fascia sono sempre un cambio per
                     # il checker (gap_slots = -1, sempre < needed qualunque
-                    # sia needed >= 0), quindi questa clausola non dipende
-                    # da `needed` — postata anche a needed = 0. Di norma
-                    # irraggiungibile (structural:occupation la vieta gia'
+                    # sia needed >= 0), quindi questo tetto non dipende
+                    # da `needed` — postato anche a needed = 0. Di norma
+                    # irraggiungibile (structural:occupation lo vieta gia'
                     # a capienza 1), raggiungibile a
-                    # simultaneous_capacity > 1 (vedi docstring del modulo).
+                    # simultaneous_capacity > 1 (vedi docstring del modulo) —
+                    # ed e' li' che L6 ha trovato che il divieto era falso.
                     for s in range(ctx.grid.slots_per_day):
                         tocca = {aid for aid, _ in ctx.by_cell.get((key, day, s), ())
                                   if aid in active}
                         if not any_free(ctx, tocca):
                             continue
                         for sa in per_fascia[s]:
-                            sa_congelata = _sede_congelata(
-                                ctx, key, day, s, sa, rep)
                             for sb in per_fascia[s]:
                                 # `sb <= sa`, non `sb == sa`: qui s e t sono
-                                # la stessa fascia, quindi la clausola e'
-                                # simmetrica in (sa, sb) — `AddBoolOr` lo e'
-                                # per costruzione — e `posted`, che tiene
-                                # conto dell'ordine, non la deduplica. Senza
+                                # la stessa fascia, quindi il tetto e'
+                                # simmetrico in (sa, sb) — la somma lo e' per
+                                # costruzione — e `posted`, che tiene conto
+                                # dell'ordine, non lo deduplica. Senza
                                 # questo ogni coppia di sedi veniva postata
                                 # due volte identica (Minor 2 della ri-review
                                 # del giro 1: sul Fermi 5604 -> 4806
                                 # constraint a 2 sedi, 21830 -> 17042 a 4).
                                 # ⚠ Nel blocco `s < t` sotto la simmetria non
                                 # c'e': (s, sa) e (t, sb) sono fasce diverse,
-                                # e scambiare le sedi e' un'altra clausola.
+                                # e scambiare le sedi e' un altro tetto.
                                 if sb <= sa:
                                     continue
-                                if sa_congelata and _sede_congelata(
-                                        ctx, key, day, s, sb, rep):
-                                    continue   # vedi _sede_congelata
                                 firma = (key, day, s, s, sa, sb,
                                          frozenset(tocca))
                                 if firma in posted:
                                     continue
                                 posted.add(firma)
-                                model.AddBoolOr([
-                                    ctx.vocab.site_occupied(
-                                        key, day, s, sa, signature=rep).Not(),
-                                    ctx.vocab.site_occupied(
-                                        key, day, s, sb, signature=rep).Not(),
-                                ])
+                                _posta_il_tetto(ctx, model, key, day,
+                                                (s, sa), (s, sb), rep, cap)
 
                     if not needed:
                         continue   # la coppia s < t sotto e' interamente vacua
@@ -407,22 +470,13 @@ class SiteTransitionBuilder(Builder):
                             if not any_free(ctx, tocca):
                                 continue
                             for sa in per_fascia[s]:
-                                sa_congelata = _sede_congelata(
-                                    ctx, key, day, s, sa, rep)
                                 for sb in per_fascia[t]:
                                     if sa == sb:
                                         continue
-                                    if sa_congelata and _sede_congelata(
-                                            ctx, key, day, t, sb, rep):
-                                        continue   # vedi _sede_congelata
                                     firma = (key, day, s, t, sa, sb,
                                              frozenset(tocca))
                                     if firma in posted:
                                         continue
                                     posted.add(firma)
-                                    model.AddBoolOr([
-                                        ctx.vocab.site_occupied(
-                                            key, day, s, sa, signature=rep).Not(),
-                                        ctx.vocab.site_occupied(
-                                            key, day, t, sb, signature=rep).Not(),
-                                    ])
+                                    _posta_il_tetto(ctx, model, key, day,
+                                                    (s, sa), (t, sb), rep, cap)

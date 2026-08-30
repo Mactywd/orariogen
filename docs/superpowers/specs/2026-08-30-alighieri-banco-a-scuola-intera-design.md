@@ -547,3 +547,37 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
 
 Ogni ondata è verde prima della successiva, e ogni ondata aggiunge righe a
 `esiti-attesi.md` **prima** del codice che le esercita.
+
+---
+
+## Poscritto — i cinque difetti, chiusi il 2026-08-31
+
+Questa spec vieta al banco di modificare il motore (§8), e i cinque difetti
+sono usciti dalle sette ondate **dichiarati e non riparati**, ognuno fissato da
+un test che asseriva il comportamento sbagliato. Sono stati chiusi dopo, fuori
+da questa spec, e ogni test è stato **capovolto** col suo ramo di controllo.
+Il racconto sta in [`docs/changelog.md`](../../changelog.md) alla data; le
+decisioni in [ADR-022, ADR-023, ADR-024](../../decisioni.md) e in un
+emendamento ad ADR-021.
+
+Ciò che questa spec dice e che non vale più alla lettera:
+
+- il registro dei builder è **28 su 31** checker, non 27 su 30
+  (`structural:alignment`), e la sonda sale a **28 su 28**;
+- il modello della fase 1 è **14 785 variabili e 13 996 constraint** (era
+  15 330 / 13 817): l'allineamento ne aggiunge, il vincolo di sede ne toglie;
+- il criterio di §4 costa **14** scarti spegnendo `LAB-SUCC`, non 11 — le sue
+  undici ore più le tre allineate, perché l'attività complessa cade come un
+  corpo solo;
+- la fase 5 nomina **due** insiemi deficienti sul laboratorio della
+  succursale, uno dentro l'altro.
+
+🔑 **E la chiusura ha corretto il dataset in quattro punti**, che è la
+scoperta più grossa dell'intero pezzo: leggere `alignment_ident` — un campo
+che nessun builder leggeva — ha mostrato che il banco dichiarava allineamenti
+impossibili e ne fondeva tre in uno, che l'articolata parallela era
+incompatibile con lo spezzone concentrato di RICCI più il tetto di peso, e che
+il `MG` sull'insegnante di alternativa aveva perso il **soggetto**. Nessuna
+delle quattro correzioni serviva a far passare un test: ognuna toglie dal
+dataset un'affermazione falsa che nessuno poteva vedere finché il campo non
+veniva letto.

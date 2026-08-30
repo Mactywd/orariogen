@@ -142,12 +142,12 @@ def test_le_otto_forme_dichiarate():
                        for f in zanetti.values())
     assert mezze_libere >= 2
 
-    # max_half_days — il MMG della 2A, e il MG di R02.
+    # max_half_days — il MMG della 2A, e il MG di P02.
     seconda = _giorni(stato, "c", "2A")
     assert sum(bool([s for s in f if s in MATTINA])
                + bool([s for s in f if s not in MATTINA])
                for f in seconda.values()) <= 7
-    for fasce in _giorni(stato, "t", "DONAT").values():
+    for fasce in _giorni(stato, "t", "BRUNI").values():
         assert not ([s for s in fasce if s in MATTINA]
                     and [s for s in fasce if s not in MATTINA])
 

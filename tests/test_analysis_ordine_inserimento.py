@@ -53,7 +53,8 @@ def _griglia(env, days, slots):
     env["grid"].save()
 
 
-def _due_sedi_sulla_stessa_fascia(env, invertito, *, cap_transizione):
+def _due_sedi_sulla_stessa_fascia(env, invertito, *, cap_transizione,
+                                  dopo=1):
     """Una chiave a capienza cumulativa 2 con due sedi diverse sulla stessa
     fascia, piu' una terza attivita' sulla fascia dopo. `invertito` scambia
     l'ordine di **creazione** delle due simultanee, che e' l'ordine in cui
@@ -71,10 +72,11 @@ def _due_sedi_sulla_stessa_fascia(env, invertito, *, cap_transizione):
 
     sim1 = make_activity(env["subject"], classes=[klass], site=prima)
     sim2 = make_activity(env["subject"], classes=[klass], site=seconda)
-    terza = make_activity(env["subject"], classes=[klass], site=a_site)
     place(env["schedule"], sim1, 0, 0)
     place(env["schedule"], sim2, 0, 0)
-    place(env["schedule"], terza, 0, 1)
+    for _ in range(dopo):
+        place(env["schedule"],
+              make_activity(env["subject"], classes=[klass], site=a_site), 0, 1)
 
 
 @pytest.mark.parametrize("invertito", [False, True])
@@ -95,14 +97,21 @@ def test_site_transition_non_dipende_dall_ordine_di_inserimento(invertito):
     """Stessa istanza, altro checker. Letta come [A@0, B@0, A@1] le coppie
     adiacenti sono (A,B) e (B,A): due violazioni. Letta come [B@0, A@0, A@1]
     sono (B,A) e (A,A): una sola. La seconda coppia esiste o no a seconda
-    dei pk."""
+    dei pk.
+
+    ⚠ **Due attivita' alla fascia 1, non una** (L6, 2026-08-31). Da quando il
+    vincolo di sede e' un tetto di **capienza**, una chiave da due posti regge
+    due impegni e la coppia non viola piu' niente: con una sola attivita' di
+    la' il confronto sarebbe zero contro zero, cioe' un test che non misura
+    piu' l'ordine. Con due, il carico e' `1 + 2 = 3 > 2` e le coppie tornano a
+    esserci — sempre due, comunque siano ordinati i pk."""
     env = mini_school()
-    _due_sedi_sulla_stessa_fascia(env, invertito, cap_transizione=2)
+    _due_sedi_sulla_stessa_fascia(env, invertito, cap_transizione=2, dopo=2)
 
     chiavi = _chiavi(env["schedule"], "site_transition")
-    # La simultaneita' fra sedi diverse e' sempre una violazione (gap -1), e
-    # il passaggio dalla fascia 0 alla 1 la e' anch'esso: gap 0 < 2. Il numero
-    # e' quello che non deve dipendere dall'ordine.
+    # Il passaggio dalla fascia 0 alla 1 e' il solo che sfori: gap 0 < 2, e
+    # `B@0` piu' le due `A@1` chiedono tre posti su due. Il numero e' quello
+    # che non deve dipendere dall'ordine.
     assert len(chiavi) == 2, sorted(chiavi)
 
 

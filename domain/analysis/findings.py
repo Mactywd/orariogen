@@ -40,7 +40,8 @@ class Finding:
     quantities: Mapping[str, int] = field(default_factory=dict)
     weeks: tuple[int, ...] = ()        # settimane in cui la violazione vale
     subject: int | None = None         # pk della Subject, quando la causale la nomina
-    group: str | None = None           # gruppo di elezione (ADR-020), quando la causale lo nomina
+    group: str | None = None           # il gruppo che la causale nomina: di elezione
+                                       # (ADR-020) o d'allineamento (L5)
 
     @property
     def key(self):

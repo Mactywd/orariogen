@@ -60,8 +60,14 @@ pytestmark = pytest.mark.django_db
 #  16   arrival_departure, e deriva d'identita'
 #  20   deriva d'identita' su subject_imposed_succession (fino all'ondata 5
 #       faceva scattare anche l'esenzione del ramo pigro, che non esiste piu')
-#  27   la dirt piu' larga misurata: undici causali su un solo testimone
-#  30   il rapporto piu' estremo, 29 congelate contro 3 libere
+#  13   la dirt piu' larga misurata: **tredici** causali su un solo testimone
+#  17   il rapporto piu' estremo, 27 congelate contro 5 libere
+#
+# ⚠ 13 e 17 hanno preso il posto di 27 e 30 il 2026-08-31, quando `sporca` ha
+# imparato a muovere le **allineate insieme** (L5): il ripack cambia, e su
+# quei due semi non produce piu' sporco. E' il caso che il messaggio
+# dell'assert qui sotto prevede — *rimisurare e riscegliere i semi* — e i due
+# ruoli sono conservati, entrambi con numeri piu' estremi di prima.
 #  36   min_distribution e site_transition insieme
 #  38   ⚠ il seme che ha trovato il difetto di SiteTransitionBuilder
 #
@@ -69,7 +75,7 @@ pytestmark = pytest.mark.django_db
 # deve restituire qualcosa, e l'assert lo pretende. Se un giorno la fixture o
 # i derivatori cambiano al punto da non produrre piu' sporco su questi semi, il
 # banco diventa rosso invece di svuotarsi in silenzio.
-SEMI_SPORCHI = [1, 5, 6, 9, 16, 20, 27, 30, 36, 38]
+SEMI_SPORCHI = [1, 5, 6, 9, 13, 16, 17, 20, 36, 38]
 
 
 @pytest.mark.parametrize("seed", SEMI_SPORCHI)

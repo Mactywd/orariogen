@@ -54,6 +54,8 @@ CAUSALI: dict[str, str] = {
                           "alternativa non sono una"),
     # lo scarto (pezzo 3, ondata 1)
     "activity_unplaced": "{subject}, l'attività non è piazzata",
+    # l'allineamento: 📦 l'ident genera l'attività complessa (XSD)
+    "alignment_split": "Attività allineate su collocazioni diverse",
     # le aule contate dalla fase 1 (ADR-021)
     "room_group_peak": "Il gruppo di aule {resource} ha raggiunto il suo picco d'occupazione",
     # assegnazione delle aule (seconda fase)

@@ -221,27 +221,26 @@ def test_site_transition_impone_le_fasce_libere():
         assert abs(sa - sb) - 1 >= 2
 
 
-def test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa():
-    """Important 1 (review Task 9, giro di correzione 1): due attivita' di
-    sede diversa piazzate sulla STESSA fascia della stessa chiave. La
-    costruzione a coppie `s < t` non puo' esprimerlo (non esiste una coppia
-    con `s == t`), ma il checker la vede sempre come una violazione
-    (`gap_slots = s2 - s1 - 1 = -1`, sempre `< needed`). Di norma e'
-    irraggiungibile perche' la stessa cella e' gia' vietata da
-    `structural:occupation` a capienza 1 — qui la si rende raggiungibile con
-    un'aula a `simultaneous_capacity = 2` (il `Numero di aule`/`Qta'` di
-    EDT, non un caso di laboratorio): due attivita' di **classi diverse**
-    (quindi nessun conflitto di classe o docente le separa) che condividono
-    la stessa aula, su una griglia 1x1 dove non c'e' altrove dove andare.
+def test_due_sedi_sulla_stessa_fascia_ci_stanno_se_la_capienza_le_regge():
+    """🔑 **L6, chiuso il 2026-08-31**, e questo test aveva il verdetto
+    opposto fino a quel giorno.
 
-    Prima della riparazione (clausola `s == t` in
-    `SiteTransitionBuilder.build`) il solver trovava `OPTIMAL` piazzando
-    entrambe sulla stessa unica cella — zero finding di occupazione, ma
-    `check_schedule` sulla soluzione applicata riportava un `site_transition`
-    `HARD` che il solver non aveva visto (vedi il report del Task 9, giro di
-    correzione 1, per l'output verbatim prima/dopo). Con la riparazione il
-    modello dev'essere INFEASIBLE: e' l'unica cella disponibile e la
-    clausola la vieta."""
+    Due attivita' di sede diversa sulla **stessa** fascia della stessa chiave.
+    Di norma e' irraggiungibile perche' la cella e' gia' vietata da
+    `structural:occupation` a capienza 1 — qui la si rende raggiungibile con
+    un'aula a `simultaneous_capacity = 2` (il `Numero di aule`/`Qta'` di EDT),
+    su una griglia 1x1 dove non c'e' altrove dove andare.
+
+    Fino a L6 il builder postava li' un **divieto** (`AddBoolOr`) e il modello
+    era `INFEASIBLE`. Era la domanda sbagliata: una chiave a capienza
+    cumulativa e' un *insieme*, e un insieme non viaggia — due posti reggono
+    due impegni, dovunque siano. La domanda giusta e' se **ci stanno**, e a
+    due posti per due attivita' ci stanno.
+
+    Il secondo ramo e' la prova che il vincolo non e' sparito: a capienza
+    **1** la stessa istanza torna `INFEASIBLE`, perche' un posto solo non
+    regge due impegni. E' anche la misura della frase «a capienza 1 la regola
+    coincide riga per riga con la vecchia»."""
     from domain.models import Room, SchoolClass, StudyPlan, Teacher
 
     env = mini_school()
@@ -267,7 +266,14 @@ def test_site_transition_due_sedi_sulla_stessa_fascia_a_capienza_cumulativa():
                   classes=[altra_classe], rooms=[aula], site=b_site)
 
     soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
-    assert soluzione.status == "INFEASIBLE", soluzione.stats
+    assert soluzione.status == "OPTIMAL", soluzione.stats
+    assert not [f for f in check_schedule(env["schedule"])
+                if f.code == "site_transition"]
+
+    aula.simultaneous_capacity = 1
+    aula.save()
+    stretta = solve(env["schedule"], time_limit=30, allow_unplaced=False)
+    assert stretta.status == "INFEASIBLE", stretta.stats
 
 
 # ⚠ Un tentativo di test in piu' e' stato scartato qui, non aggiunto: una
@@ -343,22 +349,30 @@ def test_adr018_site_transition_due_sedi_gia_sulla_stessa_fascia_non_blocca():
 
     ⚠ Aggiunto dalla review della PR #1 dopo averlo **misurato**: rimuovendo
     solo il `continue` di quel ramo, e lasciando l'altro, la suite intera
-    restava verde. Meta' del guardiano non era asserita da niente.
+    restava verde. Meta' del guardiano non era asserita da niente. Dal
+    2026-08-31 il guardiano non e' piu' un `continue` ma il **residuo**
+    clampato di `residual_cap`, ed e' la stessa asserzione: il passato in
+    violazione non rende infattibile il presente.
 
     `site_transition_slots` a zero, cosi' il ramo `s < t` e' interamente
-    vacuo e resta in piedi solo la clausola «due sedi diverse sulla stessa
-    fascia», che il builder posta indipendentemente da `needed`. Il ramo e'
-    raggiungibile solo a capienza simultanea > 1 (a capienza 1
-    `structural:occupation` vieta gia' la coincidenza), quindi le due
-    congelate condividono un'aula da due posti e nient'altro: nessun docente,
-    nessuna classe in comune."""
+    vacuo e resta in piedi solo il tetto «due sedi diverse sulla stessa
+    fascia», che il builder posta indipendentemente da `needed`.
+
+    ⚠ **Tre congelate, non due** (L6): con la regola nuova due impegni su due
+    posti *ci stanno*, quindi il passato non sarebbe in violazione e il test
+    non misurerebbe piu' niente. Servono tre attivita' — due della sede A e
+    una della B — su un'aula da due posti. Il conseguente e' che la stessa
+    cella viola anche `structural:occupation`, e va bene cosi': sotto la
+    regola nuova ogni violazione di sede **dentro** una fascia implica un
+    superamento di capienza, perche' e' la stessa disuguaglianza su un
+    sottoinsieme."""
     env = mini_school()
     InstituteSettings.objects.update_or_create(
         pk=1, defaults={"site_transition_slots": 0})
     palestra = Room.objects.create(name="PALESTRA", simultaneous_capacity=2)
     a_site = Site.objects.create(name="A")
     b_site = Site.objects.create(name="B")
-    for sede in (a_site, b_site):
+    for sede in (a_site, a_site, b_site):
         attivita = make_activity(env["subject"], rooms=[palestra], site=sede,
                                  immobility=Activity.Immobility.LOCKED_IN_PLACE)
         Placement.objects.create(schedule=env["schedule"], activity=attivita,

@@ -200,7 +200,15 @@ def test_il_laboratorio_unico_della_succursale_produce_un_deficit_vero():
     minimale, non un totale: la riduzione si ferma su nove attività la cui
     finestra comune vale otto ore, e dichiara 9h00 contro 8h00. Un totale
     direbbe un numero più grande su un insieme più grande, e sarebbe un
-    consiglio peggiore — l'utente deve sapere *quali* attività non stanno."""
+    consiglio peggiore — l'utente deve sapere *quali* attività non stanno.
+
+    🔑 **E dal 2026-08-31 i certificati sono due, uno dentro l'altro**, per il
+    dato che L5 ha corretto: lo spezzone di RICCI sta ora su due pomeriggi, e
+    col laboratorio chiuso il venerdì la sua fascia comune col laboratorio si
+    riduce a **due** celle del mercoledì. Le tre ore d'informatica del 2C_APP
+    sono quindi un secondo insieme deficiente, 3h00 contro 2h00 — più piccolo,
+    più stretto e più utile del primo, che è esattamente la proprietà per cui
+    il certificato si vuole minimale."""
     env = alighieri.build()
     lab = Room.objects.get(name="LAB-SUCC")
     assert Activity.objects.filter(rooms=lab).count() == 11
@@ -211,12 +219,22 @@ def test_il_laboratorio_unico_della_succursale_produce_un_deficit_vero():
                 level=ResourceUnavailability.Level.HARD)
 
     trovati = analyze_hall(env["schedule"])
-    assert len(trovati) == 1
-    f = trovati[0]
-    assert f.binding_label == "LAB-SUCC"
-    assert "LAB-SUCC" in f.resource_labels
-    assert f.required_minutes > f.placeable_minutes
-    assert f.n_activities == len(f.activities)
+    assert len(trovati) == 2
+    for f in trovati:
+        assert "LAB-SUCC" in f.resource_labels
+        assert f.required_minutes > f.placeable_minutes
+        assert f.n_activities == len(f.activities)
+    grosso, stretto = sorted(trovati, key=lambda f: f.n_activities,
+                             reverse=True)
+    assert grosso.binding_label == "LAB-SUCC"
+    assert (grosso.n_activities, grosso.required_minutes,
+            grosso.placeable_minutes) == (9, 540, 480)
+    assert stretto.binding_label == "2C_APP"
+    assert (stretto.n_activities, stretto.required_minutes,
+            stretto.placeable_minutes) == (3, 180, 120)
+    # 🔑 Il più stretto è **dentro** il più grosso: è una riduzione, non un
+    # secondo problema.
+    assert set(stretto.activities) < set(grosso.activities)
 
 
 # --------------------------------------------------------------------------
@@ -505,6 +523,33 @@ def test_la_contesa_che_il_gruppo_di_aule_risolve():
     assert set(aule.unassigned) & set(pin), aule.unassigned
 
 
+#: Le tre fasce in cui lo spezzone di RICCI può stare. L'articolata le ha
+#: tutte e tre, una per ora allineata: sono l'unica finestra in cui **non**
+#: si può chiudere un laboratorio senza misurare un secondo fenomeno.
+SPEZZONE = {(2, 5), (2, 6), (4, 7)}
+
+
+def _immobile_fuori_dallo_spezzone(env):
+    """La fisica della centrale da rendere immobile, e **dove**.
+
+    ⚠ La scelta della cella non è una comodità. Chiudendo `LAB-FIS` e
+    `LAB-INF` in una delle tre fasce dello spezzone, il tetto del **gruppo di
+    aule** sull'unione dei tre laboratori scende a **un** posto — quello di
+    `LAB-SUCC` — e l'immobile lo consuma, perché un'aula dell'insieme la
+    chiede comunque. L'informatica della 2C non può più stare lì, le restano
+    due fasce per tre ore allineate, e una coppia si scarta. È una deduzione
+    **corretta** della fase 1, ma è un secondo fenomeno: qui se ne misura uno.
+    (Prima di L5 non si vedeva: senza allineamento le tre ore d'informatica si
+    riorganizzavano da sole.)"""
+    for a in (Activity.objects
+              .filter(subject__code="FIS", duration_slots=1,
+                      site__name="Centrale").order_by("pk")):
+        dove = Placement.objects.get(schedule=env["schedule"], activity=a)
+        if (dove.day, dove.start_slot) not in SPEZZONE:
+            return a, dove
+    raise AssertionError("nessuna fisica della centrale fuori dallo spezzone")
+
+
 def test_la_rinuncia_inevitabile_e_la_fase_1_che_tace():
     """§7: *«una rinuncia inevitabile quando la si stringe»*.
 
@@ -522,10 +567,7 @@ def test_la_rinuncia_inevitabile_e_la_fase_1_che_tace():
     configurazione resta illegale perché nessun piazzamento la può
     riparare."""
     env = _orario_pieno()
-    attivita = (Activity.objects
-                .filter(subject__code="FIS", duration_slots=1,
-                        site__name="Centrale").order_by("pk").first())
-    dove = Placement.objects.get(schedule=env["schedule"], activity=attivita)
+    attivita, dove = _immobile_fuori_dallo_spezzone(env)
     attivita.immobility = Activity.Immobility.FIXED
     attivita.save()
     for nome in ("LAB-FIS", "LAB-INF"):
@@ -580,8 +622,15 @@ def test_stretto_ma_risolvibile_e_verificato_sul_dataset_intero():
     ⚠ **«Una» aula, non «qualunque»**: togliere l'aula magna, che nessuno usa,
     non scarta niente e non deve. Il criterio dice che il banco ha un punto in
     cui è teso, e i punti si misurano: `LAB-SUCC` (il laboratorio unico della
-    succursale) costa **11** scarti, cioè esattamente le attività che lo
-    chiedono; i docenti campionati ne costano 3, 12 e 20 — le loro ore.
+    succursale) costa **14** scarti e RICCI **6**.
+
+    🔑 **E i numeri non sono più «esattamente le attività che la chiedono»**,
+    che è ciò che questo test asseriva fino a L5: sono le sue **più le loro
+    allineate**. Le undici ore del laboratorio ne trascinano tre di latino, le
+    tre di RICCI altrettante, perché l'attività complessa si piazza o si
+    scarta come un corpo solo. È la misura di quanto l'allineamento costa
+    quando una risorsa manca — e la ragione per cui costa è la stessa per cui
+    serve.
 
     🔑 **E il criterio è soddisfatto senza portare al bordo il D.T.B.**, che è
     la cosa da capire: sono **due nozioni diverse di «stretto»**. Questa è
@@ -600,58 +649,75 @@ def test_stretto_ma_risolvibile_e_verificato_sul_dataset_intero():
 
     lab = Room.objects.get(name="LAB-SUCC")
     quante = Activity.objects.filter(rooms=lab).count()
+    assert quante == 11
     _spegni(lab)
     senza_lab = solve(env["schedule"], workers=8, time_limit=90)
     assert senza_lab.status == "OPTIMAL", senza_lab.stats
-    assert senza_lab.stats["scartate"] == quante == 11
+    assert senza_lab.stats["scartate"] == 14 == _con_le_allineate(
+        Activity.objects.filter(rooms=lab))
+
+
+def _con_le_allineate(usano):
+    """Le attività che cadono con `usano`: quelle stesse più le **allineate**.
+
+    L5: l'attività complessa si piazza o si scarta come un corpo solo, quindi
+    spegnere una risorsa non fa cadere solo chi la usa."""
+    idents = {a.alignment_ident for a in usano if a.alignment_ident}
+    return len({a.pk for a in usano}
+               | {a.pk for a in Activity.objects.filter(
+                   alignment_ident__in=idents)})
 
 
 def test_e_lo_stesso_per_un_docente():
     env = alighieri.build()
     ricci = Teacher.objects.get(abbreviation="RICCI")
     sue = Activity.objects.filter(teachers=ricci).count()
+    assert sue == 3
+    attese = _con_le_allineate(Activity.objects.filter(teachers=ricci))
     _spegni(ricci)
     soluzione = solve(env["schedule"], workers=8, time_limit=90)
     assert soluzione.status == "OPTIMAL", soluzione.stats
-    assert soluzione.stats["scartate"] == sue == 3
+    assert soluzione.stats["scartate"] == 6 == attese
 
 
-def test_l8_lo_scarto_non_e_una_via_d_uscita_universale():
-    """🔑 **Il difetto che l'ondata 7 ha trovato, misurando il bordo.**
+def test_l8_lo_scarto_e_una_via_d_uscita_universale():
+    """🔑 **L8, chiuso il 2026-08-31**, e l'ondata 7 lo aveva trovato
+    misurando il bordo del banco.
 
-    Spegnendo la **palestra** il modello non scarta: risponde `INFEASIBLE`,
-    che è ciò che `allow_unplaced=True` dovrebbe rendere impossibile — lo
-    scarto esiste proprio perché un'attività che non ci sta non blocchi il
-    calcolo.
+    Spegnendo la **palestra** il modello non scartava: rispondeva
+    `INFEASIBLE`, che è ciò che `allow_unplaced=True` dovrebbe rendere
+    impossibile — lo scarto esiste proprio perché un'attività che non ci sta
+    non blocchi il calcolo.
 
-    La causa è **una sola riga**, isolata togliendone dieci una per volta:
+    La causa era **una sola riga**, isolata togliendone dieci una per volta:
     `free_guaranteed` su P01 Zanetti, il docente di scienze motorie. Con la
     palestra spenta gli restano le sole ore della succursale, e il solver ne
-    piazza **una**, su **un** giorno. La riga chiede due giornate libere — che
-    ci sono — e **due mezze giornate libere**, che non ci sono: una mezza
+    piazza **una**, su **un** giorno. La riga chiedeva due giornate libere —
+    che ci sono — e **due mezze giornate libere**, che non ci sono: una mezza
     giornata libera conta solo su un giorno **lavorato**
-    (`libera = attivo AND NOT meta`), perché è così che la conta
-    `FreeGuaranteedChecker`, e un giorno interamente vuoto contribuisce zero.
-    Con un giorno lavorato il massimo è **uno**.
+    (`libera = attivo AND NOT metà`), e un giorno lavorato ne offre al più
+    una. Con un giorno lavorato il massimo è **uno**.
 
-    🔑 **È l'immagine speculare della trappola che il builder documenta**, e
-    non è un errore del builder: contare le mezze libere su tutti i giorni
-    accetterebbe orari che il checker boccia — la direzione sbagliata. Il
-    fatto nuovo è la **conseguenza**: una famiglia che conta una quantità *sui
-    giorni in cui si lavora* può diventare insoddisfacibile **perché si lavora
-    meno**, e lì lo scarto non è una via d'uscita. Un prodotto che risponde
-    `INFEASIBLE` invece di «queste dieci attività non si piazzano» dà
-    all'utente la diagnosi peggiore delle due.
+    🔑 La riparazione non tocca il conteggio — contare le mezze libere su
+    tutti i giorni accetterebbe orari che il checker boccia, la direzione
+    sbagliata — ma la **soglia**: `min(richieste, giorni lavorati)`, nel
+    checker e nel builder insieme. Una famiglia che conta una quantità *sui
+    giorni in cui si lavora* non può pretendere più di quanto quei giorni
+    offrano, e ora l'utente legge «queste attività non si piazzano» invece di
+    `INFEASIBLE`, che è la migliore delle due diagnosi e non la peggiore.
 
-    Non riparato (spec §8), fissato qui col suo **ramo di controllo**: tolta
-    quella riga, lo stesso dataset scarta e chiude `OPTIMAL`."""
+    Il ramo di controllo è quello che c'era già, e ora dice la stessa cosa del
+    primo: tolta la riga, il dataset scartava e chiudeva `OPTIMAL`. Il punto
+    di L8 è che i due rami adesso **coincidono** — la riga non decide più fra
+    un orario e nessun orario."""
     env = alighieri.build()
     _spegni(Room.objects.get(name="PALESTRA"))
     soluzione = solve(env["schedule"], workers=8, time_limit=90)
-    assert soluzione.status == "INFEASIBLE", soluzione.stats
+    assert soluzione.status == "OPTIMAL", soluzione.stats
+    assert soluzione.stats["scartate"] > 0
 
     ResourceTimeConstraint.objects.filter(
         type=ResourceTimeConstraint.Type.FREE_GUARANTEED).delete()
     controllo = solve(env["schedule"], workers=8, time_limit=90)
     assert controllo.status == "OPTIMAL", controllo.stats
-    assert controllo.stats["scartate"] > 0
+    assert controllo.stats["scartate"] == soluzione.stats["scartate"]

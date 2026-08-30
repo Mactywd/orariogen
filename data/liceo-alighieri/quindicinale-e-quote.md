@@ -46,7 +46,7 @@ settimana su due.
   si intersecano. È poi come una scuola scrive davvero un'ora quindicinale —
   «scienze al martedì alla terza» — e cambia solo cosa ci si fa dentro.
 - `week_signatures`, `SolverContext.states`, `solve_rooms` per firma.
-- ⚠ E il debito **L7**, §3.
+- 🔑 E il difetto **L7**, §4 — trovato qui e chiuso il 2026-08-31.
 
 ### La misura, e un'attesa smentita
 
@@ -82,7 +82,7 @@ distingue: il *quanto* e il *quante volte*.
 
 | Riga | Forma | Portatore | Parametri |
 |---|---|---|---|
-| `mg_donati` | **deroga** | R02 Donati (il `MG`) | 1 violazione, nessun margine |
+| `mg_bruni` | **deroga** | P02 Bruni (il `MG`) | 1 violazione, nessun margine |
 | `presenza_cappellano` | **margine** | R01 Colombo (`max_presence`) | 2 violazioni, margine 180 min |
 
 ⚠ **Nessuna delle due è consumata dal dataset**, e sembra una rinuncia. Non lo
@@ -96,21 +96,32 @@ i divieti dell'ondata 4.
 
 ⚠ **E i due portatori non sono bordi di nessuna ondata precedente.** Allentare
 un bordo dell'ondata 3 renderebbe risolvibile la sua tacca, cioè spegnerebbe
-un test scritto tre ondate fa: il bordo del `MG` sta sulla 2A e non su DONAT,
+un test scritto tre ondate fa: il bordo del `MG` sta sulla 2A e non su BRUNI,
 quello di `max_presence` su GENTI e non su COLOM.
 
 ### La deroga
 
-R02 insegna l'alternativa in tutte e dodici le classi, dodici ore. Il
-testimone la fa venire **due giorni**: col `MG` — mai mattina *e* pomeriggio
-nello stesso giorno — due giornate danno al più due mattine, cioè dieci fasce
-per dodici ore. Derogare **una** volta apre un pomeriggio: 5 + 5 + 3 = 13.
+P02 insegna scienze motorie in sei classi, dodici ore, e col `MG` non lavora
+mai mattina *e* pomeriggio nello stesso giorno. Il testimone **impone** una
+giornata con entrambe le mezze — due ore pinnate al martedì, la prima e la
+settima fascia: chiede esattamente una violazione, e la deroga ne perdona una.
 
 | | Atteso | Osservato |
 |---|---|---|
 | Senza la quota | `INFEASIBLE` | ✅ |
 | Con la quota | `OPTIMAL` | ✅ |
 | Il finding `only_half_day` con la quota | **resta** | ✅ |
+
+⚠ **La tensione è un pin, e il portatore è cambiato con L5** (2026-08-31). Il
+`MG` stava su R02 Donati e la tensione era una riga di presenza — «viene due
+giorni», dodici ore in due mattine non ci stanno. Onorato l'allineamento
+l'orario di Donati *è* quello del cappellano, che viene due giorni per conto
+suo: le due righe erano diventate incompatibili e la deroga si consumava da
+sola, cioè si spegneva il test che dice che il dataset non le consuma. Sul
+nuovo portatore la stessa riga di presenza non serve — dodici ore di scienze
+motorie in due giornate non stanno nella **palestra**, che è una sola e si
+divide con P01, e il testimone fallirebbe per la ragione sbagliata. Il pin
+dell'ondata 4 dice la stessa cosa senza chiedere altro al dataset.
 
 ### Il margine, e la taglia
 
@@ -207,11 +218,12 @@ non-regressione, e la stabilità scivola in coda a fare da spareggio.
 | `gaps_classes` | 0 | 5 |
 | `regularity_classes` | 947 | 952 |
 
-## 4. ⚠ L7 — i criteri di qualità ignorano le firme di settimana
+## 4. 🔑 L7 — i criteri di qualità e le firme di settimana, chiuso
 
 Il debito aperto il 2026-08-30 (L3) diceva che i criteri di qualità ignorano
 le firme di settimana e che **nessuna delle due basi lo esercita**. La seconda
-metà non è più vera.
+metà ha smesso di essere vera con l'ondata 6, e il 2026-08-31 è caduta anche
+la prima.
 
 Il testimone è aritmetico. Il 5B al lunedì, sulle prime quattro fasce:
 l'italiano alla prima e alla quarta, la metà di laboratorio alla seconda,
@@ -221,32 +233,43 @@ quella di teoria alla terza.
 |---|---|---|
 | pari | 0, 1, 3 | **1** (la fascia 2) |
 | dispari | 0, 2, 3 | **1** (la fascia 1) |
-| unione — ciò che vede il criterio | 0, 1, 2, 3 | **0** |
+| unione — ciò che vedeva il criterio | 0, 1, 2, 3 | **0** |
 
 Sullo stesso orario, la stessa quantità — *«la durata totale dei buchi»*, che
 il criterio calcola senza tetto e il D.T.B. col tetto, e che `criteria.buchi`
-dichiara letteralmente essere la stessa — vale **60 minuti in ogni settimana
+dichiara letteralmente essere la stessa — valeva **60 minuti in ogni settimana
 dell'anno** per `check_schedule` e **zero** per il criterio.
 
-🔑 **E non è un difetto nuovo: è lo stesso** che `MaxGapBuilder` aveva fino al
-2026-08-24, descritto per esteso nel docstring di `Vocabulary.covered` —
+🔑 **E non era un difetto nuovo: era lo stesso** che `MaxGapBuilder` aveva fino
+al 2026-08-24, descritto per esteso nel docstring di `Vocabulary.covered` —
 *«un'occupazione che cade dentro il buco ma viene da un'altra firma alza il
 conteggio senza spostare prima/ultima occupata, e chiude nel modello unione un
-buco che, settimana per settimana, resta aperto»*. Il builder passa
+buco che, settimana per settimana, resta aperto»*. Il builder passava
 `signature`; i criteri no.
 
-⚠ `quality.py` lo dichiara come approssimazione, con l'argomento che un
-obiettivo approssimato *ordina male orari tutti legali* e non ne ammette uno
-illegale. L'argomento regge, e non è questo il posto per discuterlo. Ciò che
-non regge più è la parte di contorno: che nessun dataset lo esercitasse.
+### Come si è chiuso, e perché il **massimo** e non la somma
 
-**Non si ripara** (spec §8): è **L7** in [`docs/todo.md`](../../docs/todo.md),
-fissato da un test che diventerà rosso il giorno in cui si chiude — come L5,
-L6 e L6bis.
+I criteri si calcolano ora per firma, e il livello è quello della **settimana
+peggiore**. L'aggregazione non è un dettaglio, ed è stata scelta contro le
+altre due per la regola della casa — *dove il checker esiste, la definizione
+si legge da lì*:
+
+| Aggregazione | Sul testimone | Perché no / sì |
+|---|---:|---|
+| somma delle firme | 360 | direbbe 360 dove il checker dice 180: il numero dipenderebbe da quante firme ha il dataset |
+| somma pesata per settimane | 5940 | è la quantità **annuale**: vera, ma di un'altra unità — e `--tolleranza` è un numero che l'utente scrive nell'unità del criterio |
+| **massimo fra le firme** | **180** | è il numero che `check_schedule` conta, per la settimana in cui lo conta |
+
+⚠ Il prezzo, dichiarato: sul massimo, migliorare una firma che non è la
+peggiore non muove il livello. È meno grave di quanto sembri — il massimo
+trascina comunque tutte le firme fino al proprio pavimento — ma all'ottimo una
+firma già sotto non ha più incentivo a scendere.
 
 ⚠ E il testimone ha un **ramo di controllo**, per la ragione che l'ondata 5 ha
-imparato a sue spese: con la metà di teoria non piazzata l'unione diventa
-0-1-3, il buco c'è anche lì e il criterio dice **180** (tre chiavi: la classe e
-le sue due parti IRC/alternativa, che `chiavi_di` conta per conto proprio).
-Senza quel ramo, uno zero da criterio spento e uno zero da firma di settimana
-si somiglierebbero troppo.
+imparato a sue spese. Togliendo la metà di **laboratorio** le due settimane
+smettono di somigliarsi: le pari restano con 0 e 3 (due buchi), le dispari con
+0, 2, 3 (uno solo), e il criterio dice **360**, cioè la peggiore. Sull'unione
+avrebbe detto 180. È la prova che le firme adesso si contano una per una, e
+non che il criterio conti *qualcosa*. (180 per ora di buco, e non 60, perché
+le chiavi sono tre: la classe e le sue due parti IRC/alternativa, che
+`chiavi_di` conta per conto proprio.)

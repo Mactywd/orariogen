@@ -74,21 +74,81 @@ def test_min_distribution_morde():
 
 
 def test_free_guaranteed_non_regala_mezze_giornate_dei_giorni_vuoti():
-    """La trappola, dritta. Griglia 5x6 con meta' giornata a 4; una sola
-    attivita', quindi quattro giorni su cinque sono **completamente** vuoti.
+    """La trappola, dritta. Il checker conta le mezze giornate libere solo sui
+    giorni **con** attivita': un builder che le sommasse su tutti i giorni
+    conterebbe anche i giorni vuoti, e dichiarerebbe soddisfatto un vincolo
+    che il checker boccia.
 
-    Il checker conta le mezze giornate libere solo sui giorni con attivita':
-    con una sola attivita' ce n'e' esattamente **una** (l'altra meta' del
-    giorno in cui si lavora). Un builder che sommasse su tutti i giorni ne
-    conterebbe nove, e dichiarerebbe soddisfatto un vincolo che il checker
-    boccia. Chiediamo tre mezze giornate libere: dev'essere INFEASIBLE."""
+    ⚠ **Il testimone e' cambiato con L8** (2026-08-31), e il vecchio non
+    varrebbe piu': era una sola attivita' e quattro giorni vuoti, e da L8 la
+    soglia effettiva e' `min(richieste, giorni lavorati)` — con un giorno
+    lavorato chiedere tre mezze giornate libere non e' piu' insoddisfacibile,
+    e' una pretesa che si accorcia. Il testimone giusto e' quindi uno in cui i
+    **giorni bastano** e le mezze giornate no.
+
+    Griglia 5x6 con la meta' a 4 (mattina 0-3, pomeriggio 4-5), due giorni
+    chiusi da un'indisponibilita': restano tre giorni, cioe' esattamente le
+    tre mezze giornate richieste, e la soglia non si accorcia. Quindici
+    attivita' in tre giorni: dodici stanno nelle mattine, le altre tre
+    obbligano il pomeriggio, e un pomeriggio ne regge due — quindi almeno due
+    giornate lavorano **entrambe** le mezze e le mezze libere sono al piu' una.
+    Dev'essere INFEASIBLE; sommando anche i giorni vuoti farebbe 1 + 2x2 = 5, e
+    passerebbe."""
     env = mini_school()
-    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    for giorno in (3, 4):
+        for slot in range(6):
+            ResourceUnavailability.objects.create(
+                resource=env["klass"], day=giorno, slot=slot,
+                level=ResourceUnavailability.Level.HARD)
+    for _ in range(15):
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]])
     ResourceTimeConstraint.objects.create(
         resource=env["klass"], type=T.FREE_GUARANTEED,
         params={"free_half_days": 3})
     soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
     assert soluzione.status == "INFEASIBLE", soluzione.stats
+
+
+def test_l8_la_soglia_non_pretende_piu_di_quanto_i_giorni_offrano():
+    """🔑 **L8**: una mezza giornata libera conta solo su un giorno lavorato, e
+    un giorno lavorato ne offre al piu' una — quindi chiedere tre mezze
+    giornate libere a chi lavora **un** giorno solo e' una pretesa che nessun
+    orario puo' onorare.
+
+    Fino al 2026-08-31 il modello rispondeva `INFEASIBLE`, ed era il difetto:
+    una famiglia che conta una quantita' *sui giorni in cui si lavora* poteva
+    diventare insoddisfacibile **perche' si lavora meno**, e li' lo scarto non
+    salvava. La soglia effettiva e' ora `min(richieste, giorni lavorati)`.
+
+    ⚠ Non e' un'attenuazione: cio' che resta preteso e' il **massimo
+    ottenibile** — ogni giorno lavorato con una mezza giornata libera — ed e'
+    il ramo di controllo qui sotto."""
+    env = mini_school()
+    make_activity(env["subject"], teachers=[env["teacher"]],
+                  classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED,
+        params={"free_half_days": 3})
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    apply(soluzione, env["schedule"])
+    assert violazioni(env["schedule"], {"free_guaranteed"}) == set()
+
+    # Il ramo di controllo: il massimo ottenibile resta preteso. Con cinque
+    # attivita' sullo stesso giorno — l'unico ammesso — la mattina e il
+    # pomeriggio si riempiono entrambi, la mezza giornata libera non c'e' piu'
+    # e la soglia (uno) morde.
+    for giorno in range(1, 5):
+        for slot in range(6):
+            ResourceUnavailability.objects.create(
+                resource=env["klass"], day=giorno, slot=slot,
+                level=ResourceUnavailability.Level.HARD)
+    for _ in range(5):
+        make_activity(env["subject"], teachers=[env["teacher"]],
+                      classes=[env["klass"]])
+    stretto = solve(env["schedule"], time_limit=30, allow_unplaced=False)
+    assert stretto.status == "INFEASIBLE", stretto.stats
 
 
 def test_free_guaranteed_soddisfacibile_resta_soddisfacibile():

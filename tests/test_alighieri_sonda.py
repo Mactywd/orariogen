@@ -62,6 +62,7 @@ ATTIVI = {
     S.PARTS_BEFORE_OR_AFTER_CLASS_H, S.PARTS_BEFORE_OR_AFTER_CLASS_AB,
     "structural:unavailability",    # ondata 5: sei righe, tre livelli
     "structural:didactic_weight",   # ondata 5: i tre tetti d'istituto
+    "structural:alignment",         # L5: i sedici allineamenti
 }
 
 

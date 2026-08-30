@@ -76,7 +76,7 @@ def test_structural_room_assignment_non_ha_un_builder_ed_e_voluto():
 
 
 def test_il_registro_dei_builder_e_completo():
-    """Ventisette chiavi su trenta. I numeri sono scritti qui apposta: se
+    """Ventotto chiavi su trentuno. I numeri sono scritti qui apposta: se
     un checker nuovo entra in `domain/analysis` senza il builder
     corrispondente, questo test lo dice per nome."""
     senza_builder = {"structural:coverage", "structural:placement",
@@ -84,5 +84,5 @@ def test_il_registro_dei_builder_e_completo():
     mancanti = sorted(str(k) for k in CHECKERS
                       if k not in BUILDERS and k not in senza_builder)
     assert mancanti == []
-    assert len(CHECKERS) == 30
-    assert len(BUILDERS) == 27
+    assert len(CHECKERS) == 31
+    assert len(BUILDERS) == 28

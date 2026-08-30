@@ -109,22 +109,54 @@ delle due. Il monte ore quadra e l'orario è corretto; è la riga di bilancio a
 essere una finzione. Non è un difetto trovato dall'orario — è una forma che il
 nostro modello non ha, e va scritta perché non venga scoperta come sorpresa.
 
-## ⚠ Il difetto che l'ondata 2 ha trovato: l'allineamento
+## 🔑 L'allineamento: il difetto dell'ondata 2, chiuso il 2026-08-31
 
 📦 Lo XSD `Partenaire_Index` dichiara che **l'allineamento genera l'attività
 complessa**: in EDT le attività allineate sono **una** collocazione. Da noi
-`Activity.alignment_ident` è un campo, e **nessun builder e nessun checker lo
-legge**.
+`Activity.alignment_ident` è stato per mesi un campo che **nessun builder e
+nessun checker leggeva**, e la misura sul solve completo era impietosa: dei 16
+allineamenti dichiarati, **14 uscivano senza una sola coincidenza** — i due
+livelli d'inglese su sei celle diverse, il latino e l'informatica della 2C mai
+in parallelo, cioè metà classe a scuola in un'ora in cui non ha lezione.
 
-Il dataset dichiara **16 allineamenti** su 40 attività — le dodici coppie
-IRC/alternativa, il latino contro l'informatica della 2C, le due ore di
-laboratorio di 3A e 4A, i due livelli di inglese. Misurato sul solve completo:
-**14 su 16 escono senza una sola coincidenza.** I due livelli di inglese finiscono su sei celle
-diverse, e il latino e l'informatica della 2C non sono mai in parallelo — cioè
-metà classe resta a scuola in un'ora in cui non ha lezione.
+È **L5**, ed è chiuso: `structural:alignment` è il ventottesimo builder, e il
+checker gemello nomina la coppia in disaccordo (`alignment_split`). Il gruppo
+si piazza **tutto sulla stessa cella o niente**, che è ciò che «una sola
+attività complessa» significa; se il dominio comune è vuoto il gruppo si
+scarta, e non rende infattibile il modello.
 
-⚠ **Non si ripara nel dataset**, e la spec lo dice a chiare lettere (§8,
-*nessuna modifica al motore*): un dataset che si aggiusta per far passare un
-test non prova più niente. È un debito, sta in [todo.md](../../docs/todo.md), e
-`tests/test_alighieri_gruppi.py` fissa il comportamento sbagliato perché
-diventi rosso il giorno in cui si chiude.
+### ⚠ E leggendo il campo si è visto che il dataset diceva due cose false
+
+Nessuna delle due era una svista di battitura: erano due letture sbagliate
+della stessa riga dello XSD, invisibili finché nessuno la leggeva.
+
+1. **Sdoppiare non è allineare.** L'ondata 2 aveva scritto `3A-LABSCI` sulle
+   due metà del laboratorio. Ma le due metà hanno lo **stesso docente** e non
+   sono mai simultanee — il docente quell'ora la fa **due volte**, ed è il
+   costo dello sdoppiamento. Allinearle è insoddisfacibile per costruzione.
+   È lo stesso argomento con cui l'ondata 6 aveva rifiutato di allineare
+   l'ora quindicinale: *alternare non è allineare*. Le due righe ora hanno
+   l'allineamento vuoto.
+2. **Un ident per attività complessa, non per coppia di servizi.** 📦 *«il
+   convient de définir autant d'alignements que de cours complexes
+   souhaités»*: tre ore di latino parallele a tre di informatica sono **tre**
+   attività complesse, non una da sei ore. Con un ident solo il modello le
+   fondeva tutte e sei sulla stessa fascia, e ne scartava quattro. Ora la
+   tabella dichiara l'ident della **famiglia** e il fixture lo numera per ora
+   (`2C-ART-1`, `-2`, `-3`).
+
+Dopo le due correzioni: **36 attività allineate, 18 ident**, e il solve chiude
+`OPTIMAL` a zero scarti con **18 gruppi su 18 coincidenti**.
+
+### ⚠ E ha fatto emergere una terza incoerenza, che era del dato e non del codice
+
+L'articolata dichiara latino e informatica *nelle stesse tre ore*. Onorato
+l'allineamento, quelle tre ore sono le tre di RICCI — lo spezzone di
+informatica, tre ore in un pomeriggio solo — e tre ore di latino nello stesso
+pomeriggio pesano **6** contro il tetto di **5** del peso didattico. Tre
+affermazioni del banco, ciascuna deliberata, erano insieme impossibili.
+
+Lo spezzone di RICCI è ora su **due** pomeriggi — due fasce il mercoledì e una
+il venerdì. Il bordo non si è mosso: tre fasce libere per tre ore, e una fascia
+rossa in più e l'orario non esiste (la tacca dell'ondata 3 si è spostata da
+`(2, 7)` a `(4, 7)`).

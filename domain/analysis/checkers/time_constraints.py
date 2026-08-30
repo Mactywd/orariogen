@@ -137,7 +137,29 @@ class FreeGuaranteedChecker(_TimeChecker):
     piazzando, ma `free_half_days` si conta solo sui giorni **con** attività:
     occupare un giorno prima vuoto *aggiunge* una mezza giornata
     libera. La stessa asimmetria che ha costretto `FreeGuaranteedBuilder` alla
-    disgiunzione reificata. Vedi `admissible_starts`."""
+    disgiunzione reificata. Vedi `admissible_starts`.
+
+    🔑 **E la soglia è quella raggiungibile, non quella scritta** — L8, chiuso
+    il 2026-08-31. Una mezza giornata libera conta solo su un giorno
+    **lavorato** (`libera = attivo AND NOT metà`), e un giorno lavorato ne può
+    offrire al più una: il conteggio non supera mai il numero di giorni
+    lavorati. Ne discendeva che una riga «due mezze giornate libere» diventava
+    insoddisfacibile **perché si lavora meno** — spenta la palestra, il
+    docente di scienze motorie restava con un giorno solo, e il modello
+    rispondeva `INFEASIBLE` invece di scartare le ore che non ci stavano. Una
+    famiglia che conta una quantità *sui giorni in cui si lavora* non può
+    pretendere più di quanto quei giorni offrano.
+
+    La soglia effettiva è quindi `min(richieste, giorni lavorati)`. Dove i
+    giorni bastano — cioè ovunque la riga fosse soddisfacibile — non cambia
+    nulla; dove non bastano chiede il massimo che *può* essere dato, che è
+    ogni giorno lavorato con una mezza giornata libera. ⚠ Non è
+    un'attenuazione della garanzia: è la garanzia detta senza la parte che
+    nessun orario potrebbe onorare.
+
+    ⚠ `free_days` non ha lo stesso problema e non prende lo stesso
+    trattamento: lavorare meno *aumenta* i giorni liberi, quindi quel minimo
+    non è mai reso irraggiungibile dallo scarto."""
     TYPE = T.FREE_GUARANTEED
     PLACEMENT_MONOTONE = False
 
@@ -147,13 +169,15 @@ class FreeGuaranteedChecker(_TimeChecker):
         for day, slots in days.items():
             morning, afternoon = _halves(state, slots)
             free_halves += (not morning) + (not afternoon)
+        min_mezze = row.params.get("free_half_days", 0)
+        soglia_mezze = min(min_mezze, len(days))
         short_days = len(free_days) < row.params.get("free_days", 0)
-        short_halves = free_halves < row.params.get("free_half_days", 0)
+        short_halves = free_halves < soglia_mezze
         if short_days or short_halves:
             yield _finding(state, "free_guaranteed", row,
                            free_days=len(free_days), free_half_days=free_halves,
                            min_free_days=row.params.get("free_days", 0),
-                           min_free_half_days=row.params.get("free_half_days", 0))
+                           min_free_half_days=min_mezze)
 
 
 @register(T.MAX_HALF_DAYS)

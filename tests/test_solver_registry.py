@@ -61,7 +61,11 @@ def test_i_builder_tradotti_finora():
     Dal 2026-08-29 c'e' anche `structural:room_pool` (ADR-021), che e' il
     ventisettesimo: il picco d'occupazione del **gruppo di aule**, cioe' le
     aule **contate** dalla fase 1. Contarle non e' assegnarle — quella resta
-    la seconda fase, e `structural:room_assignment` resta senza builder qui."""
+    la seconda fase, e `structural:room_assignment` resta senza builder qui.
+
+    Dal 2026-08-31 il ventottesimo e' `structural:alignment` (L5): l'ident di
+    allineamento genera l'**attivita' complessa**, cioe' una collocazione
+    sola. Era un campo dello schema che nessun builder leggeva."""
     from domain.models import ResourceTimeConstraint, SubjectConstraint
     all_builders()
     assert set(BUILDERS) == {
@@ -69,6 +73,7 @@ def test_i_builder_tradotti_finora():
         "structural:unavailability",
         "structural:occupation",
         "structural:room_pool",
+        "structural:alignment",
         "structural:site_transition",
         "structural:didactic_weight",
         ResourceTimeConstraint.Type.MAX_GAP_HOURS,

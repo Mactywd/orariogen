@@ -940,6 +940,14 @@ che la fase 1 le lascia, perché non ha altra mossa.
   (`RoomContext._filtra`): resta quindi un angolo in cui la fase 1 può
   riempire una fascia che la fase 2 non serve. Nessun dato lo esercita — è un
   debito, → [todo.md](todo.md).
+  ✅ **Corretto il 2026-08-31 (L6bis).** L'ondata 5 dell'Alighieri il dato lo
+  ha costruito, e il debito è diventato una rinuncia misurata. La gialla ora
+  azzera il posto come la rossa, nel checker e nel builder; il builder legge
+  l'override per **categoria** di risorsa (`ignora_opzionali`), lo stesso che
+  legge la fase 2, il checker no — legge un orario, non i parametri di un
+  calcolo. L'argomento che teneva la vecchia lettura («un finding HARD per un
+  ostacolo che duro non è») si rovescia guardando chi paga: l'ostacolo è duro
+  *finché non lo si autorizza*.
 - L'assegnata non conta come fissa: `Placement.assigned_room` è una
   ripartizione rivedibile — `solve_rooms` la tratta da preferenza, non da
   vincolo — quindi contarla inventerebbe deficit che la fase 2 scioglie da
@@ -947,3 +955,162 @@ che la fase 1 le lascia, perché non ha altra mossa.
   consuma.
 
 **Data.** 2026-08-29
+
+---
+
+## ADR-022 — L'allineamento genera l'attività complessa: una collocazione, o nessuna
+
+**Decisione.** Le attività che condividono `alignment_ident` sono **una**
+collocazione. Il modello lo impone con `structural:alignment` (ventottesimo
+builder, trentunesimo checker): tutti i membri del gruppo sulla **stessa
+cella**, o tutti **scartati**. È un vincolo **hard** e **non alleggeribile**.
+
+**Alternative scartate.**
+
+1. **«La stessa cella *se* entrambe piazzate».** È la forma debole, e sarebbe
+   soddisfatta anche dal gruppo mezzo scartato — cioè dalla stessa mezza
+   classe che resta a scuola senza lezione, che è il danno da cui l'intera
+   decisione nasce. Lo XSD non lascia spazio: i corsi allineati *seront
+   regroupés au sein d'un même cours complexe*, e un'attività si piazza o si
+   scarta, non a metà.
+2. **Una famiglia alleggeribile**, con una quota come le altre. Alleggerire un
+   allineamento significherebbe **scomporre l'attività complessa**, cioè
+   cambiare l'anagrafica e non un vincolo. EDT infatti non lo elenca fra le
+   famiglie che il piazzamento può allentare.
+3. **Vietare le durate diverse dentro un ident.** Lo XSD dà all'attività
+   complessa una durata sola, quindi il caso non dovrebbe esistere; se esiste
+   nel dato, l'intersezione dei domini fa già la cosa giusta (la più lunga
+   restringe l'inizio comune) e non serve inventare un divieto che
+   l'anagrafica non dichiara.
+4. **Un finding sul gruppo intero** invece che sulle coppie. Più leggibile e
+   **non monotono**: piazzare un terzo membro *sulla cella giusta*
+   allargherebbe `activities`, cambierebbe la `Finding.key` e
+   `admissible_starts` leggerebbe la cella corretta come inammissibile. Una
+   voce per coppia in disaccordo è monotona per costruzione.
+
+**Motivo.** 📦 L'annotazione dello XSD `Partenaire_Index` su `Alignement` è
+testuale (→ [schema-scambio.md](edt/schema-scambio.md)), e il campo esisteva
+dal giorno dello schema senza che nessun builder né checker lo leggesse: dei
+16 allineamenti del banco Alighieri, **14 uscivano dal solve senza una sola
+coincidenza**. Non è cosmetico — è la condizione perché gli sdoppiamenti (voce
+✅ di scope v1, [ADR-013](#adr-013--sdoppiamenti-e-raggruppamenti-trasversali-dentro-v1))
+producano orari usabili.
+
+**Conseguenze, e due sono sul dato.** Un dominio comune vuoto fa **scartare**
+il gruppo, mai `INFEASIBLE` (con `allow_unplaced=False` diventa `INFEASIBLE`,
+ed è la domanda «questo vincolo morde?»); congelate in disaccordo fanno saltare
+il vincolo, per la metà vietata di
+[ADR-018](#adr-018--linput-sporco-non-blocca-il-solver-capacità-residua-e-oracolo-differenziale).
+E leggere il campo ha reso visibile che il banco ne dichiarava di falsi:
+*sdoppiare non è allineare* (le due metà hanno lo stesso docente e non sono mai
+simultanee), e **un ident per attività complessa** e non per coppia di servizi
+— 📦 *«il convient de définir autant d'alignements que de cours complexes
+souhaités»*.
+
+**Data.** 2026-08-31
+
+---
+
+## ADR-023 — Il vincolo di sede è un tetto di capienza: un insieme non viaggia
+
+**Decisione.** `structural:site_transition` non vieta più che due sedi diverse
+tocchino la stessa chiave di occupazione a distanza insufficiente: chiede che i
+due carichi **ci stiano**, `carico(sa, s) + carico(sb, t) <= capienza
+simultanea`. Il checker conta con la stessa disuguaglianza.
+
+**Alternative scartate.**
+
+1. **Esentare le chiavi con `simultaneous_capacity > 1`.** Era il candidato
+   naturale — *un pool non viaggia* — ed è quello che il debito nominava. Ma
+   vale anche per l'aula col `Numero di aule` di EDT, che invece un luogo ce
+   l'ha, e un'esenzione secca toglierebbe il vincolo dove serve.
+2. **Esentare per tipo di risorsa** (aule e materiali non viaggiano, docenti e
+   classi sì). Toglie il vincolo alle aule senza metterci niente al posto, e
+   il tipo non è la proprietà giusta: la sede è dell'**attività**, non della
+   risorsa.
+3. **La condizione esatta su tutta la finestra di trasferimento** invece che a
+   coppie. Più stretta e più giusta, ma cambia la forma del vincolo (oggi è a
+   coppie, come il checker); la forma a coppie è più larga, ed è il verso in
+   cui un checker non inventa violazioni.
+
+**Motivo.** Il tragitto lo fa un **corpo**, e una chiave a capienza cumulativa
+è un *insieme*: quattro carrelli di portatili sono della scuola, non di un
+edificio, e servono l'inglese alla centrale mentre l'informatica è in
+succursale senza che nessuno si sposti. La domanda «due sedi si toccano?» è
+sbagliata per un insieme; quella giusta è «ci stanno?».
+
+🔑 **E la generalizzazione risolve l'obiezione dell'alternativa 1 da sé.** A
+capienza 1 — ogni docente, classe, parte, atomo — la nuova regola coincide
+**riga per riga** con la clausola booleana di prima: due carichi valgono almeno
+2, la capienza è 1, la coppia resta sempre vietata. Cambiano solo le due
+risorse per cui la vecchia regola diceva il falso.
+
+**Conseguenze.** Il ramo `s == t` (la riparazione «Important 1 / Ruling 33»)
+è ora **implicato** da `structural:occupation` — il carico di un sottoinsieme
+di una cella non può superare la capienza se il totale non la supera — e resta
+postato solo perché ogni builder dev'essere corretto da solo.
+
+⚠ **E la guardia di ADR-018 resta, generalizzata**: il tetto non si posta
+quando le **sole congelate** lo hanno già superato. La prima stesura la tolse
+credendo che `residual_cap` la contenesse, e il banco che congela ha detto di
+no (semi 6 e 9, `INFEASIBLE` sulla prova A): col residuo clampato a zero, ogni
+**libera** viene cacciata dalle celle in cui la coppia è già rotta — comprese
+quelle in cui già stava. 🔑 La differenza con `structural:occupation`, che
+invece clampa e fa bene, è la forma del finding: là la causale nomina *tutte*
+le attività della cella, quindi una libera che si aggiunge cambia la chiave;
+qui nomina una **coppia**, e la coppia (libera, congelata) esisteva già nella
+baseline.
+
+⚠ **[ADR-019](#adr-019--dentro-una-fascia-non-si-viaggia-il-cambio-di-sede-e-il-pareggio-di-collocazione)
+resta intatto e ne esce rafforzato**: *dentro una fascia non si viaggia* diceva
+che due sedi simultanee valgono zero **cambi**, e aggiungeva che l'impossibilità
+la nomina comunque `structural:site_transition`. La prima metà è confermata; la
+seconda era vera solo a capienza 1, ed è ora detta con la disuguaglianza giusta.
+
+**Data.** 2026-08-31
+
+---
+
+## ADR-024 — Un criterio di qualità vale quanto la settimana peggiore
+
+**Decisione.** I criteri di qualità (`domain/solver/criteria.py`) si calcolano
+**per firma di settimana**, e il valore del livello è il **massimo** fra le
+firme. Le firme con le stesse attività attive *sulle chiavi del criterio* si
+deduplicano, come in `ResourceBuilder`.
+
+**Alternative scartate.**
+
+1. **L'unione delle settimane**, cioè lo status quo. È il difetto: un'ora
+   quindicinale col laboratorio alla seconda fascia e la teoria alla terza dà
+   un buco in *ogni* settimana e **zero** sull'unione, perché nell'unione le
+   fasce sono contigue. Lo stesso orario valeva 60 minuti per `check_schedule`
+   e 0 per il criterio `gaps`.
+2. **La somma sulle firme.** Direbbe 360 dove il checker dice 180, e farebbe
+   dipendere il valore da **quante firme ha il dataset** invece che da com'è
+   l'orario.
+3. **La somma pesata per il numero di settimane.** È la quantità **annuale**:
+   vera, e con il gradiente migliore dei tre. Ma è di un'altra unità, e
+   `Arbitrato.tolleranza` è un numero **nell'unità del criterio** che l'utente
+   scrive a mano — «tollero 60 minuti» diventerebbe «tollero 1980».
+
+**Motivo.** La regola della casa: *dove il checker esiste, la definizione si
+legge da lì*. Il checker produce un verdetto **per firma** e porta le settimane
+in un campo a parte (`Finding.weeks`); la sua unità è la settimana, e 180 è il
+numero che conta. Un criterio che ne dicesse un altro misurerebbe qualcos'altro
+— è la stessa ragione per cui `B`, nei rami disgiuntivi di
+[ADR-018](#adr-018--linput-sporco-non-blocca-il-solver-capacità-residua-e-oracolo-differenziale),
+si **legge** chiamando il checker invece di riscriverne la condizione.
+
+**⚠ Il prezzo, dichiarato.** Sul massimo, migliorare una firma che non è la
+peggiore non muove il livello. È meno grave di quanto sembri — il massimo
+trascina comunque tutte le firme fino al proprio pavimento — ma all'ottimo una
+firma già sotto non ha più incentivo a scendere.
+
+**⚠ E il costo moltiplicativo non si paga.** Era la ragione con cui
+`quality.py` giustificava l'approssimazione (*«le firme sono una dimensione
+moltiplicativa e un anno reale ne ha 35-40»*): con la deduplicazione, su un
+dataset a **firma unica** — cioè ogni dataset senza corsi quindicinali né
+sostituzioni — non nasce nemmeno una variabile in più e non cambia nessun
+numero.
+
+**Data.** 2026-08-31

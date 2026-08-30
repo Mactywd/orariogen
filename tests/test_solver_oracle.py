@@ -33,6 +33,10 @@ CODICI = {
     "unavailability",
     "slot_out_of_grid", "break_straddled", "holiday",
     "site_transition",
+    # l'allineamento (L5, ADR-022): il solver sceglie la cella, quindi due
+    # allineate che finiscono in celle diverse sono un finding **nuovo** che
+    # questo oracolo deve vedere.
+    "alignment_split",
     # il picco del **gruppo di aule** (ADR-021): la fase 1 le conta, quindi
     # e' questo oracolo a sorvegliarlo — non quello della seconda fase, che
     # sorveglia invece *quale* aula viene assegnata (`room_unassigned`).

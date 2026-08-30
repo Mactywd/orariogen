@@ -37,7 +37,8 @@ import pytest
 from domain.analysis.conformity import check_schedule
 from domain.analysis.findings import Severity
 from domain.models import (
-    RelaxationQuota, ResourceTimeConstraint, ResourceUnavailability, Teacher,
+    Activity, RelaxationQuota, ResourceTimeConstraint, ResourceUnavailability,
+    Teacher,
 )
 from domain.solver.model import apply, solve
 from tests import alighieri
@@ -50,15 +51,24 @@ def _quota(famiglia, abbr):
         family=famiglia, resource=Teacher.objects.get(abbreviation=abbr))
 
 
-def _tensione_donati():
-    """R02 viene **due giorni**: dodici ore non stanno in due mezze giornate.
+def _tensione_bruni():
+    """La tensione del `MG`: **una** giornata con entrambe le mezze, imposta.
 
-    Con il `MG` — mai mattina *e* pomeriggio nello stesso giorno — due giornate
-    danno al più due mattine, cioè dieci fasce per dodici ore. Derogare una
-    volta sola apre un pomeriggio: 5 + 5 + 3 = 13, e ci stanno."""
-    ResourceTimeConstraint.objects.create(
-        resource=Teacher.objects.get(abbreviation="DONAT"),
-        type=ResourceTimeConstraint.Type.MAX_PRESENCE, params={"days": 2})
+    P02 non lavora mai mattina *e* pomeriggio nello stesso giorno. Pinnare due
+    delle sue ore al martedì — una alla prima fascia e una alla settima —
+    chiede esattamente una violazione: la deroga ne perdona una, e senza non
+    c'è orario.
+
+    ⚠ La tensione è un **pin** e non un secondo vincolo, ed è la forma
+    dell'ondata 4 riusata qui: una riga di presenza («viene due giorni»)
+    direbbe la stessa cosa sull'aritmetica del `MG`, ma per P02 sarebbe
+    infattibile per un'altra ragione — dodici ore di scienze motorie in due
+    giornate non stanno nella palestra, che è una sola e la divide con P01.
+    Misurato: `INFEASIBLE` anche con la deroga. Un testimone che fallisce per
+    la ragione sbagliata non misura la quota."""
+    bruni = Teacher.objects.get(abbreviation="BRUNI")
+    sue = list(Activity.objects.filter(teachers=bruni).order_by("pk"))
+    return {sue[0].pk: (1, 0), sue[1].pk: (1, 6)}
 
 
 def _tensione_colombo(minuti=240):
@@ -103,7 +113,7 @@ def test_le_due_righe_ci_sono_e_sono_le_due_forme():
     alighieri.build()
     righe = RelaxationQuota.objects.all()
     assert righe.count() == 2
-    deroga = _quota(RelaxationQuota.Family.HALF_DAYS, "DONAT")
+    deroga = _quota(RelaxationQuota.Family.HALF_DAYS, "BRUNI")
     assert deroga.params == {} and deroga.max_violations == 1
     margine = _quota(RelaxationQuota.Family.MAX_PRESENCE, "COLOM")
     assert margine.params == {"margine": 180} and margine.max_violations == 2
@@ -128,23 +138,24 @@ def test_il_dataset_non_le_consuma():
     assert [f.code for f in hard] == ["room_unassigned"] * 73
 
 
-def test_la_deroga_rimette_in_piedi_il_mg_di_donati():
-    """La **deroga**: senza, dodici ore in due mattine non ci stanno."""
+def test_la_deroga_rimette_in_piedi_il_mg_di_bruni():
+    """La **deroga**: senza, la giornata imposta a due mezze non esiste."""
     env = alighieri.build()
-    _tensione_donati()
-    _quota(RelaxationQuota.Family.HALF_DAYS, "DONAT").delete()
+    pin = _tensione_bruni()
+    _quota(RelaxationQuota.Family.HALF_DAYS, "BRUNI").delete()
     senza = solve(env["schedule"], workers=8, allow_unplaced=False,
-                  time_limit=120)
+                  time_limit=120, pinned=pin)
     assert senza.status == "INFEASIBLE", senza.stats
 
 
 def test_e_con_la_deroga_ci_stanno():
-    """L'altra metà: con la deroga R02 fa mattina **e** pomeriggio una volta,
+    """L'altra metà: con la deroga P02 fa mattina **e** pomeriggio una volta,
     e le dodici ore ci stanno. Le due metà insieme dicono che a rimettere in
     piedi il dataset è **quella riga**, non un caso della ricerca."""
     env = alighieri.build()
-    _tensione_donati()
-    con = solve(env["schedule"], workers=8, allow_unplaced=False, time_limit=120)
+    pin = _tensione_bruni()
+    con = solve(env["schedule"], workers=8, allow_unplaced=False,
+                time_limit=120, pinned=pin)
     assert con.status == "OPTIMAL", con.stats
 
 
@@ -158,14 +169,14 @@ def test_la_deroga_consumata_resta_una_violazione_nominata():
     consumate dalla base: l'ondata 3 pretende che l'orario di base non porti
     finding `HARD` oltre alle aule."""
     env = alighieri.build()
-    _tensione_donati()
+    pin = _tensione_bruni()
     soluzione = solve(env["schedule"], workers=8, allow_unplaced=False,
-                      time_limit=120)
+                      time_limit=120, pinned=pin)
     assert soluzione.status == "OPTIMAL"
     apply(soluzione, env["schedule"])
-    donati = Teacher.objects.get(abbreviation="DONAT")
+    bruni = Teacher.objects.get(abbreviation="BRUNI")
     codici = {f.code for f in check_schedule(env["schedule"])
-              if f.severity == Severity.HARD and donati.pk in f.resources}
+              if f.severity == Severity.HARD and bruni.pk in f.resources}
     assert "only_half_day" in codici, codici
 
 

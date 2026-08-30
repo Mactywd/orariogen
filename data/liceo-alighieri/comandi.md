@@ -63,7 +63,7 @@ D.T.B. non c'entra», che è il consiglio sbagliato dato in silenzio.
 | | esito |
 |---|---|
 | dataset base | **nessun** insieme deficiente |
-| `LAB-SUCC` ridotto al solo mercoledì | **1** insieme, risorsa satura `LAB-SUCC` |
+| `LAB-SUCC` ridotto al solo mercoledì | **2** insiemi, uno dentro l'altro |
 
 La prima riga è un atteso e non un contorno: la fase 5 dimostra
 l'*impossibilità*, e un dataset che il solver risolve non può contenerne una.
@@ -83,6 +83,24 @@ il sottoinsieme che dimostra l'impossibilità.
 🔑 Ed è il verdetto più utile dei due. *«Mancano tre ore»* non dice dove
 guardare; *«queste nove hanno in comune otto ore di finestra»* nomina il gruppo
 da spezzare.
+
+### 🔑 E dal 2026-08-31 i certificati sono due, uno **dentro** l'altro
+
+Chiudendo L5 lo spezzone di RICCI è passato da un pomeriggio a due (tre ore
+restano tre ore: vedi [gruppi.md](gruppi.md)). Col laboratorio chiuso il
+venerdì, la fascia che RICCI e il laboratorio hanno in comune si riduce a
+**due** celle del mercoledì, e le tre ore d'informatica del 2C_APP diventano un
+secondo insieme deficiente:
+
+| Insieme | Risorsa satura | Attività | Richiesti | Piazzabili |
+|---|---|---:|---:|---:|
+| il grosso | `LAB-SUCC` | 9 | 9h00 | 8h00 |
+| **il più stretto** | `2C_APP` | 3 | 3h00 | 2h00 |
+
+Il secondo è un **sottoinsieme** proprio del primo, e il test lo asserisce come
+tale: non sono due problemi, è una riduzione. Ed è il verdetto migliore —
+«queste tre ore, in queste due celle» è più azionabile di «queste nove in
+otto».
 
 ## 3. `Estrai` — i sei rilevatori
 
@@ -218,17 +236,24 @@ può riparare.
 solo docente comincia a scartare.»* È l'ultimo criterio della spec rimasto
 senza verdetto, e tre file del banco lo rimandavano a quest'ondata.
 
-| risorsa spenta | scarti |
-|---|---:|
-| `LAB-SUCC`, il laboratorio unico della succursale | **11** — cioè le attività che lo chiedono |
-| `VITAL` (20 h) | 20 |
-| `COLOM` (12 h) | 12 |
-| `RICCI` (lo spezzone, 3 h) | 3 |
-| `LAB-INF`, `AUL-DIS`, `A101`, `AULA-MAGNA` | 0 |
+| risorsa spenta | scarti prima di L5 | dopo |
+|---|---:|---:|
+| `LAB-SUCC`, il laboratorio unico della succursale | 11 | **14** |
+| `VITAL` (20 h) | 20 | 20 |
+| `COLOM` (12 h) | 12 | 12 |
+| `RICCI` (lo spezzone, 3 h) | 3 | **6** |
+| `LAB-INF`, `AUL-DIS`, `A101`, `AULA-MAGNA` | 0 | 0 |
 
 ⚠ **«Una» aula, non «qualunque»**: l'aula magna non la usa nessuno, e toglierla
 non deve costare niente. Il criterio dice che il banco ha un punto in cui è
 teso, e i punti si misurano.
+
+🔑 **E dal 2026-08-31 il numero non è più «le attività che la chiedono»**: è
+quelle **più le loro allineate**. Le undici ore del laboratorio ne trascinano
+tre di latino, le tre di RICCI altrettante, perché l'attività complessa si
+piazza o si scarta come un corpo solo (L5). Le due colonne misurano quanto
+l'allineamento costa quando una risorsa manca — e la ragione per cui costa è
+la stessa per cui serve.
 
 ### 🔑 Due nozioni diverse di «stretto», e la spec ne dichiarava una sola
 
@@ -246,16 +271,19 @@ La frase «diventerà rosso all'ondata 7» che accompagnava quei due test era
 quindi sbagliata: l'ondata 7 stringe le **risorse**, non la griglia. Corretta
 dove stava scritta.
 
-## 8. ⚠ Misurando il bordo il banco ha trovato **L8**
+## 8. ⚠ Misurando il bordo il banco ha trovato **L8** — chiuso il 2026-08-31
 
-Spegnendo la **palestra** il modello non scarta: risponde `INFEASIBLE`, che è
-ciò che `allow_unplaced=True` dovrebbe rendere impossibile — lo scarto esiste
-proprio perché un'attività che non ci sta non blocchi il calcolo.
+Spegnendo la **palestra** il modello non scartava: rispondeva `INFEASIBLE`,
+che è ciò che `allow_unplaced=True` dovrebbe rendere impossibile — lo scarto
+esiste proprio perché un'attività che non ci sta non blocchi il calcolo.
 
-| | esito |
-|---|---|
-| palestra spenta | **`INFEASIBLE`**, zero scarti |
-| la stessa, tolta la riga `free_guaranteed` | `OPTIMAL`, **10** scarti |
+| | prima | dopo |
+|---|---|---|
+| palestra spenta | **`INFEASIBLE`**, zero scarti | `OPTIMAL`, con gli scarti |
+| la stessa, tolta la riga `free_guaranteed` | `OPTIMAL`, **10** scarti | lo **stesso** numero di scarti |
+
+🔑 La riga non decide più fra un orario e nessun orario, ed è la forma del test
+capovolto: i due rami devono dare lo stesso conto.
 
 La causa è **una sola riga**, isolata togliendone dieci una per volta:
 `free_guaranteed` su P01 Zanetti, il docente di scienze motorie. Con la
@@ -266,14 +294,20 @@ solo su un giorno **lavorato** (`libera = attivo AND NOT meta`), perché è cos�
 che la conta `FreeGuaranteedChecker`, e un giorno interamente vuoto contribuisce
 zero. Con un giorno lavorato il massimo è uno.
 
-🔑 **È l'immagine speculare della trappola che il builder documenta**, e non è
-un errore del builder: contare le mezze libere su tutti i giorni accetterebbe
-orari che il checker boccia, cioè la direzione sbagliata. Il fatto nuovo è la
-**conseguenza**: una famiglia che conta una quantità *sui giorni in cui si
-lavora* può diventare insoddisfacibile **perché si lavora meno**, e lì lo
-scarto non è una via d'uscita. Un prodotto che risponde `INFEASIBLE` invece di
-«queste dieci attività non si piazzano» dà all'utente la diagnosi peggiore
-delle due.
+🔑 **È l'immagine speculare della trappola che il builder documenta**, e non
+era un errore del builder: contare le mezze libere su tutti i giorni
+accetterebbe orari che il checker boccia, cioè la direzione sbagliata. Il
+fatto nuovo era la **conseguenza**: una famiglia che conta una quantità *sui
+giorni in cui si lavora* può diventare insoddisfacibile **perché si lavora
+meno**, e lì lo scarto non era una via d'uscita. Un prodotto che risponde
+`INFEASIBLE` invece di «queste dieci attività non si piazzano» dà all'utente
+la diagnosi peggiore delle due.
+
+La riparazione non tocca il conteggio — quella sarebbe la direzione sbagliata
+— ma la **soglia**: `min(richieste, giorni lavorati)`, nel checker e nel
+builder insieme. Una famiglia che conta sui giorni lavorati non può pretendere
+più di quanto quei giorni offrano, e ciò che chiede resta il massimo
+ottenibile: ogni giorno lavorato con una mezza giornata libera.
 
 ---
 

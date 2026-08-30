@@ -143,4 +143,5 @@ def test_registro_completo():
         "structural:site_transition", "structural:didactic_weight",
         "structural:coverage", "structural:placement",
         "structural:room_assignment", "structural:room_pool",
+        "structural:alignment",
     }

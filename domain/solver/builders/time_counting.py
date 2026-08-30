@@ -356,6 +356,18 @@ class FreeGuaranteedBuilder(ResourceBuilder):
     Percio' `libera` (mezza giornata libera-che-conta) e' congiunta con
     `giorno attivo`: vera solo se il giorno lavora e quella meta' e' scarica.
 
+    🔑 **E da qui viene L8, chiuso il 2026-08-31.** Da `libera = attivo AND
+    NOT meta` discende che il conteggio non supera mai il numero di giorni
+    **lavorati**: un giorno lavorato offre al piu' una mezza libera, e un
+    giorno vuoto zero. Quindi una riga «due mezze giornate libere» diventava
+    insoddisfacibile *perche' si lavora meno* — spenta la palestra, il docente
+    di scienze motorie restava con un giorno solo, e il modello rispondeva
+    `INFEASIBLE` invece di scartare le ore che non ci stavano, che e'
+    precisamente cio' che `allow_unplaced=True` dovrebbe rendere impossibile.
+    La soglia effettiva e' ora `min(richieste, giorni lavorati)`, definita con
+    `AddMinEquality` — una definizione, non un vincolo — e il checker conta
+    allo stesso modo. Dove i giorni bastano non cambia un bit.
+
     ⚠ Niente `if not len(span): continue` sulla meta' vuota (review Task 7,
     Important 1 — corretto qui, non in `MaxHalfDaysBuilder` dove e' giusto
     cosi': li' il checker fa `bool(afternoon)`, che vale 0 su una lista
@@ -442,6 +454,20 @@ class FreeGuaranteedBuilder(ResourceBuilder):
 
         minimo_giorni = row.params.get("free_days", 0)
         minimo_mezze = row.params.get("free_half_days", 0)
+        # L8: la soglia e' quella **raggiungibile** — `min(richieste, giorni
+        # lavorati)`. Una mezza libera conta solo su un giorno lavorato, e un
+        # giorno lavorato ne offre al piu' una: pretendere di piu' rende la
+        # riga insoddisfacibile *perche' si lavora meno*, ed e' cosi' che
+        # spegnere la palestra faceva rispondere INFEASIBLE invece di
+        # scartare. `AddMinEquality` e' una **definizione**, non un vincolo:
+        # dove i giorni bastano il minimo e' la costante di prima.
+        soglia_mezze = minimo_mezze
+        if minimo_mezze:
+            lavorati = sum(v.day_active(key, day, signature=rep)
+                           for day in range(grid.days_per_cycle))
+            soglia_mezze = model.NewIntVar(0, minimo_mezze,
+                                           f"freehalf_soglia_{key}_{rep}")
+            model.AddMinEquality(soglia_mezze, [minimo_mezze, lavorati])
         stato = ctx.states[rep]
         quantita = _quantita_baseline(FreeGuaranteedChecker(), stato, row,
                                       stato.resource_days(key))
@@ -456,7 +482,7 @@ class FreeGuaranteedBuilder(ResourceBuilder):
             if minimo_giorni:
                 model.Add(sum(giorni_liberi) >= minimo_giorni - margine)
             if minimo_mezze:
-                model.Add(sum(mezze_libere) >= minimo_mezze - margine)
+                model.Add(sum(mezze_libere) >= soglia_mezze - margine)
             return
 
         if _status_quo_rappresentabile(ctx, key, rep):
@@ -475,5 +501,5 @@ class FreeGuaranteedBuilder(ResourceBuilder):
             model.Add(sum(giorni_liberi) >= minimo_giorni - margine).OnlyEnforceIf(riparato)
             model.Add(sum(giorni_liberi) >= b_giorni).OnlyEnforceIf(riparato.Not())
         if minimo_mezze:
-            model.Add(sum(mezze_libere) >= minimo_mezze - margine).OnlyEnforceIf(riparato)
+            model.Add(sum(mezze_libere) >= soglia_mezze - margine).OnlyEnforceIf(riparato)
             model.Add(sum(mezze_libere) >= b_mezze).OnlyEnforceIf(riparato.Not())

@@ -481,13 +481,13 @@ tacca, cioè spegnerebbe un test scritto due ondate fa.
 
 | Riga | Forma | Portatore | Perché lì |
 |---|---|---|---|
-| `HALF_DAYS`, 1 violazione | **deroga** | R02 Donati (il `MG`) | il bordo del `MG` sta sulla 2A, non su di lei |
+| `HALF_DAYS`, 1 violazione | **deroga** | R02 Donati (il `MG`) → P02 Bruni da L5 | il bordo del `MG` sta sulla 2A, non sul portatore |
 | `MAX_PRESENCE`, 2 violazioni, `margine` 120 min | **margine** | R01 Colombo (il cappellano) | il bordo di `max_presence` sta su GENTI |
 
 | Contratto | Atteso | Osservato |
 |---|---|---|
 | Base | quote **non consumate**: zero finding nuovi, l'orario di prima | ✅ (+11 variabili, +4 constraint: i builder le leggono) |
-| Deroga, con tensione (`max_presence {days: 2}` su DONAT) | senza quota `INFEASIBLE`, con quota `OPTIMAL` | ✅ |
+| Deroga, con tensione (`max_presence {days: 2}` su DONAT; da L5 un pin su BRUNI) | senza quota `INFEASIBLE`, con quota `OPTIMAL` | ✅ |
 | Deroga consumata | il finding `HARD` **resta**: la quota autorizza, non nasconde | ✅ (`only_half_day`) |
 | Margine, con tensione su COLOM | quota **0** → `INFEASIBLE`, **1** → `INFEASIBLE`, **2** → `OPTIMAL` | ✅, ma la **taratura** era sbagliata — vedi sotto |
 
@@ -903,3 +903,59 @@ delle due.
 
 Non riparato (spec §8), fissato da un test col suo ramo di controllo, aperto
 come **L8** in [`docs/todo.md`](../../docs/todo.md).
+
+---
+
+# 10. I cinque difetti, chiusi il 2026-08-31
+
+Le sette ondate hanno dichiarato cinque difetti e non ne hanno riparato
+nessuno: la spec (§8) vietava di modificare il motore mentre lo si misurava, e
+ogni difetto è rimasto fissato da un test che asseriva il comportamento
+**sbagliato**. Questa sezione chiude il conto. Non è un'ondata e non ha attese
+scritte prima: le attese erano già scritte, ed erano i test da capovolgere.
+
+| Difetto | Trovato | Cosa cambia |
+|---|---|---|
+| **L5** — l'allineamento è un campo che nessuno legge | ondata 2 | `structural:alignment`, ventottesimo builder e trentunesimo checker: tutto il gruppo sulla stessa cella o niente |
+| **L6** — una risorsa senza sede non può servire due sedi | ondata 5 | il vincolo di sede è un tetto di **capienza**, non un divieto: `carico(sa) + carico(sb) <= posti` |
+| **L6bis** — il giallo su un'aula a più candidate costa una rinuncia | ondata 5 | `structural:room_pool` conta il giallo come il rosso, con lo stesso override per categoria della fase 2 |
+| **L7** — i criteri di qualità ignorano le firme di settimana | ondata 6 | i criteri si calcolano per firma; il livello è la **settimana peggiore** |
+| **L8** — lo scarto non è una via d'uscita universale | ondata 7 | la soglia delle mezze giornate libere è `min(richieste, giorni lavorati)` |
+
+⚠ **Quattro correzioni hanno toccato il dataset, e vanno dichiarate come
+tali** — non per far passare un test, ma perché leggere un campo che nessuno
+leggeva ha reso visibile che diceva il falso. Le prime tre stanno in
+[gruppi.md](gruppi.md):
+
+1. le due metà di uno sdoppiamento non sono più allineate (stesso docente, mai
+   simultanee: *sdoppiare non è allineare*, com'era già stato deciso per l'ora
+   quindicinale);
+2. una famiglia di tre ore parallele porta **tre** ident invece di uno — 📦
+   *«autant d'alignements que de cours complexes souhaités»*;
+3. lo spezzone di RICCI è su **due** pomeriggi invece che uno, perché
+   l'articolata parallela, lo spezzone concentrato e il tetto di peso
+   d'indirizzo erano insieme impossibili. Il bordo non si è mosso: tre fasce
+   libere per tre ore.
+
+E la quarta sta in [quindicinale-e-quote.md](quindicinale-e-quote.md):
+
+4. il `MG` è passato da R02 Donati a **P02 Bruni**. Onorato l'allineamento,
+   l'orario dell'insegnante di alternativa *è* quello del cappellano — le
+   stesse dodici celle — e il cappellano viene due giorni: dodici ore in due
+   giornate con una sola mezza giornata ciascuna fanno al più dieci. Il `MG`
+   su Donati aveva smesso di essere un vincolo su di lei per diventarne uno
+   sul cappellano, cioè aveva perso il **soggetto** — che è la condizione con
+   cui il banco sceglie i portatori. La deroga, che è la sua, lo ha seguito, e
+   la sua tensione è diventata un **pin** invece di una riga di presenza.
+
+**Dopo:** 36 attività allineate su 18 ident, tutte coincidenti; due fasi
+`OPTIMAL` senza scarti né rinunce; il registro dei builder a **28 su 31**
+checker.
+
+⚠ E i quattro test capovolti dicono ora una cosa in più di prima: ognuno porta
+il proprio **ramo di controllo**, perché «il difetto non c'è più» da solo è
+soddisfatto anche da un vincolo spento. La capienza dei carrelli scende da 4 a
+3 a 2 (tacca), la fase 1 sul giallo si rimette in piedi con l'override, il
+criterio dei buchi distingue le due firme con il laboratorio tolto, e L8
+pretende che i due rami — con la riga e senza — diano lo **stesso** numero di
+scarti.

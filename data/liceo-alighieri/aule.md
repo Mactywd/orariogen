@@ -78,8 +78,9 @@ sulle aule come sui docenti: `PALESTRA` è rossa il lunedì mattina (concessa
 alla scuola media) e `LAB-SUCC` è gialla nelle prime due ore del lunedì
 (manutenzione).
 
-⚠ **La gialla sta su un'aula a candidata unica, e non per caso.** Su un'aula
-con più candidate — `LAB-INF`, per dire — la fase 1 e la fase 2 leggono
-l'opzionale in modo diverso, e il prezzo è una rinuncia: è il difetto
-**L6bis**, che ha un test suo invece di stare nel dataset. Vedi
-[risorse.md](risorse.md).
+⚠ **La gialla sta su un'aula a candidata unica, e la ragione è cambiata.** Ci
+stava perché su un'aula con più candidate — `LAB-INF`, per dire — la fase 1 e
+la fase 2 leggevano l'opzionale in modo diverso, e il prezzo era una rinuncia:
+il difetto **L6bis**, chiuso il 2026-08-31 facendo contare il giallo anche
+alla fase 1. Resta dov'è perché prova l'interazione col pre-filtro, non più
+perché eviti un difetto. Vedi [risorse.md](risorse.md).

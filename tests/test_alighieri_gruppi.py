@@ -206,29 +206,36 @@ def test_i_due_livelli_invece_convivono(dataset):
 
 # ------------------------------------------------------- ⚠ il debito trovato
 
-def test_l_allineamento_e_un_campo_che_nessuno_legge(dataset):
-    """⚠ **Il difetto che l'ondata 2 ha trovato, ed è del motore.**
+def test_l_allineamento_genera_l_attivita_complessa(dataset):
+    """🔑 **L5, chiuso il 2026-08-31**, ed era il primo difetto che questo
+    banco ha prodotto.
 
     📦 Lo XSD `Partenaire_Index` dichiara che *l'allineamento genera l'attività
     complessa*: in EDT le attività allineate sono **una** collocazione, non due
-    che si somigliano. Da noi `Activity.alignment_ident` è un campo, e nessun
-    builder e nessun checker lo legge — quindi l'IRC e la sua alternativa
-    possono finire in due giorni diversi, e metà classe resta a scuola per
-    un'ora in cui non ha lezione.
+    che si somigliano. Da noi `Activity.alignment_ident` è stato per mesi un
+    campo che nessun builder e nessun checker leggeva — l'IRC e la sua
+    alternativa finivano in due giorni diversi, e metà classe restava a scuola
+    per un'ora in cui non aveva lezione.
 
-    Misurato sul dataset completo (2026-08-30): dei **15** allineamenti
-    dichiarati, **14** escono dal solve senza una sola coincidenza — i due
-    livelli di inglese di 1A/1B sparsi su sei celle diverse, il latino e
-    l'informatica della 2C articolata mai in parallelo.
+    Ora la coppia in disaccordo è un finding `HARD` (`alignment_split`) e il
+    modello la vieta: `structural:alignment`, il ventottesimo builder.
 
-    ⚠ Non si ripara qui: la spec §8 dice *nessuna modifica al motore*, e un
-    dataset che si aggiusta per far passare un test non prova più niente.
-    Questo test **fissa il comportamento sbagliato** perché diventi rosso il
-    giorno in cui il debito si chiude. Vedi `docs/todo.md`."""
+    ⚠ **Il dato è cambiato con il motore, e in due punti** — la lettura ha
+    reso visibile ciò che l'ident diceva davvero. Le due metà dello
+    sdoppiamento non sono più allineate (hanno lo stesso docente: *sdoppiare
+    non è allineare*, come alternare non lo è), e una famiglia di tre ore
+    parallele porta **tre** ident invece di uno, che è la riga dello XSD alla
+    lettera: *autant d'alignements que de cours complexes souhaités*."""
     env = dataset
     allineate = Activity.objects.exclude(alignment_ident="")
-    assert allineate.count() == 40
-    assert len({a.alignment_ident for a in allineate}) == 16
+    assert allineate.count() == 36
+    idents = {a.alignment_ident for a in allineate}
+    assert len(idents) == 18
+    # dodici coppie IRC/alternativa, tre ore d'articolata, tre di livelli
+    assert sum(1 for i in idents if i.startswith("REL-")) == 12
+    assert {i for i in idents if not i.startswith("REL-")} == {
+        "2C-ART-1", "2C-ART-2", "2C-ART-3", "ING1-1", "ING1-2", "ING1-3"}
+    assert {a.alignment_ident for a in _attivita("SCI", parts__name="3A_G1")} == {""}
 
     irc = _attivita("IRC", parts__name="1A_REL").first()
     alt = _attivita("ALT", parts__name="1A_ALT").first()
@@ -237,4 +244,28 @@ def test_l_allineamento_e_un_campo_che_nessuno_legge(dataset):
                              day=0, start_slot=0)
     Placement.objects.create(schedule=env["schedule"], activity=alt,
                              day=3, start_slot=6)   # tre giorni più in là
-    assert _hard(env) == []   # ⚠ nessuno se ne accorge
+    rotte = [f for f in _hard(env) if f.code == "alignment_split"]
+    assert len(rotte) == 1
+    assert rotte[0].activities == tuple(sorted((irc.pk, alt.pk)))
+    assert rotte[0].group == "REL-1A"
+
+    # E sulla stessa cella non dice niente: è una coppia, non un gruppo.
+    Placement.objects.filter(schedule=env["schedule"], activity=alt).update(
+        day=0, start_slot=0)
+    assert [f for f in _hard(env) if f.code == "alignment_split"] == []
+
+
+def test_il_gruppo_incompleto_non_e_una_violazione(dataset):
+    """⚠ Un membro piazzato e l'altro no è un orario **parziale**, non un
+    orario sbagliato: chiamarlo violazione renderebbe rossa ogni costruzione
+    incrementale alla prima attività, e romperebbe il dominio residuo, che sul
+    finding nuovo decide se una cella è ammissibile.
+
+    Che il gruppo si piazzi tutto o niente è invece una proprietà del
+    **modello** — `AlignmentBuilder` la posta — e ciò che manca lo nomina già
+    `structural:coverage`."""
+    env = dataset
+    irc = _attivita("IRC", parts__name="1A_REL").first()
+    Placement.objects.create(schedule=env["schedule"], activity=irc,
+                             day=0, start_slot=0)
+    assert [f for f in _hard(env) if f.code == "alignment_split"] == []

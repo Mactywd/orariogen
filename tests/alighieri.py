@@ -238,14 +238,30 @@ GROUPS = {
 # ⚠ L'`allineamento` è il campo `Activity.alignment_ident` — 📦 lo XSD dichiara
 # che *l'allineamento genera l'attività complessa*. Qui si dichiara, e
 # l'ondata 2 misura se il motore lo onora: vedi `esiti-attesi.md`.
+#
+# 🔑 **Un ident per attività complessa, non per coppia di servizi** — la
+# seconda correzione del 2026-08-31 (L5), e viene dalla stessa riga dello XSD:
+# *«il convient de définir autant d'alignements que de cours complexes
+# souhaités»*. Tre ore di latino parallele a tre di informatica sono **tre**
+# attività complesse, non una da sei ore; scrivere un ident solo le avrebbe
+# fuse tutte e sei sulla stessa fascia. Qui la tabella dichiara l'ident della
+# **famiglia** e `_erogazione` lo numera per ora (`2C-ART-1`, `-2`, `-3`)
+# quando le ore sono più d'una — vedi `_ident`.
 EROGAZIONI = {
     # Lo sdoppiamento: due ore a classe intera, la terza a metà classe — e
     # quell'ora il docente la fa **due volte**, che è il costo dello
     # sdoppiamento e la ragione per cui N01 passa da 17 a 18 ore.
-    ("3A", "SCI"): [(None, 2, ""), (("part", "3A_G1"), 1, "3A-LABSCI"),
-                    (("part", "3A_G2"), 1, "3A-LABSCI")],
-    ("4A", "SCI"): [(None, 2, ""), (("part", "4A_G1"), 1, "4A-LABSCI"),
-                    (("part", "4A_G2"), 1, "4A-LABSCI")],
+    #
+    # ⚠ E l'allineamento è **vuoto**, corretto il 2026-08-31 chiudendo L5:
+    # l'ondata 2 aveva scritto `3A-LABSCI` sulle due metà, ed era la stessa
+    # confusione che l'ondata 6 avrebbe poi respinto sull'ora quindicinale.
+    # Le due metà hanno lo **stesso docente** e non sono mai simultanee:
+    # allinearle dice il contrario di ciò che sono, ed è insoddisfacibile per
+    # costruzione. *Sdoppiare non è allineare*, come alternare non lo è.
+    ("3A", "SCI"): [(None, 2, ""), (("part", "3A_G1"), 1, ""),
+                    (("part", "3A_G2"), 1, "")],
+    ("4A", "SCI"): [(None, 2, ""), (("part", "4A_G1"), 1, ""),
+                    (("part", "4A_G2"), 1, "")],
     # L'articolata: latino per gli ordinari, informatica per gli applicati,
     # nelle stesse tre ore.
     ("2C", "LAT"): [(("part", "2C_ORD"), 3, "2C-ART")],
@@ -391,9 +407,19 @@ TIME_CONSTRAINTS = [
     # quindi sette mezze giornate sono due pomeriggi e non tre.
     ("max_half_days", "c", "2A", "max_half_days", {"max_half_days": 7}),
     # Il `MG`, l'altro ramo della stessa famiglia: mai mattina **e** pomeriggio
-    # nello stesso giorno. Sull'insegnante di alternativa, che ha dodici ore
-    # sparse su dodici classi.
-    ("only_half_day", "t", "DONAT", "max_half_days",
+    # nello stesso giorno. Su P02 Bruni, dodici ore di scienze motorie sparse
+    # su sei classi e due sedi.
+    #
+    # ⚠ **Era sull'insegnante di alternativa, e L5 l'ha dovuta spostare**
+    # (2026-08-31). Onorato l'allineamento, l'orario di R02 Donati *è* quello
+    # del cappellano — le stesse dodici celle — e il cappellano viene due
+    # giorni (la riga qui sotto, che serve alle sedi). Dodici ore in due
+    # giornate con una sola mezza giornata ciascuna fanno al più dieci: le due
+    # righe erano incompatibili, e la deroga le teneva in piedi consumandosi
+    # tutta. Il `MG` su Donati aveva quindi smesso di essere un vincolo su di
+    # lei per diventarne uno sul cappellano — cioè aveva perso il **soggetto**,
+    # che è la condizione con cui questa tabella sceglie i portatori.
+    ("only_half_day", "t", "BRUNI", "max_half_days",
      {"only_half_day_per_day": True}),
     # 🔑 **Il cappellano viene due giorni.** Questa riga non è qui per
     # `max_presence` — quello ce l'ha già GENTI — ma per dare un soggetto a
@@ -540,12 +566,22 @@ POSTI_PER_CARRELLO = 12
 #:
 #: (nome, "t"|"c"|"r", portatore, livello, celle)
 INDISPONIBILITA = [
-    # 🔑 Lo **spezzone in un pomeriggio solo**: RICCI ha tre ore e viene un
-    # pomeriggio a settimana. Le tre ore stanno in tre fasce, quindi la riga è
-    # al bordo — una fascia rossa in più e l'orario non esiste. È l'unica
-    # famiglia dell'ondata che ammette la tacca dell'ondata 3.
+    # 🔑 Lo **spezzone**: RICCI ha tre ore e viene due pomeriggi — due fasce il
+    # mercoledì e una il venerdì. Le tre ore stanno in tre fasce, quindi la
+    # riga è al bordo — una fascia rossa in più e l'orario non esiste. È
+    # l'unica famiglia dell'ondata che ammette la tacca dell'ondata 3.
+    #
+    # ⚠ **Le tre fasce erano un pomeriggio solo, e L5 le ha spezzate**
+    # (2026-08-31). L'articolata dichiara latino e informatica *nelle stesse
+    # tre ore*: onorato l'allineamento, quelle tre ore sono le tre di RICCI, e
+    # tre ore di latino nello stesso pomeriggio pesano 6 contro il tetto di 5.
+    # Le tre affermazioni — l'articolata parallela, lo spezzone concentrato, il
+    # peso d'indirizzo — erano incompatibili, e nessuno se ne accorgeva perché
+    # nessun builder leggeva l'allineamento. Il bordo non si è mosso: tre
+    # fasce libere per tre ore, come prima.
     ("ricci", "t", "RICCI", "hard",
-     [(d, s) for d in range(5) for s in range(8) if not (d == 2 and s >= 5)]),
+     [(d, s) for d in range(5) for s in range(8)
+      if (d, s) not in {(2, 5), (2, 6), (4, 7)}]),
     # Il pomeriggio di orientamento della 5A: la classe non c'è.
     ("orientamento", "c", "5A", "hard", [(2, s) for s in (5, 6, 7)]),
     # La palestra è concessa alla scuola media il lunedì mattina. ⚠ Vale come
@@ -585,12 +621,14 @@ INDISPONIBILITA = [
 # ⚠ E i due portatori sono scelti perché **non sono bordi**: allentare un
 # bordo dell'ondata 3 renderebbe risolvibile la sua tacca, cioè spegnerebbe
 # un test scritto tre ondate fa. Il bordo del `MG` sta sulla 2A e non su
-# DONAT; quello di `max_presence` sta su GENTI e non su COLOM.
+# BRUNI; quello di `max_presence` sta su GENTI e non su COLOM.
 #
 # (nome, famiglia, portatore, max_violations, params)
 QUOTE = [
-    # La deroga: R02 può fare mattina **e** pomeriggio una volta a settimana.
-    ("mg_donati", "half_days", "DONAT", 1, {}),
+    # La deroga: P02 può fare mattina **e** pomeriggio una volta a settimana.
+    # ⚠ Segue il portatore del `MG`, che L5 ha spostato da R02 a P02: una
+    # deroga senza la sua riga non autorizza niente.
+    ("mg_bruni", "half_days", "BRUNI", 1, {}),
     # Il margine: il cappellano può allungare la giornata di tre ore, e due
     # volte — una per giornata. ⚠ Il letterale è **per giorno**, non per riga:
     # «una volta per settimana e per docente» conta le volte che il
@@ -689,6 +727,18 @@ def _erogazione(class_name, subject_code, ore):
     `tecnico`."""
     righe = EROGAZIONI.get((class_name, subject_code), [(None, ore, "")])
     return [(u, h, i, resto[0] if resto else {}) for u, h, i, *resto in righe]
+
+
+def _ident(ident, quante, n):
+    """L'ident dell'**attività complessa** n-esima della famiglia `ident`.
+
+    📦 *«autant d'alignements que de cours complexes souhaités»*: una famiglia
+    di tre ore parallele sono tre attività complesse, quindi tre ident. Con
+    una sola ora la numerazione non aggiunge niente e l'ident resta quello
+    dichiarato (`REL-1A`), che è anche il nome con cui i test lo cercano."""
+    if not ident or quante == 1:
+        return ident
+    return f"{ident}-{n}"
 
 
 def _settimane(spec):
@@ -856,14 +906,15 @@ def build(qualita=False):
                 site = class_sites[class_name]
                 for unita, quante, ident, extra in _erogazione(
                         class_name, subject_code, ore):
-                    for block in BLOCKS.get((subject_code, quante),
-                                            [1] * quante):
+                    for n, block in enumerate(
+                            BLOCKS.get((subject_code, quante), [1] * quante),
+                            start=1):
                         activity = Activity.objects.create(
                             subject=subjects[subject_code],
                             duration_slots=block, duration_minutes=block * 60,
                             week_mask=_maschera(extra.get("settimane")),
                             site=sites[site],
-                            alignment_ident=ident,
+                            alignment_ident=_ident(ident, quante, n),
                             # ⚠ Solo i blocchi lunghi: un'ora singola non può
                             # attraversare niente, e dichiararlo su tutte
                             # renderebbe la casella indistinguibile dal default.

@@ -95,7 +95,7 @@ domain/                l'app Django del modello di dominio v1
                         **classifica dei vincoli** per fallimenti causati
                         (blame.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
-                        residuo di ADR-018, ventisette builder su trenta checker,
+                        residuo di ADR-018, ventotto builder su trentuno checker,
                         la catena lessicografica (objective.py), le quote
                         di alleggerimento (relaxation.py), i criteri di
                         qualità (quality.py + criteria.py), la separazione
@@ -117,7 +117,7 @@ tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture
                        tests/alighieri.py il **banco** (L4, ondate 1–5) e
                        tests/sonda.py il **cricchetto della copertura** —
                        quali builder fanno davvero qualcosa su un dataset,
-                       asserito come insieme e non come numero, e i test degli assi — tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla, tests/test_alighieri_relazione.py, dove si prova **puntandola**: la configurazione vietata imposta con `pinned`, INFEASIBLE con la riga e OPTIMAL senza, e tests/test_alighieri_risorse.py, dove il contratto è **misto** (indisponibilità nei tre livelli, tetti di peso, tecnico e carrelli) e dove stanno i due difetti L6 e L6bis; e per l'ondata 6 tests/test_alighieri_quote.py, dove una riga si prova **mettendo il dataset in tensione** e chiedendo alla quota di rimetterlo in piedi (e la taglia della quota conta), tests/test_alighieri_settimane.py, l'ora quindicinale — l'occupazione che distingue le firme, e il difetto **L7** col suo ramo di controllo — e tests/test_alighieri_qualita.py, la gerarchia completa dei criteri, l'arbitrato e il verde che *conta* dopo che l'ondata 5 aveva provato che non vieta; e per l'ondata 7 tests/test_alighieri_comandi.py, i cinque comandi di §7 — la classifica che ordina quindici famiglie contro l'unica del Fermi, il deficit di Hall sul laboratorio unico, i sei rilevatori, la cella a **due sfratti**, il tetto di non-regressione che morde solo in tensione, e il gruppo di aule provato col testimone puntato; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisette builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+                       asserito come insieme e non come numero, e i test degli assi — tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla, tests/test_alighieri_relazione.py, dove si prova **puntandola**: la configurazione vietata imposta con `pinned`, INFEASIBLE con la riga e OPTIMAL senza, e tests/test_alighieri_risorse.py, dove il contratto è **misto** (indisponibilità nei tre livelli, tetti di peso, tecnico e carrelli) e dove stavano i due difetti L6 e L6bis, ora capovolti col loro ramo di controllo; e per l'ondata 6 tests/test_alighieri_quote.py, dove una riga si prova **mettendo il dataset in tensione** e chiedendo alla quota di rimetterlo in piedi (e la taglia della quota conta), tests/test_alighieri_settimane.py, l'ora quindicinale — l'occupazione che distingue le firme, e **L7** col suo ramo di controllo — e tests/test_alighieri_qualita.py, la gerarchia completa dei criteri, l'arbitrato e il verde che *conta* dopo che l'ondata 5 aveva provato che non vieta; e per l'ondata 7 tests/test_alighieri_comandi.py, i cinque comandi di §7 — la classifica che ordina quindici famiglie contro l'unica del Fermi, il deficit di Hall sul laboratorio unico, i sei rilevatori, la cella a **due sfratti**, il tetto di non-regressione che morde solo in tensione, e il gruppo di aule provato col testimone puntato; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventotto builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -198,7 +198,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
 > predicati e l'analisi di capienza **sono anch'essi implementati**
 > (`domain/analysis/`); e il **modello CP-SAT hard è completo**
-> (`domain/solver/`): **ventisette builder su trenta checker**, e i tre senza
+> (`domain/solver/`): **ventotto builder su trentuno checker**, e i tre senza
 > builder non ne hanno uno per costruzione — `structural:coverage`
 > (`PLACEMENT_INDEPENDENT`: il solver non crea né distrugge attività),
 > `structural:placement` (lo scarto *è* il meccanismo del modello, non un
@@ -206,7 +206,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **seconda fase**). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **946 test verdi**, 17 skip tutti misurati e attribuiti
+> minimo. **953 test verdi**, 17 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -214,7 +214,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > `None` — e prima delle aule dava gli stessi 8140 variabili e 1082 constraint
 > dello spike a cinque vincoli, `OPTIMAL` in ~0,56 s.
 >
-> 🔑 **E sono tre builder su ventisette, non sei famiglie**: qui era scritto
+> 🔑 **E sono tre builder su ventotto, non sei famiglie**: qui era scritto
 > «griglia, indisponibilità, occupazione, sedi, D.T.B. e `room_pool`», ed era un
 > elenco, non una misura. Avvolgendo `restrict` e `build` di ogni builder
 > durante `build_model` (2026-08-30): `structural:occupation` posta **948**
@@ -320,7 +320,8 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **rinuncia** ammessa come lo scarto, e `manage.py assign_rooms`.
 >
 > 🔑 **E dal 2026-08-29 la fase 1 le aule le conta** (`structural:room_pool`,
-> [ADR-021](docs/decisioni.md)) — trentesimo checker, ventisettesimo builder.
+> [ADR-021](docs/decisioni.md)) — trentesimo checker, ventisettesimo builder
+> (il ventottesimo è `structural:alignment`, L5).
 > Fino a quel giorno il piazzamento era cieco alle aule con più di una
 > candidata e la fase 2 rinunciava: **84 assegnate su 92**. Era scritto qui
 > come «la conseguenza dichiarata di assegnare le aule *dopo*», e la parola
@@ -393,7 +394,7 @@ risposta a un problema più facile.
 Questo script **resta parcheggiato ed è superato**: il codice vivo del solver
 è `domain/solver/` (vedi la nota di stato sopra), che ne riprende l'idea sullo
 schema del dominio approvato invece che sui dati grezzi. Il **modello hard è
-ora completo** — ventisette builder su trenta checker. Ciò che manca non è
+ora completo** — ventotto builder su trentuno checker. Ciò che manca non è
 più la traduzione dei vincoli, ma i due pezzi dichiarati fuori dal piano: gli
 alleggerimenti a quota con l'ottimizzazione lessicografica e l'assegnazione
 delle aule (il violatore di Hall è implementato, vedi la nota di stato sopra
@@ -540,7 +541,7 @@ criteri` governa un'euristica di ricerca che in CP-SAT non esiste.
 **L4 — il banco «Alighieri», chiuso il 2026-08-30**, sette ondate su sette
 ([spec](docs/superpowers/specs/2026-08-30-alighieri-banco-a-scuola-intera-design.md)).
 Nasce da una misura che ha corretto ciò che il progetto credeva di sé: il Fermi
-esercita **tre builder su ventisette** e lascia **tredici tabelle su trentatré
+esercita **tre builder su ventotto** e lascia **tredici tabelle su trentatré
 vuote**, `ClassPartition`/`ClassPart`/`Group` comprese — cioè le voci ✅ di
 scope v1 che nessun dataset rappresentava. Il banco è
 `data/liceo-alighieri/` + `tests/alighieri.py`: 12 classi su due indirizzi e
@@ -552,11 +553,11 @@ tredici tipi dell'asse Relazione; **55 righe di indisponibilità** nei tre
 livelli, i tetti di peso didattico, un tecnico e quattro carrelli; l'**ora
 quindicinale** del 5B con la sua **seconda firma di settimana**, **due quote**
 di alleggerimento e **sei criteri di qualità**. Due fasi `OPTIMAL` senza scarti
-né rinunce: **15 330 variabili, 13 817 constraint, 73 aule su 73**.
+né rinunce: **14 785 variabili, 13 996 constraint, 73 aule su 73**.
 🔑 **Accanto al Fermi, non al posto suo**: il Fermi vale perché non è stato
 progettato per superare i nostri test.
 🔑 **La sonda è un test** (`tests/sonda.py`, `tests/test_alighieri_sonda.py`):
-l'insieme dei builder che fanno qualcosa è **27 su 27** dall'ondata 5 — il
+l'insieme dei builder che fanno qualcosa è **28 su 28** — il
 registro intero, cioè il criterio di accettazione della spec — ed è asserito
 come **insieme**, non come numero, perché da qui non deve più salire ma
 **restare fermo**. ⚠ E dice che un builder *fa qualcosa*, non che ciò che fa
@@ -610,35 +611,59 @@ docenti e classi, e i buchi della popolazione ottimizzata scendono a zero
 *dimostrato* in tutte. La forma 3 lo rimette in piedi: `INFEASIBLE` /
 `INFEASIBLE` / `FEASIBLE` a tolleranza 0 / 60 / 180.
 ✅ **E il criterio di §4 della spec è verificato sul dataset intero**: spento
-`LAB-SUCC` il banco scarta 11 attività, spento un docente le sue ore. ⚠ Ma
+`LAB-SUCC` il banco scarta **14** attività — le undici che lo chiedono più le
+tre **allineate**, perché da L5 l'attività complessa cade come un corpo solo —
+e spento un docente le sue ore con le loro allineate. ⚠ Ma
 **«stretto» ha due nozioni, e la spec ne dichiarava una sola** — questa è
 stretta rispetto alle **risorse**, mentre la contiguità che il D.T.B. chiede è
 stretta rispetto alla **densità della griglia**, e con 40 fasce contro cattedre
 da 10–21 ore resta gratis. I due test che asseriscono l'`OPTIMAL` (il D.T.B.
 dell'ondata 3, la tacca dei divieti della 4) restano verdi e restano giusti.
 
-🔑 **E il banco ha prodotto cinque difetti, nessuno riparato** (spec §8:
-nessuna modifica al motore), tutti fissati da un test e aperti in
-`docs/todo.md`. **L5**: 📦 lo XSD dichiara che *l'allineamento genera
-l'attività complessa*, ma `Activity.alignment_ident` è un campo che **nessun
-builder e nessun checker legge**, e 14 allineamenti su 16 escono dal solve
-senza una coincidenza. **L6**: una risorsa **senza sede** non può servire due
-sedi, e non è la capienza (misurato: `INFEASIBLE` anche a capienza 9,
-`OPTIMAL` a stessa sede) — con esso arriva la misura di **ADR-019**, che
-voleva una chiave a capienza cumulativa toccata da due sedi. **L6bis**: il
-giallo su un'aula a più candidate costa una rinuncia, perché
-`structural:room_pool` lo ignora mentre la fase 2 lo rispetta. **L7**: i
-criteri di qualità **ignorano le firme di settimana** — la stessa quantità
-vale 60 minuti in *ogni* settimana per `check_schedule` e **zero** per il
-criterio `gaps`; è lo stesso difetto che `MaxGapBuilder` aveva fino al
-2026-08-24, descritto nel docstring di `Vocabulary.covered`: il builder passa
-`signature`, i criteri no. **L8**: **lo scarto non è una via d'uscita
-universale** — spegnendo la palestra il modello risponde `INFEASIBLE` invece
-di scartare, per una sola riga: `free_guaranteed` conta le mezze giornate
-libere **solo sui giorni lavorati** (`libera = attivo AND NOT meta`, com'è
-nel checker), e con un giorno lavorato il massimo è uno. Una famiglia che
-conta una quantità *sui giorni in cui si lavora* può diventare
-insoddisfacibile **perché si lavora meno**, e lì `allow_unplaced` non salva.
+🔑 **Il banco ha prodotto cinque difetti — e il 2026-08-31 sono chiusi tutti**,
+ognuno col proprio test **capovolto** e col proprio ramo di controllo, perché
+«il difetto non c'è più» da solo è soddisfatto anche da un vincolo spento.
+Ognuno aveva una **decisione** aperta, e quella è la parte che vale:
+
+- **L5** — 📦 lo XSD dichiara che *l'allineamento genera l'attività complessa*,
+  e `Activity.alignment_ident` era un campo che nessuno leggeva (14 gruppi su
+  16 uscivano dal solve senza una coincidenza). Ora è `structural:alignment`,
+  **hard e non alleggeribile**, e il gruppo si piazza *tutto sulla stessa cella
+  o niente* — la forma debole sarebbe soddisfatta anche dal gruppo mezzo
+  scartato, che è la stessa mezza classe abbandonata con un altro nome.
+  🔑 **E leggerlo ha corretto il dato in quattro punti**: *sdoppiare non è
+  allineare* (stesso docente, mai simultanee), **un ident per attività
+  complessa** e non per coppia di servizi (📦 *«autant d'alignements que de
+  cours complexes souhaités»*), lo spezzone di RICCI su **due** pomeriggi
+  (l'articolata parallela + le tre ore concentrate + il tetto di peso
+  d'indirizzo erano insieme impossibili), e il **`MG`** da R02 a P02 —
+  allineato all'IRC, l'orario dell'alternativa è quello del cappellano, che
+  viene due giorni, e la riga aveva perso il soggetto.
+- **L6** — *un insieme non viaggia*. La decisione è stata **cambiare la
+  domanda**: non «due sedi si toccano?» ma «**ci stanno?**», cioè
+  `carico(sa, s) + carico(sb, t) <= posti`. A capienza 1 coincide riga per riga
+  con la clausola di prima, quindi l'obiezione che bloccava la voce — l'aula
+  col `Numero di aule`, che un luogo ce l'ha — cade da sé. Conseguenze: il ramo
+  `s == t` è ora **implicato** da `structural:occupation`. ⚠ E la guardia di
+  ADR-018 **resta**, generalizzata a «le sole congelate hanno già superato il
+  tetto»: toglierla affidandosi al clamp caccia le libere dalle celle in cui
+  già stanno, e il banco che congela lo ha detto (semi 6 e 9).
+- **L6bis** — il giallo lo conta anche la fase 1, e la decisione si prende
+  guardando **chi paga**: l'ostacolo è duro *finché non lo si autorizza*.
+  L'autorizzazione la legge il builder (`ignora_opzionali`, per categoria);
+  il checker no e non può — legge un orario, non i parametri di un calcolo.
+- **L7** — i criteri di qualità si calcolano **per firma**, e il livello è la
+  **settimana peggiore**. Le tre aggregazioni davano 360 / 5940 / **180** sullo
+  stesso testimone: vince il massimo perché 180 è il numero che il checker
+  conta, e *dove il checker esiste la definizione si legge da lì*. ⚠ Prezzo
+  dichiarato: migliorare una firma che non è la peggiore non muove il livello.
+  ⚠ Il costo moltiplicativo **non si paga**: le firme si deduplicano, e su un
+  dataset a firma unica non cambia nessun numero.
+- **L8** — la soglia delle mezze giornate libere è quella **raggiungibile**,
+  `min(richieste, giorni lavorati)`, nel checker e nel builder insieme. Non è
+  un'attenuazione: è la garanzia detta senza la parte che nessun orario
+  potrebbe onorare. ⚠ `free_days` non prende lo stesso trattamento, ed è la
+  metà che spiega la prima: lavorare meno *aumenta* i giorni liberi.
 
 ⚠ Altre due misure del banco che valgono oltre il banco: i **tetti di peso**
 cambiano il *regime di ricerca* (439 s con un lavoratore contro 7 s con otto);

@@ -15,6 +15,149 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-31 — I cinque difetti del banco, chiusi: e tre di essi erano del dato** —
+  Il banco L4 ha prodotto cinque difetti e non ne ha riparato nessuno: la spec
+  (§8) vietava di modificare il motore mentre lo si misurava, e ognuno è
+  rimasto fissato da un test che asseriva il comportamento **sbagliato**.
+  Questa voce chiude il conto. Nessun difetto è stato «sistemato»: ognuno aveva
+  una **decisione** aperta scritta nel todo, e la parte che vale è quale
+  decisione è stata presa e contro cosa.
+
+  🔑 **L5 — l'allineamento genera l'attività complessa**
+  ([ADR-022](decisioni.md)), ed è il
+  ventottesimo builder (`structural:alignment`) e il trentunesimo checker
+  (`alignment_split`). Le due decisioni aperte: **hard e non alleggeribile**
+  (alleggerire un allineamento vorrebbe dire scomporre l'attività complessa,
+  cioè cambiare l'anagrafica — non un vincolo), e **tutto il gruppo sulla
+  stessa cella o niente**, perché la forma debole «la stessa cella *se*
+  entrambe piazzate» è soddisfatta anche dal gruppo mezzo scartato, che è la
+  mezza classe abbandonata a scuola con un altro nome. Dominio comune vuoto ⇒
+  il gruppo si scarta, mai `INFEASIBLE`.
+
+  🔑 **E leggere un campo che nessuno leggeva ha corretto il *dataset*, in
+  quattro punti.** È la scoperta della giornata, e va detta per prima perché è il
+  genere di cosa per cui il banco esiste: una dichiarazione che nessuno legge
+  può dire il falso per mesi. (1) *Sdoppiare non è allineare*: le due metà del
+  laboratorio avevano lo stesso ident, ma hanno lo **stesso docente** e non
+  sono mai simultanee — è insoddisfacibile per costruzione, ed è lo stesso
+  argomento con cui l'ondata 6 aveva rifiutato di allineare l'ora
+  quindicinale. (2) 📦 *«autant d'alignements que de cours complexes
+  souhaités»*: tre ore parallele sono **tre** attività complesse, non una da
+  sei ore — con un ident solo il modello fondeva sei attività su una fascia e
+  ne scartava quattro. (3) L'articolata *«nelle stesse tre ore»*, lo spezzone
+  di RICCI concentrato in un pomeriggio e il tetto di peso d'indirizzo erano
+  **insieme impossibili**: tre ore di latino (peso 2) in un pomeriggio pesano
+  6 contro un tetto di 5. Isolato spegnendo i builder uno per uno —
+  `DidacticWeightBuilder` era l'unico che, tolto, rendeva il pin fattibile.
+  Lo spezzone è ora su **due** pomeriggi, e il bordo non si è mosso: tre fasce
+  libere per tre ore (la tacca dell'ondata 3 si sposta da `(2, 7)` a
+  `(4, 7)`). (4) E il `MG` è passato da R02 Donati a **P02 Bruni**: onorato
+  l'allineamento, l'orario dell'insegnante di alternativa *è* quello del
+  cappellano, che viene due giorni — dodici ore in due giornate con una sola
+  mezza giornata ciascuna fanno al più dieci. La riga su Donati aveva smesso
+  di essere un vincolo su di lei per diventarne uno sul cappellano, cioè aveva
+  perso il **soggetto**; la deroga l'ha seguita, e la sua tensione è diventata
+  un **pin** invece di una riga di presenza (su Bruni una riga di presenza
+  fallirebbe per la palestra, che è una sola — misurato: `INFEASIBLE` anche
+  con la deroga, cioè il testimone sbagliato). Misure: **16 → 18 ident, 40 →
+  36 attività allineate, 18 gruppi coincidenti su 18**, `OPTIMAL` a zero
+  scarti.
+
+  🔑 **L6 — un insieme non viaggia, e la decisione è stata *cambiare la
+  domanda*** ([ADR-023](decisioni.md)). Il todo chiedeva quale criterio
+  dicesse «questa chiave viaggia»,
+  col candidato `simultaneous_capacity > 1` e la sua obiezione (l'aula col
+  `Numero di aule` di EDT, che invece un luogo ce l'ha). La domanda non ha
+  risposta perché è la domanda sbagliata: quella giusta non è «due sedi si
+  toccano?» ma «**ci stanno?**». Il vincolo è ora un tetto di capienza,
+  `carico(sa, s) + carico(sb, t) <= posti`, nel builder e nel checker con la
+  stessa disuguaglianza. A capienza 1 — ogni docente, classe, parte, atomo —
+  coincide **riga per riga** con la clausola booleana di prima (due carichi
+  valgono almeno due, un posto non li regge), quindi l'obiezione dell'aula
+  cade da sé: cambiano solo le due risorse per cui la vecchia regola diceva il
+  falso. Misura sul banco: era `INFEASIBLE` a capienza 4 con domanda 3 e
+  `INFEASIBLE` anche a capienza **9**; ora `OPTIMAL` a 4, `OPTIMAL` a 3 (il
+  bordo esatto), `INFEASIBLE` a 2.
+
+  ⚠ **Una conseguenza non prevista, e un errore che il banco che congela ha
+  trovato.** La conseguenza: il ramo `s == t` — la riparazione «Important 1 /
+  Ruling 33» — è ora **implicato da `structural:occupation`** (il carico di un
+  sottoinsieme di una cella non può superare la capienza se il totale non la
+  supera); resta postato perché ogni builder deve essere corretto da solo, ma
+  non vieta più niente di nuovo.
+
+  L'errore: la prima stesura **tolse** la guardia `_sede_congelata` scrivendo
+  che `residual_cap` la conteneva. È falso, e `tests/test_solver_frozen.py`
+  l'ha detto sui semi 6 e 9 — `INFEASIBLE` sulla prova A, cioè il modello che
+  rifiuta l'orario che gli è stato dato. Col residuo clampato a zero ogni
+  **libera** viene cacciata dalle celle in cui la coppia è già rotta, comprese
+  quelle in cui già stava: la metà vietata di ADR-018, precisa.
+  🔑 E la differenza con `structural:occupation`, che invece clampa e fa bene,
+  è la **forma del finding**: là la causale nomina *tutte* le attività della
+  cella, quindi una libera che si aggiunge cambia la chiave ed è un finding
+  nuovo; qui nomina una **coppia**, e la coppia (libera, congelata) esisteva
+  già nella baseline. La guardia resta, generalizzata: il tetto non si posta
+  quando le sole congelate lo hanno già superato.
+
+  🔑 **L6bis — il giallo lo conta anche la fase 1** (emendamento ad
+  [ADR-021](decisioni.md)), e la decisione si prende
+  guardando **chi paga**. L'argomento che teneva `structural:room_pool` com'era
+  — *«l'opzionale è violabile per definizione, contarlo come chiuso
+  produrrebbe un finding HARD per un ostacolo che duro non è»* — si rovescia:
+  l'ostacolo è duro *finché non lo si autorizza*, ed è la frase letterale
+  della documentazione. La fase 2 lo toglie dalle candidate; contarne i posti
+  in fase 1 significava promettere un'aula che nessuno avrebbe potuto usare.
+  Il builder legge l'autorizzazione (`ignora_opzionali`, per **categoria** di
+  risorsa — A4), il checker no e non può: legge un orario, non i parametri di
+  un calcolo. È la stessa asimmetria che `structural:unavailability` ha da
+  sempre. Misura: il pin che prima era `OPTIMAL` in fase 1 e una rinuncia in
+  fase 2 è ora `INFEASIBLE` **prima**, e con l'override torna `OPTIMAL` in
+  entrambe.
+
+  🔑 **L7 — i criteri di qualità contano per firma, e il livello è la
+  settimana peggiore** ([ADR-024](decisioni.md)). La decisione qui era
+  l'**aggregazione**, e le tre
+  candidate danno tre numeri diversi sullo stesso testimone: somma delle firme
+  360, somma pesata per settimane 5940, massimo **180**. Vince il massimo per
+  la regola della casa — *dove il checker esiste, la definizione si legge da
+  lì*: 180 è il numero che `check_schedule` conta. La somma direbbe 360 e
+  farebbe dipendere il valore da quante firme ha il dataset; la pesata è la
+  quantità annuale, vera ma di un'altra unità — e `Arbitrato.tolleranza` è un
+  numero che l'utente scrive nell'unità del criterio. ⚠ Il prezzo, dichiarato:
+  sul massimo, migliorare una firma che non è la peggiore non muove il
+  livello. ⚠ E il costo moltiplicativo che il todo temeva **non si paga**: le
+  firme si deduplicano come in `ResourceBuilder`, e su un dataset a firma
+  unica non cambia nessun numero — i venti test di `test_solver_qualita.py`
+  sono passati senza toccarne uno.
+
+  🔑 **L8 — la soglia è quella raggiungibile.** Delle due strade aperte nel
+  todo è stata presa la prima: `free_half_days >= min(richieste, giorni
+  lavorati)`, nel checker e nel builder insieme (`AddMinEquality`, una
+  definizione e non un vincolo). Non è un'attenuazione: è la garanzia detta
+  senza la parte che nessun orario potrebbe onorare, perché una mezza giornata
+  libera conta solo su un giorno lavorato e un giorno lavorato ne offre al più
+  una. La seconda strada — contare diversamente — resta esclusa per la ragione
+  di sempre: accetterebbe orari che il checker boccia. ⚠ E `free_days` **non**
+  prende lo stesso trattamento, ed è la metà che spiega la prima: lavorare
+  meno *aumenta* i giorni liberi, quindi quel minimo non è mai reso
+  irraggiungibile dallo scarto.
+
+  ⚠ **Ogni test capovolto porta il suo ramo di controllo**, perché «il difetto
+  non c'è più» da solo è soddisfatto anche da un vincolo spento: la capienza
+  dei carrelli scende 4 → 3 → 2 (tacca), la fase 1 sul giallo si rimette in
+  piedi con l'override, il criterio dei buchi distingue le due firme quando si
+  toglie il laboratorio (360 contro 180), e L8 pretende che i due rami — con
+  la riga `free_guaranteed` e senza — diano lo **stesso** numero di scarti.
+
+  ⚠ **E quattro test che non parlavano dei difetti sono cambiati lo stesso**,
+  perché erano scritti sopra la semantica sbagliata: i due di
+  `test_solver_sites.py` sul ramo `s == t` (costruiti su un'aula a due posti
+  *senza sede*, dove la vecchia regola vietava ciò che ora è lecito — quello
+  di ADR-018 ha ora **tre** congelate invece di due, perché con due il passato
+  non sarebbe più in violazione e il test non misurerebbe niente) e i due di
+  `test_analysis_ordine_inserimento.py`, dove l'indipendenza dall'ordine si
+  misura ora su un carico che sfora davvero (`1 + 2 > 2`).
+
 - **2026-08-30 (notte) — L'Alighieri, ondata 7: i comandi, e due attese smentite di natura diversa** —
   L'ultima ondata non aggiunge una riga al dataset. Aggiunge la domanda che sta
   a valle di tutte le altre, §7 della spec: **i cinque comandi diagnostici

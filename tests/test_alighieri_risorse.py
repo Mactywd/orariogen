@@ -144,14 +144,18 @@ def test_i_pesi_e_i_tetti():
 
 def test_lo_spezzone_di_ricci_e_al_bordo():
     """La tacca dell'ondata 3, e qui è un conteggio nudo: RICCI ha **tre** ore
-    e viene un pomeriggio, cioè tre fasce. Una fascia rossa in più e le tre
+    e viene due pomeriggi, cioè tre fasce. Una fascia rossa in più e le tre
     ore non ci stanno.
+
+    ⚠ Le tre fasce erano un pomeriggio solo fino a L5, e la tacca cadeva su
+    `(2, 7)`. Il conteggio non è cambiato — tre fasce per tre ore — è cambiato
+    *dove* stanno: vedi `INDISPONIBILITA` in `tests/alighieri.py`.
 
     ⚠ `allow_unplaced=False` legge `INFEASIBLE` invece di uno scarto: sono la
     stessa cosa detta da due porte diverse."""
     env = alighieri.build()
     ResourceUnavailability.objects.create(
-        resource=Teacher.objects.get(abbreviation="RICCI"), day=2, slot=7,
+        resource=Teacher.objects.get(abbreviation="RICCI"), day=4, slot=7,
         level=ResourceUnavailability.Level.HARD)
     soluzione = solve(env["schedule"], workers=8, allow_unplaced=False,
                       time_limit=90)
@@ -350,46 +354,49 @@ def test_i_carrelli_sono_una_capienza_cumulativa():
 
 # ------------------------------------- ⚠ i due difetti che l'ondata ha trovato
 
-def test_il_carrello_non_puo_servire_due_sedi_e_non_e_la_capienza():
-    """⚠ **Difetto L6**, e il banco lo ha trovato costruendo la sua unica
-    risorsa **senza sede**.
+def test_il_carrello_serve_due_sedi_perche_un_insieme_non_viaggia():
+    """🔑 **L6, chiuso il 2026-08-31**, e il banco lo aveva trovato
+    costruendo la sua unica risorsa **senza sede**.
 
-    Tre carrelli sono della scuola, non di un edificio: servono l'inglese alla
-    centrale e l'informatica in succursale. Ma `structural:site_transition`
-    posta la clausola «due sedi sulla stessa fascia» su **ogni** chiave di
-    occupazione, e per il carrello quella clausola è falsa — un insieme di tre
-    carrelli non è un corpo solo, e non viaggia.
+    Quattro carrelli sono della scuola, non di un edificio: servono le scienze
+    alla centrale e l'informatica in succursale, nella stessa fascia. Fino a
+    L6 `structural:site_transition` postava su **ogni** chiave di occupazione
+    il divieto «due sedi sulla stessa fascia», e per il carrello quel divieto
+    era falso — un insieme di quattro carrelli non è un corpo solo, e non
+    viaggia. Il modello rispondeva `INFEASIBLE` anche a capienza 9, che era la
+    prova che il colpevole non era la capienza.
 
-    Le tre esecuzioni qui sotto sono la dimostrazione che il colpevole è la
-    sede e non la capienza:
+    Ora il vincolo è un tetto di **capienza**, e le tre esecuzioni sono la
+    tacca dell'ondata 3 su di lui: due carrelli di qua e uno di là fanno tre.
 
-    1. capienza 3, domanda 2 + 1 = 3: entrerebbe, e invece `INFEASIBLE`;
-    2. capienza 9, stessa cella: ancora `INFEASIBLE` — quindi non è capienza;
-    3. stessa capienza 3, stessa cella, **stessa sede**: `OPTIMAL` a zero
-       scarti.
+    1. capienza 4 (quella del dataset): `OPTIMAL` a zero scarti;
+    2. capienza **3**, cioè esattamente la domanda: ancora `OPTIMAL` — il
+       bordo;
+    3. capienza **2**: `INFEASIBLE`, perché i posti non bastano. È l'unica
+       cosa che decide, ed è ciò che L6 afferma.
 
-    ⚠ Non riparato, per la regola della spec (§8: il banco non modifica il
-    motore). Il test asserisce il comportamento **corrente**, così diventa
-    rosso il giorno in cui si ripara."""
+    ⚠ Il pin è su un'attività di laboratorio **non allineata**: pinnare un
+    livello d'inglese trascinerebbe l'altro (L5), e la domanda diventerebbe
+    `2 + 2 + 1` — un'altra misura, non questa."""
     env = alighieri.build()
-    inf = _parte("2C_APP", "INF")[0]
-    base = _gruppo("ING1-BASE")[0]
-    pin = {base.pk: (2, 5), inf.pk: (2, 5)}   # il pomeriggio in cui RICCI c'è
+    inf = _parte("2C_APP", "INF")[0]        # succursale, un carrello
+    sci = _parte("3A_G1", "SCI")[0]         # centrale, due carrelli
+    assert sci.site_id != inf.site_id
+    pin = {sci.pk: (2, 5), inf.pk: (2, 5)}  # il pomeriggio in cui RICCI c'è
 
-    assert solve(env["schedule"], workers=8, time_limit=90,
-                 pinned=pin).status == "INFEASIBLE"
-    env["carrelli"].simultaneous_capacity = 9
-    env["carrelli"].save()
-    assert solve(env["schedule"], workers=8, time_limit=90,
-                 pinned=pin).status == "INFEASIBLE"
+    ampia = solve(env["schedule"], workers=8, time_limit=90, pinned=pin)
+    assert ampia.status == "OPTIMAL", ampia.stats
+    assert list(ampia.unplaced) == []
 
     env["carrelli"].simultaneous_capacity = 3
     env["carrelli"].save()
-    base.site = inf.site
-    base.save()
-    stessa = solve(env["schedule"], workers=8, time_limit=90, pinned=pin)
-    assert stessa.status == "OPTIMAL", stessa.stats
-    assert list(stessa.unplaced) == []
+    esatta = solve(env["schedule"], workers=8, time_limit=90, pinned=pin)
+    assert esatta.status == "OPTIMAL", esatta.stats
+
+    env["carrelli"].simultaneous_capacity = 2
+    env["carrelli"].save()
+    assert solve(env["schedule"], workers=8, time_limit=90,
+                 pinned=pin).status == "INFEASIBLE"
 
 
 def test_adr_019_dentro_una_fascia_non_si_viaggia_e_il_carrello_lo_mostra():
@@ -402,9 +409,15 @@ def test_adr_019_dentro_una_fascia_non_si_viaggia_e_il_carrello_lo_mostra():
     serviva una chiave a capienza cumulativa toccata da due sedi — che nessun
     dataset aveva.
 
-    Il test scrive l'orario a mano, perché il solver quella configurazione la
-    vieta (vedi il difetto qui sopra): è l'analisi di un orario *già scritto*,
-    che è dove ADR-019 vive."""
+    Il test scrive l'orario a mano: è l'analisi di un orario *già scritto*,
+    che è dove ADR-019 vive.
+
+    ⚠ **La seconda metà del test diceva il falso fino a L6.** Qui c'era
+    scritto *«e invece l'impossibilità c'è, e la nomina l'altro checker»*, con
+    `site_transition` `HARD` sui tre carrelli: era il difetto, non una
+    proprietà. Tre carrelli reggono due impegni, e non si sposta nessuno.
+    L'impossibilità torna appena i posti non bastano — un carrello solo per
+    due sedi — ed è il ramo di controllo che tiene in piedi la prima metà."""
     env = alighieri.build()
     inf = _parte("2C_APP", "INF")[0]
     base = _gruppo("ING1-BASE")[0]
@@ -419,34 +432,41 @@ def test_adr_019_dentro_una_fascia_non_si_viaggia_e_il_carrello_lo_mostra():
     # fascia successiva con un insieme diverso.
     assert not [f for f in check_schedule(env["schedule"])
                 if f.code == "max_site_changes"]
-    # E invece l'impossibilità c'è, e la nomina l'altro checker.
-    trasferte = [f for f in check_schedule(env["schedule"])
-                 if f.code == "site_transition" and chiave in f.resources]
+    # E nemmeno un'impossibilità: tre carrelli reggono due impegni.
+    def _trasferte():
+        return [f for f in check_schedule(env["schedule"])
+                if f.code == "site_transition" and chiave in f.resources]
+
+    assert _trasferte() == []
+    # Il ramo di controllo: con un carrello solo i due impegni non ci stanno,
+    # e l'impossibilità la nomina l'altro checker.
+    env["carrelli"].simultaneous_capacity = 1
+    env["carrelli"].save()
+    trasferte = _trasferte()
     assert trasferte and trasferte[0].severity == Severity.HARD
 
 
-def test_il_giallo_su_un_aula_a_piu_candidate_costa_una_rinuncia():
-    """⚠ **Difetto L6bis**, e nasce da una domanda che l'ondata si è posta
-    scegliendo *dove* mettere l'indisponibilità gialla di un'aula.
+def test_il_giallo_su_un_aula_a_piu_candidate_lo_vede_anche_la_fase_1():
+    """🔑 **L6bis, chiuso il 2026-08-31.**
 
-    Le due fasi leggono il giallo in modo diverso:
+    Le tre letture dello stesso giallo erano tre, e la terza pagava:
 
-    - `structural:room_pool` (fase 1) conta i posti dell'aula come se fosse
-      libera — il suo commento lo dichiara, e la ragione è che l'opzionale è
-      violabile per definizione;
-    - `RoomsContext._filtra` (fase 2) toglie l'aula dalle candidate esattamente
-      come per una rossa, se non si autorizza l'override.
+    - `structural:unavailability` (il pre-filtro) lo rispetta come una rossa;
+    - `RoomsContext._filtra` (fase 2) toglie l'aula dalle candidate, se non si
+      autorizza l'override;
+    - `structural:room_pool` (fase 1) ne contava i posti **come se fosse
+      libera**, perché «l'opzionale è violabile per definizione».
 
-    Su un'aula a **candidata unica** non si vede: l'aula è un token, e il
-    pre-filtro di `structural:unavailability` — che il giallo lo rispetta —
-    toglie la cella prima. Su un'aula a più candidate la fase 1 piazza e la
-    fase 2 **rinuncia**, che è esattamente ciò che ADR-021 esiste per non far
-    succedere.
+    Su un'aula a **candidata unica** non si vedeva: l'aula è un token, e il
+    pre-filtro toglieva la cella prima. Su un'aula a più candidate la fase 1
+    piazzava e la fase 2 **rinunciava**, che è esattamente ciò che ADR-021
+    esiste per non far succedere.
 
-    ⚠ Non riparato (§8). Il dataset porta quindi la sua gialla su `LAB-SUCC`,
-    a candidata unica, e il difetto vive qui: due attività di fisica delle
-    sole `{LAB-FIS, LAB-INF}` imposte sulla fascia gialla, e la fase 2 può
-    servirne una sola."""
+    Ora la fase 1 il giallo lo conta: due attività di fisica delle sole
+    `{LAB-FIS, LAB-INF}` imposte sulla fascia gialla non ci stanno più, e il
+    modello lo dice **prima** invece di lasciare alla fase 2 la rinuncia. Il
+    ramo di controllo è l'override per categoria di risorsa, che restituisce
+    il posto e rimette in piedi lo stesso pin."""
     env = alighieri.build()
     ResourceUnavailability.objects.create(
         resource=env["rooms"]["LAB-INF"], day=0, slot=0,
@@ -454,15 +474,15 @@ def test_il_giallo_su_un_aula_a_piu_candidate_costa_una_rinuncia():
     pin = {_cl("1A", "FIS")[0].pk: (0, 0), _cl("3B", "FIS")[0].pk: (0, 0)}
 
     fase1 = solve(env["schedule"], workers=8, time_limit=90, pinned=pin)
-    assert fase1.status == "OPTIMAL", fase1.stats   # la fase 1 non la vede
-    apply(fase1, env["schedule"])
+    assert fase1.status == "INFEASIBLE", fase1.stats   # ora la fase 1 la vede
 
-    fase2 = solve_rooms(env["schedule"], workers=8)
-    assert len(list(fase2.unassigned)) == 1
-    rinuncia = Activity.objects.get(pk=list(fase2.unassigned)[0])
-    assert rinuncia.subject.code == "FIS"
-    # E l'override della categoria aule la ricompone, che è l'altra metà della
-    # prova: la rinuncia viene dal giallo, non da una scarsità vera.
-    liberata = solve_rooms(env["schedule"], workers=8,
-                           ignora_opzionali=(Resource.Kind.ROOM,))
-    assert list(liberata.unassigned) == []
+    # L'override della categoria aule restituisce il posto, e con esso il pin
+    # torna soddisfacibile: la rinuncia veniva dal giallo, non da una scarsità
+    # vera. ⚠ È la stessa autorizzazione che legge la fase 2.
+    liberata = solve(env["schedule"], workers=8, time_limit=90, pinned=pin,
+                     ignora_opzionali=(Resource.Kind.ROOM,))
+    assert liberata.status == "OPTIMAL", liberata.stats
+    apply(liberata, env["schedule"])
+    fase2 = solve_rooms(env["schedule"], workers=8,
+                        ignora_opzionali=(Resource.Kind.ROOM,))
+    assert list(fase2.unassigned) == []
