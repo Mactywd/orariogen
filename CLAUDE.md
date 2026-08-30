@@ -466,11 +466,19 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
       + rango`.
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
-Tre decisioni, **una sola osservazione** ancora aperta in EDT (il `Ciclo
-personalizzato`), due esperimenti e nove debiti dichiarati. **Nessuna blocca il
-calcolo**: ⛔ D1 è sciolta il 2026-08-28 con [ADR-020](docs/decisioni.md), ⛔ D3
-il 2026-08-29 con [ADR-021](docs/decisioni.md), e O1 — i criteri
-dell'ottimizzatore aule — il 2026-08-30.
+Tre decisioni, **una sola osservazione sostanziale** ancora aperta in EDT (il
+`Ciclo personalizzato`) più due minuzie da tooltip, due esperimenti e nove
+debiti dichiarati. **Nessuna blocca il calcolo**: ⛔ D1 è sciolta il 2026-08-28
+con [ADR-020](docs/decisioni.md), ⛔ D3 il 2026-08-29 con
+[ADR-021](docs/decisioni.md), e O1 — i criteri dell'ottimizzatore aule — il
+2026-08-30.
+
+🔧 Dal 2026-08-30 il todo ha una sezione **`Lavoro`**: tre voci che non
+aspettano nessuno — **L1** il buco misurato sulla mezza giornata (in EDT è un
+parametro, ed è il debito promosso), **L2** le due voci che O1 ha lasciato sulla
+fase 2 (la capienza in alunni è un *criterio* che nessuno legge; manca il
+lucchetto sulla singola assegnazione d'aula), **L3** il materiale per decidere
+O5. Sono in ordine di valore.
 
 Quello che segue è la **storia delle voci chiuse**, con il perché: si legge, non
 si aggiorna.

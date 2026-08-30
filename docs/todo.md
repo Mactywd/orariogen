@@ -17,17 +17,25 @@ perché è ciò che decide chi può muoverla:
 
 Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la data).
 
-> **Stato al 2026-08-29.** Nessuna voce ✅ di [scope-v1.md](scope-v1.md) è
+> **Stato al 2026-08-30.** Nessuna voce ✅ di [scope-v1.md](scope-v1.md) è
 > rimasta senza implementazione: il motore, l'analisi, le due fasi, `Estrai`,
 > `Piazza e sistema` e l'export iCal ci sono tutti. E **D1 è sciolta**
 > ([ADR-020](decisioni.md)): la copertura misura l'atomo e l'alternativa è un
 > dato dichiarato, quindi **l'import non è più bloccato**.
 >
 > **Niente blocca il calcolo.** Restano **tre decisioni** di prodotto
-> (D2, D4, e O5 che è una decisione travestita), **una sola osservazione** in
-> EDT — l'ultimo residuo di O2, il `Ciclo personalizzato` — **due esperimenti**
-> che nessun dato esistente può sostituire (O3, O6), e **nove debiti** già
-> decisi. O1 è chiusa il 2026-08-30.
+> (D2, D4, e O5 che è una decisione travestita), **una sola osservazione
+> sostanziale** in EDT — l'ultimo residuo di O2, il `Ciclo personalizzato` —
+> più le due minuzie da tooltip di **O7**, **due esperimenti** che nessun dato
+> esistente può sostituire (O3, O6), e **nove debiti** già decisi. O1 è chiusa
+> il 2026-08-30.
+>
+> 🔧 **E da quel giorno c'è una sezione 3, `Lavoro`**, che prima non serviva
+> perché non c'era niente di fattibile che non aspettasse qualcuno. Ora sì:
+> **L1** il buco sulla mezza giornata (il debito promosso, misura già scritta),
+> **L2** le due voci che O1 ha lasciato sulla fase 2 — la capienza come criterio
+> e il lucchetto sull'aula — e **L3** il materiale per decidere O5. Sono in
+> ordine di valore, ed è l'ordine in cui conviene prenderle.
 >
 > ⚠ Il giro del 2026-08-29 ha spostato quattro voci dalla colonna 👁 a 🧭 o 🧪:
 > non mancavano schermate, mancavano decisioni. È il segno che l'osservazione
@@ -125,8 +133,7 @@ vive nel solo wizard di creazione — da confermare.
 `Fasce orarie` il generatore sparisce, perché le etichette ordinali *sono* i
 ranghi e non si generano), e l'orologio conferma per la **terza** via i ranghi
 2 e 4 degli intervalli e il 6+1+3 della mezza giornata. ⚠ E ha aperto una
-minuzia: `Intervallo del pomeriggio` sta alle 11:50, cioè nella mezza giornata
-del mattino — o il nome è posizionale, o l'ingranaggio ⚙ nasconde altro.
+minuzia, che sta in **O7**: `Intervallo del pomeriggio` alle 11:50.
 
 ### O3 🧪 La semantica del monte ore tripartito — **esperimento, non osservazione**
 
@@ -206,9 +213,67 @@ L'esperimento residuo — compilare `MS = R` e guardare se cambia il piazzamento
 è sceso di priorità: un campo che il produttore non compila nemmeno nella
 propria base difficilmente muove il motore.
 
+### O7 👁 Due minuzie da un tooltip ciascuna
+
+Non bloccano niente e costano uno screenshot. Stanno qui perché due
+affermazioni del repo sono oggi marcate **[INFERENZA]** e un passaggio del
+mouse le promuove o le smentisce.
+
+1. L'intestazione **`TOP`** nell'elenco delle aule: la formula `Occ. / (Qtà ×
+   50h)` torna su quattro righe su cinque, e su `LAB.ARTISTICA` no (21h su 50
+   farebbe 42%, il prodotto dice 72%). L'ipotesi che le riconcilia è che il
+   denominatore sia il tempo **disponibile** — cioè che le indisponibilità
+   dell'aula escano dal conto. → [aule.md](edt/aule.md)
+2. L'**ingranaggio ⚙** accanto a `Intervallo` nel passo 3 di `Parametri →
+   Istituto → Orari`: `Intervallo del pomeriggio` sta alle 11:50, cioè nella
+   mezza giornata del mattino. O il nome è posizionale, o l'ingranaggio nasconde
+   un altro asse. → [tempo-e-calendario.md](edt/tempo-e-calendario.md)
+
 ---
 
-## 3. Debiti dichiarati
+## 3. Lavoro — si può fare adesso
+
+Nessuno le sblocca: hanno una risposta tecnica e non aspettano né EDT né una
+decisione. In ordine di valore, che è l'ordine in cui conviene prenderle.
+
+### L1 🔧 Il buco misurato sulla mezza giornata — **il candidato più concreto**
+
+È il debito omonimo della sezione 4, promosso a lavoro perché è l'unico dei nove
+che ha già la sua misura scritta e il suo costo quantificato: un parametro a due
+valori e uno `span` scelto invece che fisso, in due posti
+(`MaxGapChecker`, il criterio `buchi`). ⚠ Tocca la quantità di un vincolo
+**hard** — il D.T.B. — e di un livello della catena, quindi vuole il suo giro di
+misure sul Fermi e sul banco, non solo i due test nuovi. Il perché sta nella
+riga della sezione 4, che resta la fonte.
+
+### L2 🔧 Le due voci in meno lasciate da O1 sulla fase 2
+
+Aperte il 2026-08-30 dall'osservazione dell'ottimizzatore aule, entrambe
+piccole ed entrambe dentro `domain/solver/rooms.py`:
+
+- **La capienza in alunni è un criterio, e nessuno la legge.** *«Minimizza il
+  superamento della capienza»* è il terzo default di EDT: dice insieme che si
+  **può** superare — quindi «non è un vincolo» resta vero — e che EDT preferisce
+  non farlo. `Room.capacity` esiste nel nostro schema dal primo giorno ed è letto
+  da nessuno. Costo: un livello in coda alla catena della fase 2 che minimizza
+  l'eccedenza, non un vincolo.
+- **Manca il lucchetto sulla singola assegnazione d'aula.** `Blocco delle aule
+  nelle attività coinvolte` ha una casella **per riga**: è `immobility` applicato
+  all'**aula** invece che alla collocazione. Da noi la fase 2 riassegna tutto o
+  niente. Costo: un campo sull'assegnazione e un dominio fissato nel contesto —
+  la stessa forma che `Estrai` già usa come immobilità di esecuzione.
+
+### L3 🔧 Preparare O5: la raccomandazione motivata, criterio per criterio
+
+O5 è una decisione (dieci criteri di piazzamento su cui dire dentro/fuori) ma il
+**materiale** per deciderla è lavoro nostro: per ognuno dei dieci, cosa fa in
+EDT, cosa costerebbe da noi, e la raccomandazione. Tre sono già quasi decisi
+dalla struttura (vedi O5). Serve perché oggi la decisione è bloccata non da un
+dubbio di prodotto ma dall'assenza di una tabella su cui rispondere.
+
+---
+
+## 4. Debiti dichiarati
 
 Già decisi, e la decisione è stata «non adesso». Si riaprono con un motivo
 nuovo, non per fastidio.
@@ -243,6 +308,7 @@ nuovo, non per fastidio.
   valori e uno `span` scelto invece che fisso, negli stessi due posti. Non
   adesso perché cambierebbe la quantità di un vincolo **hard** (il D.T.B.) e di
   un livello della catena, quindi vuole il suo giro di misure. 👁 2026-08-29.
+  → promosso a lavoro il 2026-08-30: è **L1**, il candidato più concreto.
 - ⚖ **I giorni esclusi dal conteggio delle giornate libere** non esistono da
   noi. EDT ha una casella per giorno in `Parametri → Istituto → Orari` — *«I
   giorni spuntati saranno ignorati durante il calcolo delle giornate libere»* —
@@ -269,7 +335,7 @@ nuovo, non per fastidio.
 
 ---
 
-## 4. Fuori scope, dichiarato
+## 5. Fuori scope, dichiarato
 
 Deciso in [ADR-015](decisioni.md) e in [scope-v1.md](scope-v1.md). Qui solo
 perché nessuno debba ricostruire *perché*.
