@@ -24,9 +24,10 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > dato dichiarato, quindi **l'import non è più bloccato**.
 >
 > **Niente blocca il calcolo.** Restano **tre decisioni** di prodotto
-> (D2, D4, e O5 che è una decisione travestita), **due osservazioni** in
-> EDT — entrambe residui minori di O1 e O2 — **due esperimenti** che nessun
-> dato esistente può sostituire (O3, O6), e **nove debiti** già decisi.
+> (D2, D4, e O5 che è una decisione travestita), **una sola osservazione** in
+> EDT — l'ultimo residuo di O2, il `Ciclo personalizzato` — **due esperimenti**
+> che nessun dato esistente può sostituire (O3, O6), e **nove debiti** già
+> decisi. O1 è chiusa il 2026-08-30.
 >
 > ⚠ Il giro del 2026-08-29 ha spostato quattro voci dalla colonna 👁 a 🧭 o 🧪:
 > non mancavano schermate, mancavano decisioni. È il segno che l'osservazione
@@ -76,52 +77,7 @@ stato vive dove.
 
 ## 2. Da osservare in EDT
 
-### O1 👁 `TypeChoixOptimSalle` e `TypeIncompatibiliteSalle` — **resta un default**
-
-⚠ La voce diceva che ne conosciamo il nome e non i valori: **falso**, i valori
-erano già negli estratti (2026-08-28).
-`TypeChoixOptimSalle = tcosChangements, tcosSallePref, tcosCapacite,
-tcosChangementsConfort, tcosAucun` — i criteri con cui EDT sceglie *quale* aula
-fra le ammissibili — e gli undici di `TypeIncompatibiliteSalle`
-(`isElleMeme, isSite, isCapacite, isSalleDansGroupe, isDejaDansLeGroupe,
-isNbOccurences, isGroupeDansGroupe, isGroupeDeGroupe, isIndisponibilites,
-isOccupation, isGroupeDansConseil`) →
-[estratti/catalogo-tipi-interni.md](edt/estratti/catalogo-tipi-interni.md),
-[aule.md](edt/aule.md).
-
-⚠ **E si è ristretta ancora il 2026-08-29**, sempre senza aprire EDT: le
-etichette della finestra `FicheEdt_OptimiseurSalles` erano nelle stringhe e
-mappano uno a uno sui cinque valori. Con due conseguenze scritte in
-[aule.md](edt/aule.md):
-
-- 🔑 **`tcosChangements` non è ciò che credevamo.** L'etichetta è `Limita gli
-  spostamenti tra attività consecutive`: è il **cammino** di una classe fra
-  un'ora e la successiva, non la differenza fra due ripartizioni. Quindi il
-  **secondo livello della nostra seconda fase non è nessuno dei cinque criteri
-  di EDT** — è nostro, ed è la stabilità. Da dichiarare come voce in più, non
-  da spacciare per traduzione.
-- La finestra ha **quattro caselle numerate** (catena lessicografica a quattro
-  livelli, la stessa forma della nostra) e un `Ottimizza per` **Classi/Docenti**
-  con liste di prioritari: la **separazione per popolazione** vale anche nella
-  fase aule, non solo nel piazzamento.
-
-Resta **una sola cosa** e la strada è uno screenshot: quali siano i **quattro
-valori di default** nelle caselle.
-
-👁 **2026-08-30 — trovata la strada, non ancora la finestra.** Il comando non è
-una voce di menu ma un **pulsante**, in `Orario → Aule → Gestione del gruppo di
-aule`: si seleziona un gruppo, si preme `Assegna le aule alle attività`, e solo
-dopo `Ottimizza l'assegnazione delle aule` smette di rispondere
-*«Ottimizzazione impossibile»*. La ripartizione va **confermata** (avverte che
-*«certe modifiche dell'orario per settimana saranno cancellate»*), ed è il passo
-che mancava. → [aule.md](edt/aule.md)
-
-⚠ Lo stesso giro ha portato molto più di quanto O1 chiedesse — `Picco d'occ.`
-come conferma diretta di [ADR-021](decisioni.md), la finestra del gruppo di aule
-campo per campo, e una minuzia aperta sulla colonna `TOP`. Vedi il
-[changelog](changelog.md) alla data.
-
-### O2 👁 La configurazione della griglia oraria — **chiusa, due residui**
+### O2 👁 La configurazione della griglia oraria — **chiusa, un residuo**
 
 **Osservata il 2026-08-29** la finestra `File → Strumenti → Cambia i parametri
 della griglia oraria`: giorni lavorativi come **maschera** a sette caselle con
@@ -159,7 +115,8 @@ attività, intervalli e limiti della mezza giornata. Le due strade sono quindi
 davvero diverse: una **converte** la griglia ai bordi, l'altra **manutiene** un
 orario esistente da qualunque punto. → [tempo-e-calendario.md](edt/tempo-e-calendario.md)
 
-Resta **un** residuo: dove si imposta il **`Ciclo personalizzato`**
+Resta **un solo** residuo, ed è l'unica osservazione ancora aperta in tutto
+questo elenco: dove si imposta il **`Ciclo personalizzato`**
 (`NombreJoursParCycle > 7`). Nella finestra di conversione **non c'è**, quindi
 vive nel solo wizard di creazione — da confermare.
 
@@ -340,6 +297,21 @@ perché nessuno debba ricostruire *perché*.
 
 Il racconto è in [changelog.md](changelog.md), alla data.
 
+- [x] **2026-08-30** — **O1, i criteri dell'ottimizzatore aule**: i quattro
+      default sono `Limita gli spostamenti tra attività consecutive`,
+      `Favorisci l'utilizzo delle aule preferenziali`, `Minimizza il superamento
+      della capienza`, `Nessuno`. 🔑 Il criterio dominante non è «quale aula è
+      più adatta» ma **«quanto camminano le persone»**. ⚠ Ne escono tre voci in
+      meno dichiarate: la nostra fase 2 non implementa nessuno dei quattro, la
+      capienza in alunni è un **criterio** (non un vincolo, ma nemmeno inerte),
+      e manca il lucchetto sulla singola assegnazione d'aula.
+      → [aule.md](edt/aule.md)
+- [x] **2026-08-30** — **Il primo residuo di O2**: `Inserisci / cancella una
+      fascia oraria` è una **migrazione**, non un parametro — unità in
+      **durata**, posizione libera, e ciò che segue viene scalato (attività,
+      intervalli, limiti di mezza giornata). Le due strade per cambiare il
+      numero di fasce sono davvero diverse: una converte, l'altra manutiene.
+      → [tempo-e-calendario.md](edt/tempo-e-calendario.md)
 - [x] **2026-08-29 (sera)** — **D3, la fase 1 cieca alle aule**, sciolta con
       [ADR-021](decisioni.md): non era una decisione di prodotto ma
       un'osservazione già nel repo e letta male — in EDT le aule si **contano**

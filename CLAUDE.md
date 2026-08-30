@@ -466,9 +466,11 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
       + rango`.
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
-Quattro decisioni, due osservazioni e due esperimenti in EDT, otto debiti dichiarati. **Nessuna
-blocca il calcolo**: ⛔ D1, che bloccava l'import, è sciolta il 2026-08-28 con
-[ADR-020](docs/decisioni.md).
+Tre decisioni, **una sola osservazione** ancora aperta in EDT (il `Ciclo
+personalizzato`), due esperimenti e nove debiti dichiarati. **Nessuna blocca il
+calcolo**: ⛔ D1 è sciolta il 2026-08-28 con [ADR-020](docs/decisioni.md), ⛔ D3
+il 2026-08-29 con [ADR-021](docs/decisioni.md), e O1 — i criteri
+dell'ottimizzatore aule — il 2026-08-30.
 
 Quello che segue è la **storia delle voci chiuse**, con il perché: si legge, non
 si aggiorna.

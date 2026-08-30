@@ -15,6 +15,57 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (notte) — O1 chiusa: il criterio dominante è quanto camminano le persone** —
+  Lanciata la ripartizione su `PALESTRE` e aperto l'ottimizzatore. I quattro
+  criteri che il produttore ci trova dentro:
+
+  | | Default | Enum |
+  |---|---|---|
+  | 1. | `Limita gli spostamenti tra attività consecutive` | `tcosChangements` |
+  | 2. | `Favorisci l'utilizzo delle aule preferenziali` | `tcosSallePref` |
+  | 3. | `Minimizza il superamento della capienza` | `tcosCapacite` |
+  | 4. | `Nessuno` | `tcosAucun` |
+
+  Il quinto (`tcosChangementsConfort`, gli spostamenti fra attività **non**
+  consecutive) resta fuori, coerentemente con l'avvertenza che è lento.
+
+  🔑 **Il criterio dominante non è «quale aula è più adatta»: è «quanto
+  camminano le persone».** Il cammino primo, l'aula preferenziale seconda, la
+  capienza terza. Quarta conferma indipendente che `tcosChangements` è una
+  distanza fisica e non una differenza fra due ripartizioni — il che lascia in
+  piedi la conclusione del 2026-08-29: il secondo livello della nostra fase 2
+  (la stabilità) **non è nessuno dei cinque criteri di EDT**, è nostro.
+
+  ⚠ **E la capienza torna, ma come criterio.** `Minimizza il superamento della
+  capienza` dice due cose insieme: che la capienza in alunni **si può superare**
+  — quindi «non è un vincolo» resta vero — e che EDT **preferisce non farlo**.
+  Non era inerte come sembrava. `Room.capacity` esiste nel nostro schema,
+  dichiarato descrittivo, e non è letto da nessuno.
+
+  Altre tre cose dalla stessa finestra:
+
+  - `Ottimizza per` è una **tendina** `Classi`/`Docenti` (nella ripartizione la
+    stessa scelta è un radio), e sotto c'è la lista dei **prioritari** — 22
+    classi o 4 docenti sulla demo, `0` selezionati. 🔑 **La priorità è una
+    selezione, non un peso**: il nostro `Arbitrato` dichiara invece una
+    tolleranza numerica di peggioramento. Il nostro è più fine, il loro sa dire
+    una cosa che il nostro non sa — *queste* classi prima delle altre;
+  - `Blocco delle aule nelle attività coinvolte` è la tabella delle assegnazioni
+    rimescolabili (43 righe sulla demo) con un **lucchetto per riga**: è
+    `immobility` applicato all'**aula** invece che alla collocazione, e non ce
+    l'abbiamo;
+  - le colonne della tabella si **scambiano** con la popolazione scelta —
+    `Classe | Aula | …` diventa `Docente | Aula | …`.
+
+  🔑 **E la ripartizione, misurata, giustifica la separazione in due fasi.**
+  Prima: `Palestra 1` e `Palestra 2` entrambe a `0h00`. Dopo `Assegna le aule
+  alle attività`: **29h00 e 19h00**, somma 48h00 = l'`Occ.` del gruppo. Cioè la
+  ripartizione da sola trova *una* assegnazione valida e **non la bilancia**;
+  bilanciarla è il lavoro dell'ottimizzatore. La separazione non è formale.
+
+  Con questa, **O1 è chiusa** e resta una sola osservazione aperta in tutto il
+  todo — il `Ciclo personalizzato`.
+
 - **2026-08-30 (sera) — `Picco d'occ.` è la colonna che ADR-021 calcola** — Quattro
   schermate della vista `Orario → Aule` e della finestra `Gestione del gruppo di
   aule`, cercando i default dell'ottimizzatore (O1). L'ottimizzatore non si è

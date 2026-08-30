@@ -368,8 +368,71 @@ scrive `assigned_room` senza toccare nient'altro: **non** ha questo effetto, ed
 
 La nostra seconda fase (`domain/solver/rooms.py`) ha **due** livelli — minuti
 senza aula, poi i cambi rispetto alla ripartizione precedente — e non implementa
-nessuno dei cinque criteri di EDT. **Resta da osservare in UI** solo quali siano
-i **quattro valori di default** nelle caselle (O1 di [todo.md](../todo.md)).
+nessuno dei cinque criteri di EDT.
+
+### 👁 La finestra dell'ottimizzatore, aperta — e i quattro default
+
+Osservata il 2026-08-30, dopo aver lanciato la ripartizione su `PALESTRE`.
+Titolo: *«Ottimizzazione della ripartizione delle aule di PALESTRE»* — quindi
+**si ottimizza la ripartizione**, non si assegna: sono due verbi diversi, come
+sono due riquadri diversi.
+
+🔑 **I quattro criteri, coi valori che il produttore ci trova dentro:**
+
+| | Default osservato | Enum |
+|---|---|---|
+| **1.** | `Limita gli spostamenti tra attività consecutive` | `tcosChangements` |
+| **2.** | `Favorisci l'utilizzo delle aule preferenziali` | `tcosSallePref` |
+| **3.** | `Minimizza il superamento della capienza` | `tcosCapacite` |
+| **4.** | `Nessuno` | `tcosAucun` |
+
+Il quinto valore — `Limita gli spostamenti tra attività **non** consecutive`
+(`tcosChangementsConfort`) — **non è fra i default**, coerentemente con la nota
+a piè di finestra: *«Questo criterio comporterà un'ottimizzazione più lunga, deve
+essere utilizzato solo se necessario.»*
+
+🔑 **Il criterio dominante non è «quale aula è più adatta»: è «quanto camminano
+le persone».** Il cammino sta al primo posto, l'aula preferenziale al secondo, la
+capienza al terzo. Chiude O1 e conferma per la quarta volta la correzione del
+2026-08-29 su `tcosChangements`.
+
+⚠ **E la capienza torna, ma come criterio.** `Minimizza il superamento della
+capienza` dice due cose insieme: che la capienza in alunni **si può superare**
+(quindi non è un vincolo — § *Cosa vincola davvero la scelta dell'aula* resta
+vero) e che EDT **preferisce non farlo**. Non è quindi inerte come sembrava: è
+un criterio soft, il terzo. Il campo `Cap.` esiste nel nostro schema
+(`Room.capacity`, dichiarato descrittivo) e non è letto da nessuno. Voce in
+meno, dichiarata.
+
+**Il resto della finestra:**
+
+- **`Ottimizza per`** è una **tendina** `Classi` / `Docenti` (nella finestra di
+  ripartizione la stessa scelta è un *radio*: due UI per la stessa cosa). Sotto,
+  `Classi prioritarie` oppure `Docenti prioritari` — sulla demo **22 classi** e
+  **4 docenti**, con contatore `0 / 22` e `0 / 4`, cioè nessuna selezione.
+  La frase è esplicita: *«La ripartizione delle aule è ottimizzata per tutte le
+  classi relative al gruppo di aule. Selezionate le classi da ottimizzare
+  prioritariamente»*.
+
+  🔑 **La priorità è una selezione, non un peso.** Il nostro `Arbitrato` dichiara
+  invece una **tolleranza numerica** di peggioramento sulla popolazione
+  sacrificata. Due meccanismi diversi per lo stesso scopo, e il nostro è più
+  fine — ma il loro dice qualcosa che il nostro non sa dire: *queste* classi
+  prima delle altre.
+- **`Blocco delle aule nelle attività coinvolte`**: la tabella delle assegnazioni
+  che l'ottimizzatore rimescolerebbe — `Classe | Aula | 🔒 | Materia | Docente |
+  Collocazione`, e le prime due colonne si **scambiano** quando si ottimizza per
+  docenti. Sulla demo **43 righe**, contatore `0 / 43`. Il lucchetto blocca la
+  singola assegnazione: *«Potete sbloccare alcune aule per consentire a EDT di
+  esplorare altre combinazioni.»* È il nostro `Activity.immobility` applicato
+  all'**aula** invece che alla collocazione, e non ce l'abbiamo.
+
+**E la ripartizione, misurata.** Prima: `Palestra 1` e `Palestra 2` entrambe a
+`0h00`. Dopo `Assegna le aule alle attività`: **29h00** e **19h00**, somma 48h00
+= l'`Occ.` del gruppo. Cioè la ripartizione da sola **non bilancia** — 43
+attività distribuite 29/19 — ed è precisamente il lavoro che l'ottimizzatore
+farebbe dopo. La separazione fra le due fasi non è formale: la prima trova *una*
+assegnazione, la seconda la rende buona.
 
 ### Ma la classe ha un'aula preferenziale
 
