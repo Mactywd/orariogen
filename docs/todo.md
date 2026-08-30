@@ -27,7 +27,8 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > (D2, D4, e O5 che è una decisione travestita), **una sola osservazione
 > sostanziale** in EDT — l'ultimo residuo di O2, il `Ciclo personalizzato` —
 > più le due minuzie da tooltip di **O7**, **due esperimenti** che nessun dato
-> esistente può sostituire (O3, O6), e **nove debiti** già decisi. O1 è chiusa
+> esistente può sostituire (O3, O6), e **sette debiti** già decisi (erano nove:
+> L6bis e L7 ne hanno pagati due). O1 è chiusa
 > il 2026-08-30.
 >
 > 🔧 **La sezione 3, `Lavoro`, ha aperto e chiuso quattro voci lo stesso

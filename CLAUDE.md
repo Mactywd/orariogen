@@ -517,7 +517,7 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
 Tre decisioni, **una sola osservazione sostanziale** ancora aperta in EDT (il
-`Ciclo personalizzato`) più due minuzie da tooltip, due esperimenti e nove
+`Ciclo personalizzato`) più due minuzie da tooltip, due esperimenti e sette
 debiti dichiarati. **Nessuna blocca il calcolo**: ⛔ D1 è sciolta il 2026-08-28
 con [ADR-020](docs/decisioni.md), ⛔ D3 il 2026-08-29 con
 [ADR-021](docs/decisioni.md), e O1 — i criteri dell'ottimizzatore aule — il
