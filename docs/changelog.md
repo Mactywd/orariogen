@@ -15,6 +15,74 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (tarda sera) — La spec dell'Alighieri: il Fermi misura il dataset, non il modello** —
+  Conseguenza diretta della prova del prodotto qui sopra, e con due misure che
+  hanno smentito quello che il progetto credeva di sé.
+
+  🔑 **La prima: tre builder su ventisette, non sei famiglie.** `CLAUDE.md`
+  elencava le famiglie esercitate dal Fermi — *«griglia, indisponibilità,
+  occupazione, sedi, D.T.B. e `room_pool`»* — ma era un elenco, non una misura.
+  Avvolgendo `restrict` e `build` di ogni builder durante `build_model`:
+  `structural:occupation` posta **948** constraint, `structural:room_pool`
+  **420**, `structural:unavailability` toglie **360** celle, e **gli altri
+  ventiquattro non fanno assolutamente nulla**. Tre dei sei elencati non
+  reggono la verifica: `site_transition` non ha `Site` da leggere,
+  `max_gap_hours` legge righe `ResourceTimeConstraint` che non esistono, e
+  `structural:grid` è un no-op perché il Fermi non ha né festività né
+  intervalli e ogni durata sta nella giornata. La riga in `CLAUDE.md` è stata
+  corretta.
+
+  ⚠ Ed è la misura che diventa il **criterio di accettazione** dell'Alighieri,
+  scritta come test e non eseguita una volta a mano: zero builder inerti. Senza
+  quel test, il primo builder aggiunto dopo tornerebbe silenziosamente inerte —
+  che è esattamente com'è nata questa situazione.
+
+  **La seconda: tredici tabelle su trentatré sono vuote.** Non solo
+  `ResourceTimeConstraint` e `SubjectConstraint` — che era già scritto — ma
+  anche `ClassPartition`, `ClassPart` e `Group`.
+
+  ⚠ **Quelle tre sono voci ✅ dello scope v1.** Sdoppiamenti e raggruppamenti
+  trasversali sono decisi *dentro* v1 da ADR-013, hanno i loro test su fixture
+  sintetiche, e **nessun dataset li rappresenta**. È il buco più grave
+  dell'elenco, perché non è una famiglia rara: è una forma che quasi ogni liceo
+  italiano ha.
+
+  🔑 **La decisione della spec è che l'Alighieri sta accanto al Fermi, non al
+  suo posto.** Il Fermi è la trascrizione di una scuola realmente inserita in
+  EDT, e il suo docstring dichiara che *«la trascrizione è essa stessa il
+  test»*. Quel test funziona **solo perché nessuno ha progettato il Fermi per
+  superarlo**: arricchirlo finché esercita ventisette builder distruggerebbe la
+  proprietà che lo rende utile. Da quel momento «lo schema rappresenta il
+  Fermi» non direbbe più niente sul mondo.
+
+  E l'Alighieri è di natura diversa — righe costruite per far scattare un
+  checker, non osservate — quindi il suo README apre dichiarandolo un **banco**.
+  La convenzione «ciò che è nostra estensione va segnalato come tale» vale
+  anche per i dataset.
+
+  ⚠ **La regola che lo tiene onesto è la verifica per mutazione**, ed è il vero
+  contratto della spec: togliere la riga di una famiglia **deve** cambiare
+  l'orario. Senza, «l'Alighieri copre tutte le famiglie» significa soltanto
+  «l'Alighieri ha righe in tutte le tabelle» — ed è il modo in cui un dataset
+  completo può essere vuoto. Il rischio gemello è dichiarato: un dataset lo si
+  aggiusta finché è verde, e a quel punto non prova più niente; per questo gli
+  esiti attesi si scrivono **prima** della prima esecuzione.
+
+  Cosa aggiunge rispetto a `test_modello_completo`, che le famiglie le accende
+  già tutte insieme: la **scala** (il difetto del budget è comparso solo a 284
+  attività, e nessun test lo vedeva), la **coerenza** (il banco combina per
+  seme, una scuola combina come una scuola), e **i comandi** — sul Fermi la
+  classifica di blame ordina tre indisponibilità e nient'altro: non è una
+  classifica, è un elenco.
+
+  Ordine rispetto a D2, dichiarato: prima l'Alighieri. D2 porterà una seconda
+  scuola *vera*, che varrà di più, ma dipende da dati che non abbiamo — e
+  l'Alighieri riduce il rischio di D2, invece di scoprire insieme che i dati
+  sono difficili e che il motore non li regge.
+
+  Sette ondate, con gli sdoppiamenti in seconda posizione — prima dei vincoli,
+  perché le quattro famiglie `parts_*` senza partizioni non hanno soggetto.
+
 - **2026-08-30 (tarda sera) — Il budget appartiene alla posizione: `solve --popolazione` non tornava** —
   Trovato non da un test ma **provando il prodotto**: database vuoto, `migrate`,
   il Fermi caricato, e poi tutti i comandi uno per uno dalla riga di comando.

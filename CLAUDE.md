@@ -189,11 +189,18 @@ Coperto finora (una scuola di esempio inserita in EDT):
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
 > righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
-> `None`, quindi **ventuno builder su ventisette non postano nulla** — e prima
-> delle aule dava gli stessi 8140 variabili e 1082 constraint dello spike a
-> cinque vincoli, `OPTIMAL` in ~0,56 s. Le famiglie che esercita sono **sei**:
-> griglia, indisponibilità, occupazione, sedi, D.T.B. e — dal 2026-08-29 —
-> `room_pool`. La misura del modello resta
+> `None` — e prima delle aule dava gli stessi 8140 variabili e 1082 constraint
+> dello spike a cinque vincoli, `OPTIMAL` in ~0,56 s.
+>
+> 🔑 **E sono tre builder su ventisette, non sei famiglie**: qui era scritto
+> «griglia, indisponibilità, occupazione, sedi, D.T.B. e `room_pool`», ed era un
+> elenco, non una misura. Avvolgendo `restrict` e `build` di ogni builder
+> durante `build_model` (2026-08-30): `structural:occupation` posta **948**
+> constraint, `structural:room_pool` **420**, `structural:unavailability` toglie
+> **360** celle, e **gli altri ventiquattro non fanno nulla**. Tre dei sei
+> elencati non reggono: `site_transition` non ha `Site`, `max_gap_hours` legge
+> righe che non esistono, `structural:grid` è un no-op senza festività né
+> intervalli. È la misura che apre **L4**. La misura del modello resta
 > `test_modello_completo`, che attiva tutte le famiglie **insieme** sullo stesso
 > testimone: 22–23 famiglie con righe su 26, 48–73 righe, `OPTIMAL` su tutti e
 > cinque i seed, oracolo pulito.
@@ -493,7 +500,14 @@ con [ADR-020](docs/decisioni.md), ⛔ D3 il 2026-08-29 con
 [ADR-021](docs/decisioni.md), e O1 — i criteri dell'ottimizzatore aule — il
 2026-08-30.
 
-🔧 La sezione **`Lavoro`** del todo è nata e si è chiusa il 2026-08-30. **L1**:
+🔧 La sezione **`Lavoro`** del todo ha aperto e chiuso tre voci il 2026-08-30,
+e ne ha aperta una quarta — **L4**, il dataset «Alighieri»: il Fermi esercita
+**tre builder su ventisette** e ne lascia **tredici tabelle su trentatré vuote**,
+`ClassPartition`/`ClassPart`/`Group` comprese, cioè le voci ✅ di scope v1 che
+nessun dataset rappresenta.
+[Spec](docs/superpowers/specs/2026-08-30-alighieri-banco-a-scuola-intera-design.md),
+da approvare. 🔑 **Accanto al Fermi, non al posto suo**: il Fermi vale perché
+non è stato progettato per superare i nostri test. **L1**:
 il perimetro su cui si misura il buco è ora un parametro d'istituto, separato
 per classi e docenti, letto insieme dal checker, dal builder del D.T.B. e dal
 criterio `gaps` — 🔑 la casella di EDT e lo spezzare alla linea sono **la stessa

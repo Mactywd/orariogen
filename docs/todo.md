@@ -30,11 +30,16 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > esistente può sostituire (O3, O6), e **nove debiti** già decisi. O1 è chiusa
 > il 2026-08-30.
 >
-> 🔧 **La sezione 3, `Lavoro`, è nata e chiusa lo stesso giorno.** L1 (il
-> perimetro del buco), L2 (la capienza come criterio e il lucchetto sull'aula) e
-> L3 (il materiale per decidere O5) sono fatte il 2026-08-30. Restano le loro
-> righe con la data, e **un debito nuovo** che L3 ha trovato per strada: i
-> criteri di qualità contano su una settimana sola.
+> 🔧 **La sezione 3, `Lavoro`, ha aperto e chiuso tre voci lo stesso giorno**
+> — L1 (il perimetro del buco), L2 (la capienza come criterio e il lucchetto
+> sull'aula) e L3 (il materiale per decidere O5) — e **una quarta è aperta**:
+> L4, il dataset Alighieri. Con L3 è arrivato anche **un debito nuovo**, che ha
+> trovato per strada: i criteri di qualità contano su una settimana sola.
+>
+> ⚠ **E provando il prodotto invece dei test si è visto che il Fermi misura
+> pochissimo**: tre builder su ventisette fanno qualcosa, tredici tabelle su
+> trentatré sono vuote.
+> È L4, ed è ciò che va fatto prima di D2.
 
 ---
 
@@ -231,6 +236,22 @@ mouse le promuove o le smentisce.
 Nessuno le sblocca: hanno una risposta tecnica e non aspettano né EDT né una
 decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
 [changelog.md](changelog.md), e qui restano le righe con la data.
+
+- [ ] **L4 — il Liceo "Alighieri": il banco a scuola intera.** Il modello hard
+      è completo, ma il dataset su cui gira il prodotto esercita **tre builder
+      su ventisette** — misurato avvolgendo `restrict` e `build` di ciascuno — e
+      sul Fermi in un database vero **tredici tabelle su trentatré sono
+      vuote**, fra cui `ClassPartition`, `ClassPart` e
+      `Group`, cioè le voci ✅ di scope v1 (ADR-013) che **nessun dataset
+      rappresenta**. Un secondo dataset costruito apposta, con almeno una riga
+      per famiglia e l'esito atteso dichiarato prima dell'esecuzione.
+      🔑 **Accanto al Fermi, non al posto suo**: il Fermi è la trascrizione di
+      una scuola osservata, e il suo valore sta tutto nel non essere stato
+      progettato per superare i nostri test. ⚠ E la regola che lo tiene onesto
+      è la **verifica per mutazione**: togliere la riga di una famiglia deve
+      cambiare l'orario, o quella famiglia è presente e non esercitata.
+      Spec: [2026-08-30-alighieri-banco-a-scuola-intera-design.md](superpowers/specs/2026-08-30-alighieri-banco-a-scuola-intera-design.md)
+      — **da approvare**, sette ondate.
 
 - [x] **L1 — il buco misurato sulla mezza giornata.** Il perimetro è ora un
       parametro d'istituto, separato per classi e per docenti
