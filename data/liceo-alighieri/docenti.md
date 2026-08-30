@@ -1,7 +1,11 @@
-# Docenti — le 21 cattedre
+# Docenti — le 23 cattedre
 
 Ogni riga quadra a `+/- = 0`: le ore assegnate sono esattamente il monte ore
 contrattuale (`Mh/s`), e il test lo verifica cattedra per cattedra.
+
+⚠ **`Mh/s` non si legge dal quadro orario**, e l'ondata 2 lo rende visibile: N01
+lavora **18** ore per 17 ore di curriculum, perché l'ora di laboratorio
+sdoppiata di 3A la insegna due volte. Vedi [gruppi.md](gruppi.md) §3.
 
 | ID | Docente | Abbr. | Insegna | Mh/s |
 |---|---|---|---|---:|
@@ -20,21 +24,27 @@ contrattuale (`Mh/s`), e il test lo verifica cattedra per cattedra.
 | M02 | Quaranta Livia | QUARA | MAT, FIS in 1C 2C | 14 |
 | M03 | Rinaldi Tommaso | RINAL | MAT, FIS in 3A 4A 5A | 21 |
 | M04 | Sartori Gaia | SARTO | MAT in 1B–5B, FIS in 3B 4B 5B | 18 |
-| N01 | Tosi Alberto | TOSI | SCI in 1A 2A 1C 2C 3A 4A 5A | 17 |
+| N01 | Tosi Alberto | TOSI | SCI in 1A 2A 1C 2C 3A 4A 5A (3A sdoppiata) | **18** |
 | N02 | Urbani Chiara | URBAN | SCI in 1B–5B | **10** |
 | A01 | Vitali Renzo | VITAL | DIS nelle 7 scientifiche, STA in 3B 4B 5B | 20 |
 | P01 | Zanetti Luca | ZANET | MOT in 1A 2A 3A 4A 5A 1C | **12** |
 | P02 | Bruni Sofia | BRUNI | MOT in 2C 1B 2B 3B 4B 5B | **12** |
 | R01 | Colombo Padre Egidio | COLOM | IRC in tutte e dodici | **12** |
-| | | | **Totale** | **345** |
+| R02 | Donati Marta | DONAT | ALT (attività alternativa) in tutte e dodici | **12** |
+| I01 | Ricci Dario | RICCI | INF in 2C (parte Scienze Applicate) | **3** |
+| | | | **Totale erogato** | **361** |
 
-## I quattro tempi parziali
+## I tempi parziali, e lo spezzone
 
-🔑 **L06** (12 h), **N02** (10 h), **P01/P02** (12 h) e **R01** (12 h) esistono
+🔑 **L06** (12 h), **N02** (10 h), **P01/P02** (12 h), **R01/R02** (12 h) esistono
 perché `max_presence` — *«lavora al più N giorni»* — **non ha soggetto su un
 collegio di sole cattedre piene**: con 21 ore un docente sta a scuola comunque
 tutti i giorni, e il vincolo è vero per costruzione. Il portatore designato è
 L06 (ondata 3): dodici ore su cinque giorni si comprimono a tre.
+
+⚠ **I01 sta a tre ore**, ed è lo **spezzone** che un'articolata produce davvero
+in una scuola piccola: il nostro modello lo rappresenta senza dire niente,
+perché `Mh/s` è un numero e non una cattedra.
 
 ⚠ Al Fermi i part-time ci sono (D09 a 6 h, D15 a 9 h) ma **non portano alcun
 vincolo**: la tabella `ResourceTimeConstraint` è vuota, quindi otto famiglie su
@@ -52,4 +62,15 @@ richiesta sensata invece di un capriccio.
 
 ## Chi attraversa le sedi
 
-Sei cattedre su ventuno: R01, A01, N01, E01, P01, E02. Vedi [sedi.md](sedi.md).
+Sette cattedre su ventitré: R01, **R02**, A01, N01, E01, P01, E02 — l'attività
+alternativa segue l'IRC in tutte e dodici le classi, succursale compresa. Vedi
+[sedi.md](sedi.md).
+
+## ⚠ Dove la contabilità della cattedra è una finzione
+
+Le tre ore di E01 sul livello base di inglese sono registrate su **1A** e
+quelle di E02 sul livello avanzato su **1B**, mentre entrambi insegnano ad
+alunni di **entrambe** le classi: `TeachingAssignment` ha una FK alla classe, e
+un raggruppamento trasversale non ci sta dentro. Il monte ore quadra e l'orario
+è corretto — è la riga di bilancio a mentire. Scritto qui perché non venga
+scoperto come sorpresa; vedi [gruppi.md](gruppi.md) §4.

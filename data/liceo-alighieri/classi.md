@@ -23,19 +23,22 @@ le cattedre che attraversano sono poche e nominate ([sedi.md](sedi.md)), che è
 la condizione in cui un vincolo di transizione morde su qualcuno invece di
 pesare su tutti.
 
-## Dove andrà il raggruppamento trasversale
+## Le classi che portano uno sdoppiamento
 
-Su **1A e 1B**, alla centrale: i livelli di inglese delle due prime che si
-mescolano, che è il modo in cui le scuole li fanno davvero (ondata 2). È il
-caso che *rompe la decomposizione per classe* — la conseguenza dichiarata da
-[ADR-013](../../docs/decisioni.md) e che nessun dataset ha mai messo alla
-prova.
+Tutte e dodici hanno la partizione **IRC / alternativa**; tre ne hanno una
+seconda. Il dettaglio sta in [gruppi.md](gruppi.md).
 
-⚠ **E non attraversa le sedi, deliberatamente.** Un raggruppamento fra 1A e 1C
+| Classe | Seconda partizione | Cosa esercita |
+|---|---|---|
+| 1A, 1B | `INGLESE` (due livelli) | il **raggruppamento trasversale**: rompe la decomposizione per classe |
+| 3A | `LABSCI` (due gruppi) | lo **sdoppiamento a effettivo ridotto** |
+| 2C | `ARTICOLAZIONE` (ordinario / Scienze Applicate) | la **classe articolata**, condizione 3 di ADR-015 |
+
+⚠ **Il raggruppamento non attraversa le sedi, deliberatamente.** Fra 1A e 1C
 sarebbe più spettacolare e sarebbe un errore di anagrafica: gli alunni delle
 due classi dovrebbero stare nello stesso posto alla stessa ora, in due edifici
-diversi. Un banco che chiedesse l'impossibile misurerebbe la propria
-incoerenza, non il motore.
+diversi. Un banco che chiede l'impossibile misura la propria incoerenza, non il
+motore.
 
 ## `expected_students`
 

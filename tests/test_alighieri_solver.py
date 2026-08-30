@@ -1,11 +1,11 @@
-"""L'Alighieri visto dal motore, all'ondata 1.
+"""L'Alighieri visto dal motore.
 
 ⚠ **Non è ancora il criterio di accettazione della spec.** Quello (§4) chiede
 un dataset *stretto*: `OPTIMAL` con zero scarti, ma una sola aula o un solo
-docente in meno e comincia a scartare. All'ondata 1 non c'è ancora una riga di
-vincolo, quindi la tensione non c'è: qui si fissa che l'anagrafica **regge**
-— capienza pulita, due fasi verdi, nessun finding che non sia lo stato di
-partenza — e la tensione arriva con le famiglie."""
+docente in meno e comincia a scartare. Fino all'ondata 2 non c'è ancora una
+riga di vincolo, quindi la tensione non c'è: qui si fissa che l'anagrafica e
+gli sdoppiamenti **reggono** — capienza pulita, due fasi verdi, nessun finding
+che non sia lo stato di partenza — e la tensione arriva con le famiglie."""
 
 import pytest
 
@@ -31,14 +31,15 @@ def test_su_schedule_vuoto_solo_attivita_non_piazzate():
     env = alighieri.build()
     findings = check_schedule(env["schedule"])
     assert {f.code for f in findings} == {"activity_unplaced"}
-    assert len(findings) == Activity.objects.count() == 323
+    assert len(findings) == Activity.objects.count() == 340
 
 
 def test_le_due_fasi_chiudono_pulite():
     """🔑 La fase 2 senza rinunce **non è gratuita**: lo è diventata il
     2026-08-29, quando la fase 1 ha cominciato a contare le aule (ADR-021).
-    Qui le sessantasei richieste d'aula si dividono fra due sedi, e la
-    succursale non ha un `LAB-INF` su cui ripiegare."""
+    Qui le settantuno richieste d'aula si dividono fra due sedi, e la
+    succursale non ha un `LAB-INF` su cui ripiegare — il suo unico laboratorio
+    porta fisica, scienze **e** l'informatica della 2C articolata."""
     env = alighieri.build()
 
     fase1 = solve(env["schedule"], workers=8)
@@ -47,7 +48,7 @@ def test_le_due_fasi_chiudono_pulite():
     apply(fase1, env["schedule"])
 
     richieste = Activity.objects.exclude(rooms=None).count()
-    assert richieste == 66
+    assert richieste == 71
     fase2 = solve_rooms(env["schedule"], workers=8)
     assert fase2.status == "OPTIMAL"
     assert len(fase2.assignments) == richieste

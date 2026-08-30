@@ -1,6 +1,6 @@
 # Materie e discipline
 
-14 materie su 8 discipline. La disciplina è una tabella e non un enum
+16 materie su 10 discipline. La disciplina è una tabella e non un enum
 ([ADR-001](../../docs/decisioni.md)), e porta la mappatura alle classi di
 concorso ([ADR-002](../../docs/decisioni.md)), che è **nostra estensione** e
 non un campo EDT.
@@ -15,6 +15,13 @@ non un campo EDT.
 | ART Discipline artistiche | A017, A054 | DIS Disegno e Storia dell'Arte, STA Storia dell'Arte |
 | MOT Scienze motorie | A048 | MOT Scienze motorie |
 | REL Religione | IRC | IRC Religione cattolica |
+| INF Informatica | A041 | INF Informatica |
+| ALV Attività alternativa | **nessuna** | ALT Attività alternativa |
+
+⚠ **`ALV` senza classi di concorso non è una dimenticanza**: l'attività
+alternativa all'IRC non ne ha una propria — la copre chi ha ore disponibili. È
+anche l'unico caso del dataset in cui la M2M resta vuota, ed è giusto che ce ne
+sia uno.
 
 ## Le due materie che il Fermi non ha
 
@@ -25,10 +32,12 @@ non un campo EDT.
   disciplina che mappa a **più** classi di concorso è il caso che la normativa
   sulle sostituzioni richiede, e il Fermi lo esercita su due discipline soltanto.
 
-⚠ `max_reduced_students` (`Al./Rid.`) resta `NULL` su tutte le materie:
-**eredita** dal default d'istituto (15), che è la cascata dichiarata di
-[ADR-003](../../docs/decisioni.md). Diventerà un dato quando l'ondata 2
-introdurrà lo sdoppiamento a effettivo ridotto.
+⚠ `max_reduced_students` (`Al./Rid.`) resta `NULL` su tutte le materie, e
+**dopo l'ondata 2 è una scelta e non un rinvio**: lo sdoppiamento di 3A c'è, i
+due gruppi da 13 stanno sotto il tetto, e il tetto che vale è quello
+d'istituto (15) — cioè la cascata di [ADR-003](../../docs/decisioni.md)
+esercitata invece che dichiarata. Materializzarlo sulla materia toglierebbe
+l'unico posto del dataset in cui l'ereditarietà si vede lavorare.
 
 ⚠ `didactic_weight` resta al default **1** su tutte: i tetti di peso didattico
 sono `None` in `InstituteSettings`, come in EDT dove i quattro tetti d'istituto

@@ -21,7 +21,7 @@ seconda fase non assegna mai un'aula di una sede a un'attività dell'altra.
 | Aula | Capienza | Qtà | Uso |
 |---|---:|---:|---|
 | C101, C102 | 26 | 1 | aule preferenziali di 1C, 2C |
-| LAB-SUCC | 28 | 1 | fisica **e** scienze: il laboratorio unico |
+| LAB-SUCC | 28 | 1 | fisica, scienze **e** informatica: il laboratorio unico |
 | PAL-SUCC | 50 | 1 | scienze motorie |
 
 ## Le due asimmetrie, che sono deliberate
@@ -32,8 +32,9 @@ la prende già il piazzamento, quindi la seconda fase confermerebbe una scelta
 già fatta — zero gradi di libertà, e una misura che non può fallire.
 
 🔑 **La succursale ha un laboratorio solo, e nessun ripiego.** Fisica e scienze
-di 1C e 2C — otto ore a settimana — si contendono `LAB-SUCC`, senza il
-`LAB-INF` su cui la centrale ripiega. È il posto in cui la stretta si farà
+di 1C e 2C, più le tre ore di informatica della 2C articolata — **undici** ore
+a settimana — si contendono `LAB-SUCC`, senza il `LAB-INF` su cui la centrale
+ripiega. È il posto in cui la stretta si farà
 sentire per prima quando le ondate 3–6 aggiungeranno i vincoli, ed è per questo
 che le due sedi non sono simmetriche.
 
@@ -50,6 +51,11 @@ EDT dichiara `Sedi distaccate`, `Indisponibilità opzionali` e
 aule (`eccedenza_capienza`) — un criterio, come in EDT. Le B da 24 posti per 22
 alunni e le A da 28 per 26 danno al criterio qualcosa da misurare senza che
 nulla lo forzi.
+
+⚠ E dall'ondata 2 `expected_students` è dichiarato anche su **ogni parte**, non
+per completezza: `_effettivo` (`domain/solver/rooms.py`) restituisce `None`
+appena un'unità non ce l'ha, e un'eccedenza sparirebbe in silenzio. Un
+laboratorio a mezza classe porta dentro 13 alunni, non 26.
 
 Categoria e tipologie non esistono nel nostro modello, e non sono un debito:
 `docs/edt/aule.md` documenta che non vincolano.

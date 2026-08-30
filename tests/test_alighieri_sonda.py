@@ -16,10 +16,18 @@ from tests import alighieri, fermi, sonda
 pytestmark = pytest.mark.django_db
 
 
-# Ondata 1 — l'anagrafica. Nessuna tabella di vincoli è ancora popolata:
-# ciò che lavora è tutto **strutturale**, e sono le sedi e la griglia a essere
-# nuove rispetto al Fermi.
-ATTIVI_ONDATA_1 = {
+# Ondate 1–2. Nessuna tabella di **vincoli** è ancora popolata: ciò che lavora
+# è tutto strutturale, e sono le sedi e la griglia a essere nuove rispetto al
+# Fermi.
+#
+# ⚠ **L'ondata 2 non allarga questo insieme, ed è corretto così.** Partizioni,
+# parti e raggruppamenti non hanno un builder proprio: entrano nel modello
+# attraverso le **chiavi di occupazione** (ADR-017), cioè facendo lavorare di
+# più `structural:occupation` — **1440 → 3440** constraint — e attraverso
+# `structural:coverage`, che un builder non ce l'ha per costruzione (il solver
+# non crea né distrugge attività). Un cricchetto che contasse i constraint
+# invece dell'insieme direbbe «cresciuto» e non direbbe niente di vero.
+ATTIVI = {
     "structural:occupation",
     "structural:room_pool",
     "structural:site_transition",   # 🔑 il Fermi ha zero `Site`: qui è muto
@@ -29,7 +37,7 @@ ATTIVI_ONDATA_1 = {
 
 def test_l_alighieri_esercita_i_builder_dichiarati():
     env = alighieri.build()
-    assert sonda.attivi(env["schedule"]) == ATTIVI_ONDATA_1
+    assert sonda.attivi(env["schedule"]) == ATTIVI
 
 
 def test_il_fermi_ne_esercita_tre_ed_e_la_misura_che_apre_il_pezzo():

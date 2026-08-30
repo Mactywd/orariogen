@@ -15,6 +15,64 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (notte) — L'Alighieri, ondata 2: gli sdoppiamenti, e il primo difetto che il banco produce** —
+  La voce ✅ di scope v1 ([ADR-013](decisioni.md)) che **nessun dataset
+  rappresentava**: `ClassPartition`, `ClassPart` e `Group` erano tre tabelle
+  vuote, provate solo da fixture sintetiche da poche righe. Ora stanno dentro
+  una scuola intera, **insieme**, e in quattro forme deliberatamente diverse —
+  quattro righe della stessa forma proverebbero una cosa sola.
+
+  **16 partizioni, 32 parti, 2 raggruppamenti.** IRC/alternativa su tutte e
+  dodici le classi (due parti della stessa classe, con `election_group` a
+  dichiarare l'alternativa, ADR-020); la **2C articolata** con una parte su un
+  piano proprio, `SAP2` Scienze Applicate — la condizione 3 di ADR-015, provata
+  finora solo su fixture; uno **sdoppiamento a effettivo ridotto** in 3A; il
+  **raggruppamento trasversale** dei livelli di inglese su 1A e 1B, che è il
+  caso che *rompe la decomposizione per classe*.
+
+  🔑 **E ha reso visibile una distinzione che il Fermi non poteva fare
+  vedere: 345 ore-alunno contro 361 erogate.** Lo scarto è tutto negli
+  sdoppiamenti — dodici ore di alternativa, tre di informatica, e l'ora di
+  laboratorio di 3A insegnata **due volte**, che è il costo dello sdoppiamento e
+  il motivo per cui `Mh/s` di N01 vale 18 mentre il curriculum ne dice 17.
+  Confonderli è il modo in cui un monte ore torna e una cattedra no. Con essi il
+  piano diventa quello che ADR-020 dice che è: un **catalogo** che somma 28 dove
+  l'alunno fa 27.
+
+  ⚠ **La sonda non si è mossa, e va detto perché.** Restano 4 builder su 27:
+  partizioni, parti e raggruppamenti **non hanno un builder proprio**, entrano
+  dalle chiavi di occupazione (ADR-017 — `structural:occupation` da 1440 a
+  **3440** constraint) e da `structural:coverage`, che per costruzione un
+  builder non ce l'ha. Un cricchetto che contasse i constraint avrebbe detto
+  «cresciuto» senza dire niente di vero, ed è la ragione per cui l'asserzione è
+  un **insieme**.
+
+  🔑 **Il difetto trovato — L5, e il banco ha fatto il suo mestiere al secondo
+  colpo.** 📦 Lo XSD dichiara che *l'allineamento genera l'attività complessa*:
+  in EDT le attività allineate sono **una** collocazione. Da noi
+  `Activity.alignment_ident` esiste dal giorno dello schema e **nessun builder e
+  nessun checker lo legge**. Misurato: dei **15** allineamenti dichiarati dal
+  dataset, **13 escono dal solve senza una sola coincidenza** — i due livelli di
+  inglese sparsi su sei celle, il latino e l'informatica della 2C mai in
+  parallelo. Nessun finding, nessun vincolo violato: l'orario è impeccabile per
+  i nostri predicati e **sbagliato per una scuola**, perché metà classe resta a
+  scuola in un'ora in cui non ha lezione.
+  ⚠ Non riparato qui — la spec §8 dice *nessuna modifica al motore*, e un
+  dataset che si aggiusta per far passare un test non prova più niente. Il
+  comportamento sbagliato è **fissato da un test** che diventerà rosso quando il
+  debito si chiude.
+
+  ⚠ E una seconda cosa che il modello non ha, scritta prima che sorprenda
+  qualcuno: `TeachingAssignment` ha una FK alla **classe**, quindi le ore di E01
+  sul livello base sono registrate su 1A mentre insegna ad alunni di 1A e 1B. Il
+  monte ore quadra e l'orario è corretto; è la riga di bilancio a mentire.
+
+  Misure: **340 attività / 361 ore**, modello a 14 370 variabili e 7 700
+  constraint, fase 1 `OPTIMAL` a zero scarti in ~3,6 s, fase 2 **71 su 71**
+  senza rinunce, `check_schedule` su orario vuoto con solo `activity_unplaced` —
+  cioè copertura, alternativa e piano dell'articolata tutti puliti al primo
+  giro.
+
 - **2026-08-30 (notte) — L'Alighieri, ondata 1: l'anagrafica, e la sonda che diventa un cricchetto** —
   Il primo dei sette pezzi della spec approvata. `data/liceo-alighieri/` (sette
   file di markdown) e `tests/alighieri.py`: **12 classi** su due indirizzi

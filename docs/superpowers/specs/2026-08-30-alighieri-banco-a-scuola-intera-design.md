@@ -1,7 +1,7 @@
 # L'Alighieri: il banco a scuola intera
 
 **Data**: 2026-08-30
-**Stato**: approvata — **ondata 1 di 7 fatta** il 2026-08-30
+**Stato**: approvata — **ondate 1 e 2 di 7 fatte** il 2026-08-30
 **Apre**: la copertura del modello a scala reale — **ventiquattro builder su
 ventisette** non hanno mai visto un dataset
 
@@ -327,9 +327,20 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
    cui una famiglia entra «presente ma non esercitata».
    ⚠ Non verificato, e dichiarato tale: il «stretto ma risolvibile» di §4.
    Senza righe di vincolo la tensione non esiste.
-2. **Gli sdoppiamenti** (§3.3): partizioni, parti, IRC/alternativa,
-   raggruppamento trasversale. È la voce ✅ di scope v1 senza dataset, quindi
-   viene prima dei vincoli.
+2. ✅ **Gli sdoppiamenti** (§3.3) (2026-08-30): 16 partizioni, 32 parti, 2
+   raggruppamenti — IRC/alternativa su tutte e dodici le classi, la 2C
+   articolata con `SAP2` come piano proprio, il laboratorio a mezza classe di
+   3A, i livelli di inglese fra 1A e 1B. 340 attività, **345 ore-alunno contro
+   361 erogate** — la distinzione che il Fermi non poteva far vedere. Copertura,
+   alternativa e piano dell'articolata puliti al primo giro; due fasi `OPTIMAL`,
+   71 aule su 71.
+   ⚠ La sonda resta a **4 su 27**, ed è corretto: gli sdoppiamenti non hanno un
+   builder proprio (chiavi di occupazione, 1440 → 3440 constraint, e
+   `structural:coverage` che per costruzione non ne ha uno).
+   🔑 **Difetto trovato — il primo del banco**: `Activity.alignment_ident` è un
+   campo che nessun builder e nessun checker legge, e 13 allineamenti su 15
+   escono dal solve senza una coincidenza. Non riparato (§8), fissato da un
+   test, aperto come **L5** in `docs/todo.md`.
 3. **L'asse Cardinalità** (§3.1): otto famiglie, con l'esito atteso e la
    verifica per mutazione di §6.4.
 4. **L'asse Relazione** (§3.2): tredici tipi, idem.

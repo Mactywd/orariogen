@@ -39,9 +39,11 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > ⚠ **E provando il prodotto invece dei test si è visto che il Fermi misura
 > pochissimo**: tre builder su ventisette fanno qualcosa, tredici tabelle su
 > trentatré sono vuote.
-> È L4, ed è ciò che va fatto prima di D2. **Ondata 1 su 7 fatta** il
-> 2026-08-30: l'anagrafica dell'Alighieri, e la sonda che misura la copertura
-> è diventata un test.
+> È L4, ed è ciò che va fatto prima di D2. **Ondate 1 e 2 su 7 fatte** il
+> 2026-08-30: l'anagrafica dell'Alighieri e i suoi sdoppiamenti, con la sonda
+> della copertura diventata un test. 🔑 E il banco ha già prodotto il suo primo
+> difetto — **L5**, l'allineamento è un campo che nessun builder legge — che è
+> esattamente ciò per cui esiste.
 
 ---
 
@@ -239,6 +241,29 @@ Nessuno le sblocca: hanno una risposta tecnica e non aspettano né EDT né una
 decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
 [changelog.md](changelog.md), e qui restano le righe con la data.
 
+- [ ] **L5 — l'allineamento è un campo che nessuno legge.** 🔑 **Trovato
+      dall'ondata 2 dell'Alighieri, il 2026-08-30, ed è il primo difetto che
+      quel banco ha prodotto.** 📦 Lo XSD `Partenaire_Index` dichiara che
+      *l'allineamento genera l'attività complessa*: in EDT le attività allineate
+      sono **una** collocazione, non due che si somigliano. Da noi
+      `Activity.alignment_ident` esiste dal giorno dello schema e **nessun
+      builder e nessun checker lo legge**.
+      Misurato sul dataset completo: dei **15** allineamenti dichiarati, **13**
+      escono dal solve senza una sola coincidenza — i due livelli di inglese di
+      1A/1B sparsi su sei celle, il latino e l'informatica della 2C articolata
+      mai in parallelo.
+      ⚠ **Non è cosmetico**: senza allineamento metà classe resta a scuola in
+      un'ora in cui non ha lezione, e l'orario consegnato sarebbe sbagliato pur
+      essendo, per i nostri vincoli, impeccabile. È anche la condizione perché
+      gli sdoppiamenti — voce ✅ di scope v1 — producano orari usabili, quindi
+      non è rimandabile a un «poi» generico.
+      Il comportamento sbagliato è **fissato da un test**
+      (`tests/test_alighieri_gruppi.py`), che diventa rosso il giorno in cui il
+      debito si chiude. ⚠ Da decidere prima di scrivere il builder: se
+      l'allineamento sia un vincolo **hard** (una sola collocazione, come in
+      EDT) o una famiglia alleggeribile — e se le durate diverse dentro lo
+      stesso ident siano ammesse.
+
 - [ ] **L4 — il Liceo "Alighieri": il banco a scuola intera.** Il modello hard
       è completo, ma il dataset su cui gira il prodotto esercita **tre builder
       su ventisette** — misurato avvolgendo `restrict` e `build` di ciascuno — e
@@ -254,17 +279,25 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       cambiare l'orario, o quella famiglia è presente e non esercitata.
       Spec: [2026-08-30-alighieri-banco-a-scuola-intera-design.md](superpowers/specs/2026-08-30-alighieri-banco-a-scuola-intera-design.md)
       — approvata, sette ondate.
-      **Ondata 1 fatta il 2026-08-30**: l'anagrafica —
+      **Ondate 1 e 2 fatte il 2026-08-30** —
       [`data/liceo-alighieri/`](../data/liceo-alighieri/) e
-      [`tests/alighieri.py`](../tests/alighieri.py). 12 classi su 2 indirizzi e
-      2 sedi, 21 cattedre a `+/- = 0`, 345 ore-classe, 323 attività, griglia
-      5×8 con la mensa. Due fasi `OPTIMAL` senza scarti né rinunce.
+      [`tests/alighieri.py`](../tests/alighieri.py). *L'anagrafica*: 12 classi su
+      2 indirizzi e 2 sedi, 23 cattedre a `+/- = 0`, 345 ore-alunno e 361
+      erogate, 340 attività, griglia 5×8 con la mensa. *Gli sdoppiamenti*: 16
+      partizioni, 32 parti, 2 raggruppamenti — IRC/alternativa su tutte e
+      dodici, la 2C **articolata** con un piano proprio, un laboratorio a mezza
+      classe in 3A, i livelli di inglese che attraversano 1A e 1B. Due fasi
+      `OPTIMAL` senza scarti né rinunce, copertura pulita.
       🔑 E la **sonda è ora un test** ([`tests/sonda.py`](../tests/sonda.py)):
       l'insieme dei builder attivi è un cricchetto che ogni ondata deve
-      allargare — **4 su 27** oggi, contro i 3 del Fermi, e 27 su 27 è il
-      criterio di accettazione dell'ondata 7.
-      Restano le ondate 2–7: sdoppiamenti, asse Cardinalità, asse Relazione,
-      sedi e peso didattico, quote e qualità, accettazione.
+      allargare — **4 su 27**, contro i 3 del Fermi, e 27 su 27 è il criterio di
+      accettazione dell'ondata 7. ⚠ L'ondata 2 **non** lo allarga, ed è
+      corretto: gli sdoppiamenti entrano dalle chiavi di occupazione (ADR-017,
+      `structural:occupation` da 1440 a 3440 constraint) e da
+      `structural:coverage`, che un builder non ce l'ha per costruzione.
+      🔑 Ha già prodotto il suo primo difetto: **L5**, qui sopra.
+      Restano le ondate 3–7: asse Cardinalità, asse Relazione, sedi e peso
+      didattico, quote e qualità, accettazione.
 
 - [x] **L1 — il buco misurato sulla mezza giornata.** Il perimetro è ora un
       parametro d'istituto, separato per classi e per docenti
