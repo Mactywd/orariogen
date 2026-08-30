@@ -15,6 +15,52 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (tarda sera) — Il budget appartiene alla posizione: `solve --popolazione` non tornava** —
+  Trovato non da un test ma **provando il prodotto**: database vuoto, `migrate`,
+  il Fermi caricato, e poi tutti i comandi uno per uno dalla riga di comando.
+  La catena breve regge benissimo — `solve` `OPTIMAL` 284/284 in 1,2 s,
+  `assign_rooms` 92 su 92 in 0,2 s, `analyze` dopo di loro con **zero
+  finding**, `export_ical` 9405 eventi in 0,7 s, `place_and_fix` due attività
+  ricollocate in 8,2 s. Poi il caso che il Fermi non prova mai da solo.
+
+  ⚠ **Il Fermi non ha righe `QualityCriterion`**, quindi dalla riga di comando
+  la qualità non era mai stata esercitata: il prodotto consegnava un orario
+  *legale*, mai *ottimizzato*. Seminandone cinque, `solve` regge (4,2 s), ma
+  `solve --popolazione teachers --tolleranza 50` **non torna**: ucciso dopo
+  dodici minuti. Con `--limite 15` chiude in 52 s.
+
+  🔑 **La causa è che `BUDGET_QUALITA` era stato appeso alla famiglia invece
+  che alla posizione.** La diagnosi che l'aveva prodotto era precisa — un
+  livello è lento non perché difficile da ottimizzare ma perché *impossibile
+  da dimostrare* — e la stabilità sembrava esente perché in testa arriva a
+  zero, che è anche il suo limite inferiore banale. Ma con l'arbitrato la
+  stabilità **scivola in coda**, e lì il suo ottimo non è più zero: i criteri
+  sopra di lei hanno già spostato l'orario. Diventa indimostrabile esattamente
+  come loro, e `Level("spostamenti", spostate)` la costruiva con
+  `limite=None`, cioè `1e9` secondi. È lo stesso difetto di allora, ricomparso
+  **al posto lasciato libero**: la coda era la qualità, ora è la stabilità.
+
+  La prova non è un argomento ma il numero che il comando stampa da sé:
+  `spostamenti 219 (ottimo non dimostrato, non sotto 8)`. Un livello che a 15 s
+  dichiara un divario di 211 non stava chiudendo.
+
+  Corretto in `livelli()`: sotto arbitrato la stabilità entra in coda con
+  `replace(stabilita, limite=BUDGET_QUALITA)`. Il comando ora torna in **49 s**,
+  e la qualità finalmente lavora — `gaps_teachers` da 1260 a **0**,
+  `isolated_all` da 50 a **5**, `free_half_days_teachers` da 132 a 108, al
+  prezzo di 169 spostamenti su 284.
+
+  ⚠ **Un test è stato rinominato perché il suo nome era diventato falso**:
+  `test_solo_i_livelli_di_qualita_hanno_un_budget` →
+  `test_chi_dimostra_l_ottimo_non_ha_budget`. Non è cosmesi — il nome vecchio
+  affermava proprio la generalizzazione sbagliata, e sarebbe stato l'argomento
+  con cui rifiutare questa correzione.
+
+  ⚠ **Sedici skip su diciassette non sono un debito**: vengono tutti da
+  `solver_harness.py:384` e dicono la stessa cosa, «derivazione vacua per il
+  seed N». Nove famiglie, mai la stessa su tutti e cinque i seed: nessuna
+  famiglia è saltata per intero, ogni skip è un seed che non produce il caso.
+
 - **2026-08-30 (sera) — L1, L2, L3: la sezione `Lavoro` nasce e si chiude lo stesso giorno** —
   Tre voci che non aspettavano nessuno, prese in ordine di valore.
 

@@ -237,11 +237,25 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > perché difficile da ottimizzare, è lento perché **impossibile da
 > dimostrare** — `gaps` chiude in un secondo perché zero è anche il suo limite
 > inferiore banale, `free_half_days` si ferma a 202 con limite **6** e
-> `regularity` a 236 con **18**. Da qui il **budget dei soli livelli di
-> qualità** (`BUDGET_QUALITA`, 15 s): senza, `manage.py solve` non tornava, e
-> un budget globale avrebbe punito proprio i livelli che l'ottimo lo
-> dimostrano. E il rendiconto porta ora il **divario**, che distingue
-> `isolated 0` (è l'ottimo, non dimostrato) da `regularity 236` (non sotto 18).
+> `regularity` a 236 con **18**. Da qui `BUDGET_QUALITA` (15 s): senza,
+> `manage.py solve` non tornava, e un budget globale avrebbe punito proprio i
+> livelli che l'ottimo lo dimostrano. E il rendiconto porta ora il **divario**,
+> che distingue `isolated 0` (è l'ottimo, non dimostrato) da `regularity 236`
+> (non sotto 18).
+>
+> ⚠ **E il budget appartiene alla posizione, non alla famiglia** — corretto il
+> 2026-08-30 dopo che `solve --popolazione` è stato ucciso a dodici minuti
+> sul Fermi. Qui c'era scritto «il budget dei **soli** livelli di qualità», ed
+> era la generalizzazione sbagliata: la stabilità dimostra l'ottimo finché sta
+> in testa (conserva tutto e arriva a zero), lo perde quando l'arbitrato la
+> manda in coda sotto i criteri, e lì `Level("spostamenti", …)` la costruiva
+> senza limite. Ora in coda prende `BUDGET_QUALITA`, e il comando torna in
+> **49 s** — con `gaps_teachers` da 1260 a **0** e `isolated_all` da 50 a **5**,
+> al prezzo di 169 spostamenti su 284.
+>
+> ⚠ **Il Fermi non ha righe `QualityCriterion`**: dalla riga di comando la
+> qualità non è esercitata da quel dataset, e il difetto qui sopra è emerso
+> solo seminandone cinque a mano.
 >
 > Dal 2026-08-27 (sera) c'è anche la **separazione per popolazione**
 > (`Arbitrato` in `domain/solver/quality.py`,

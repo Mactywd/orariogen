@@ -245,3 +245,37 @@ def test_il_criterio_senza_popolazione_resta_un_livello():
                             arbitrato=Arbitrato(P.TEACHERS, 0)))
     assert "isolated_all" in catena
     assert "regularity_classes" not in catena
+
+
+def test_in_coda_la_stabilita_prende_il_budget_della_qualita():
+    """🔑 Il budget appartiene alla **posizione**, non al livello.
+
+    `BUDGET_QUALITA` nasce da una diagnosi precisa: un livello è lento non
+    perché difficile da ottimizzare, ma perché **impossibile da dimostrare** —
+    i livelli che contano un fallimento chiudono subito perché il loro ottimo è
+    zero e zero è anche il limite inferiore banale. La stabilità è uno di
+    quelli **finché sta in testa**: conserva tutto e arriva a zero.
+
+    Con l'arbitrato scivola in coda, e lì il suo ottimo non è più zero — i
+    livelli di qualità sopra di lei hanno già spostato l'orario. Diventa
+    indimostrabile esattamente come loro, e senza budget `manage.py solve` non
+    torna. ⚠ Misurato sul Fermi con cinque criteri: `--popolazione teachers`
+    ucciso dopo dodici minuti senza risposta; con `--limite 15` chiude in 52 s
+    riportando `spostamenti 219`, ottimo non dimostrato, non sotto 8.
+
+    È lo stesso difetto che aveva prodotto `BUDGET_QUALITA`, ricomparso al
+    posto lasciato libero: allora la coda era la qualità, ora è la stabilità."""
+    from domain.solver.model import build_model
+    from domain.solver.objective import BUDGET_QUALITA, livelli
+
+    env, a1, a2 = _tensione()
+    _regolare(env, a1, a2)
+    _criteri()
+    model, ctx = build_model(env["schedule"])
+
+    senza = {lv.nome: lv.limite for lv in livelli(ctx, model)}
+    assert senza["spostamenti"] is None, "in testa dimostra l'ottimo: nessun budget"
+
+    con = {lv.nome: lv.limite
+           for lv in livelli(ctx, model, Arbitrato(P.TEACHERS, 0))}
+    assert con["spostamenti"] == BUDGET_QUALITA

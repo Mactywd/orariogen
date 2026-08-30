@@ -18,7 +18,7 @@ La catena ha quattro livelli: gli scarti in ore e in numero (D1), le
 violazioni nuove che il modello si concede, e la stabilità fra periodi."""
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ortools.sat.python import cp_model
 
@@ -35,7 +35,7 @@ STATUS_NAME = {
 
 #: Il budget predefinito di un livello di **qualità**, in secondi.
 #:
-#: 🔑 È l'unico posto della catena dove serve un default, e la ragione è
+#: 🔑 Serve dove un livello **non sa dimostrare l'ottimo**, e la ragione è
 #: misurata: i livelli che contano un **fallimento** (ore scartate, attività,
 #: violazioni nuove, spostamenti) chiudono dimostrando l'ottimo — sul Fermi in
 #: 1,7 s e 0,7 s — perché il loro ottimo è zero e zero è anche il limite
@@ -50,6 +50,11 @@ STATUS_NAME = {
 #: proprio i livelli che l'ottimo lo dimostrano. Il valore viene dalla curva:
 #: dopo ~15 s il guadagno è marginale (`free_half_days` 202 a 15 s, 199 a 60 s;
 #: `regularity` 236 e 226). `--limite` lo sovrascrive in entrambi i versi.
+#:
+#: ⚠ **Non è una proprietà della famiglia, ma della posizione**: la stabilità
+#: dimostra l'ottimo finché sta in testa (conserva tutto e arriva a zero), e
+#: lo perde quando l'arbitrato la manda in coda sotto i criteri. Lì prende
+#: questo stesso budget — vedi `livelli()`.
 BUDGET_QUALITA = 15.0
 
 
@@ -177,7 +182,22 @@ def livelli(ctx, model, arbitrato=None):
     # quadrimestre non si stravolge l'orario di tutti). Con l'arbitrato la
     # stabilità scivola in coda e diventa lo **spareggio**: fra due orari di
     # pari qualità, il più vicino a quello che c'è.
-    coda = [stabilita] if stabilita is not None else []
+    #
+    # 🔑 E scivolando in coda la stabilità prende **il budget della qualità**,
+    # perché il budget appartiene alla posizione e non al livello. In testa la
+    # stabilità è un livello che dimostra l'ottimo — conserva tutto e arriva a
+    # zero, che è anche il suo limite inferiore banale. In coda quell'ottimo
+    # non è più zero: i criteri sopra di lei hanno già spostato l'orario, e
+    # dimostrare quanti spostamenti servano *davvero* è duro esattamente quanto
+    # dimostrare un criterio di qualità. ⚠ Misurato sul Fermi con cinque
+    # criteri: senza questa riga `--popolazione teachers` non torna in dodici
+    # minuti; con `--limite 15` chiude in 52 s a `spostamenti 219`, ottimo non
+    # dimostrato, non sotto 8. È lo stesso difetto che aveva prodotto
+    # `BUDGET_QUALITA`, ricomparso al posto lasciato libero.
+    coda = []
+    if stabilita is not None:
+        coda = [replace(stabilita, limite=BUDGET_QUALITA)
+                if arbitrato is not None else stabilita]
     catena += (qualita + coda) if arbitrato is not None else (coda + qualita)
     return catena
 

@@ -341,8 +341,8 @@ def test_l_ordine_dei_criteri_decide_chi_cede():
 
 # --- il budget dei livelli di qualità ---------------------------------------
 
-def test_solo_i_livelli_di_qualita_hanno_un_budget():
-    """🔑 Il default sta sui soli criteri di qualità, e la ragione è misurata.
+def test_chi_dimostra_l_ottimo_non_ha_budget():
+    """🔑 Il default sta dove un livello **non sa dimostrare l'ottimo**.
 
     I livelli che contano un **fallimento** chiudono dimostrando l'ottimo,
     perché il loro ottimo è zero e zero è anche il limite inferiore banale: sul
@@ -352,7 +352,12 @@ def test_solo_i_livelli_di_qualita_hanno_un_budget():
     minuti senza risposta, misurati.
 
     ⚠ Un budget globale sarebbe stato il rimedio sbagliato: punirebbe proprio i
-    livelli che l'ottimo lo dimostrano."""
+    livelli che l'ottimo lo dimostrano.
+
+    ⚠ E il criterio non è la famiglia ma la **posizione**: questo testimone non
+    ha un orario di partenza, quindi non ha il livello di stabilità — che in
+    testa è senza budget e in coda, sotto l'arbitrato, lo prende
+    (`test_in_coda_la_stabilita_prende_il_budget_della_qualita`)."""
     from domain.solver.objective import BUDGET_QUALITA
 
     env = mini_school(days=2, slots=4)
