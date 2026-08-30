@@ -53,6 +53,13 @@ class Command(BaseCommand):
         self.stdout.write(f"  Stato: {soluzione.status}")
         self.stdout.write(f"  Richieste d'aula: {stats['richieste']} "
                           f"({stats['assegnate']} assegnate)")
+        if stats["eccedenza_capienza"]:
+            # ⚠ È un **criterio**, non un vincolo: si dichiara, non si rifiuta.
+            # In EDT è `Minimizza il superamento della capienza`, e superarla è
+            # previsto — quello che non è previsto è farlo senza dirlo.
+            self.stdout.write(
+                f"  Alunni oltre la capienza dichiarata: "
+                f"{stats['eccedenza_capienza']}")
         self.stdout.write(f"  Modello: {stats['variabili']} variabili, "
                           f"{stats['constraint']} constraint")
         self.stdout.write(f"  Tempo totale: {stats['secondi']}s")

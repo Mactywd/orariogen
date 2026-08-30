@@ -30,22 +30,11 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > esistente può sostituire (O3, O6), e **nove debiti** già decisi. O1 è chiusa
 > il 2026-08-30.
 >
-> 🔧 **E da quel giorno c'è una sezione 3, `Lavoro`**, che prima non serviva
-> perché non c'era niente di fattibile che non aspettasse qualcuno. Ora sì:
-> **L1** il buco sulla mezza giornata (il debito promosso, misura già scritta),
-> **L2** le due voci che O1 ha lasciato sulla fase 2 — la capienza come criterio
-> e il lucchetto sull'aula — e **L3** il materiale per decidere O5. Sono in
-> ordine di valore, ed è l'ordine in cui conviene prenderle.
->
-> ⚠ Il giro del 2026-08-29 ha spostato quattro voci dalla colonna 👁 a 🧭 o 🧪:
-> non mancavano schermate, mancavano decisioni. È il segno che l'osservazione
-> di EDT ha davvero finito il suo lavoro.
->
-> 🔑 E **D3 è caduta la sera dello stesso giorno, senza aprire EDT**: non era
-> una decisione di prodotto, era un'osservazione già nel repo e letta male.
-> Le aule si contano mentre si piazza ([ADR-021](decisioni.md)) — il che
-> vale come avvertimento sulle tre voci 🧭 rimaste: prima di scegliere,
-> rileggere cosa fa EDT.
+> 🔧 **La sezione 3, `Lavoro`, è nata e chiusa lo stesso giorno.** L1 (il
+> perimetro del buco), L2 (la capienza come criterio e il lucchetto sull'aula) e
+> L3 (il materiale per decidere O5) sono fatte il 2026-08-30. Restano le loro
+> righe con la data, e **un debito nuovo** che L3 ha trovato per strada: i
+> criteri di qualità contano su una settimana sola.
 
 ---
 
@@ -163,6 +152,12 @@ scritta** — gli undici nomi stanno in
 **riconfermati** da una seconda schermata della stessa base, valore per valore.
 Non manca uno screenshot: manca una **decisione**, una per criterio.
 
+🔧 **Il materiale per rispondere c'è, da L3**:
+[criteri-di-piazzamento.md](criteri-di-piazzamento.md) prende i dieci uno per
+uno — cosa fa in EDT, cosa già abbiamo che lo tocca, il costo, e la
+raccomandazione. La proposta è **sette no e tre forse**; resta da dire sì o no,
+che è l'unica cosa che il file non poteva fare.
+
 In EDT i meccanismi sono due e confonderli era l'errore di partenza:
 `Ordinamento dei criteri` è la lista degli **undici** criteri di *piazzamento*;
 `Ottimizzazione degli orari` è una fase separata con **cinque** valori. Sono
@@ -234,42 +229,33 @@ mouse le promuove o le smentisce.
 ## 3. Lavoro — si può fare adesso
 
 Nessuno le sblocca: hanno una risposta tecnica e non aspettano né EDT né una
-decisione. In ordine di valore, che è l'ordine in cui conviene prenderle.
+decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
+[changelog.md](changelog.md), e qui restano le righe con la data.
 
-### L1 🔧 Il buco misurato sulla mezza giornata — **il candidato più concreto**
-
-È il debito omonimo della sezione 4, promosso a lavoro perché è l'unico dei nove
-che ha già la sua misura scritta e il suo costo quantificato: un parametro a due
-valori e uno `span` scelto invece che fisso, in due posti
-(`MaxGapChecker`, il criterio `buchi`). ⚠ Tocca la quantità di un vincolo
-**hard** — il D.T.B. — e di un livello della catena, quindi vuole il suo giro di
-misure sul Fermi e sul banco, non solo i due test nuovi. Il perché sta nella
-riga della sezione 4, che resta la fonte.
-
-### L2 🔧 Le due voci in meno lasciate da O1 sulla fase 2
-
-Aperte il 2026-08-30 dall'osservazione dell'ottimizzatore aule, entrambe
-piccole ed entrambe dentro `domain/solver/rooms.py`:
-
-- **La capienza in alunni è un criterio, e nessuno la legge.** *«Minimizza il
-  superamento della capienza»* è il terzo default di EDT: dice insieme che si
-  **può** superare — quindi «non è un vincolo» resta vero — e che EDT preferisce
-  non farlo. `Room.capacity` esiste nel nostro schema dal primo giorno ed è letto
-  da nessuno. Costo: un livello in coda alla catena della fase 2 che minimizza
-  l'eccedenza, non un vincolo.
-- **Manca il lucchetto sulla singola assegnazione d'aula.** `Blocco delle aule
-  nelle attività coinvolte` ha una casella **per riga**: è `immobility` applicato
-  all'**aula** invece che alla collocazione. Da noi la fase 2 riassegna tutto o
-  niente. Costo: un campo sull'assegnazione e un dominio fissato nel contesto —
-  la stessa forma che `Estrai` già usa come immobilità di esecuzione.
-
-### L3 🔧 Preparare O5: la raccomandazione motivata, criterio per criterio
-
-O5 è una decisione (dieci criteri di piazzamento su cui dire dentro/fuori) ma il
-**materiale** per deciderla è lavoro nostro: per ognuno dei dieci, cosa fa in
-EDT, cosa costerebbe da noi, e la raccomandazione. Tre sono già quasi decisi
-dalla struttura (vedi O5). Serve perché oggi la decisione è bloccata non da un
-dubbio di prodotto ma dall'assenza di una tabella su cui rispondere.
+- [x] **L1 — il buco misurato sulla mezza giornata.** Il perimetro è ora un
+      parametro d'istituto, separato per classi e per docenti
+      (`InstituteSettings.gaps_split_at_lunch_*`), letto insieme dal checker
+      `MaxGapChecker`, dal builder del D.T.B. e dal criterio `gaps`. 🔑 La
+      casella di EDT e lo spezzare alla linea sono **la stessa cosa**, e non è
+      un'assunzione: la differenza fra i due perimetri è esattamente la corsa
+      libera attorno alla linea, misurata in `tests/test_gap_span.py`.
+      ⚠ Il default resta lo status quo (mezza giornata per entrambe), che
+      **non** è il default di EDT sulle classi: la scelta cambia la quantità di
+      un vincolo hard, quindi è della scuola.
+- [x] **L2 — le due voci lasciate da O1 sulla fase 2.** La capienza in alunni è
+      ora il **terzo livello** della catena delle aule (`eccedenza_capienza`),
+      dopo i minuti senza aula e i cambi, come in EDT sta dopo il cammino e
+      l'aula preferenziale — e resta un criterio, non un vincolo: l'aula troppo
+      piccola si assegna lo stesso e l'eccedenza si **dichiara**. E c'è il
+      lucchetto sulla singola assegnazione (`Placement.room_locked`), distinto
+      dall'immobilità della collocazione: si blocca l'aula lasciando l'attività
+      libera di spostarsi.
+- [x] **L3 — il materiale per decidere O5**, in
+      [criteri-di-piazzamento.md](criteri-di-piazzamento.md): i dieci criteri
+      uno per uno, con cosa fanno in EDT, cosa già abbiamo, il costo e la
+      raccomandazione. Esito: **sette no e tre forse**, e una cosa da fare
+      comunque (vedi il debito nuovo qui sotto). ⚠ Il file è un giudizio
+      nostro, non documentazione di EDT, ed è marcato come tale.
 
 ---
 
@@ -299,16 +285,6 @@ nuovo, non per fastidio.
   [ADR-014](decisioni.md) il sostituto compare da sé, ma l'originale è annuale
   e continua a comparire nella stessa settimana — manca la relazione fra i due
   (`RELATIONCOURSSUBSTITUT` di EDT).
-- ⚖ **Il buco si misura sulla mezza giornata, e in EDT è un parametro.** Per
-  EDT il buco è sulla **giornata**, con una casella `Non conteggiare come buchi
-  le ore libere prima o dopo la linea di fine mattinata` **separata per classi e
-  per docenti** — sulla base di esempio spuntata per i docenti e **non** per le
-  classi. `MaxGapChecker` e il criterio `buchi` misurano sempre dentro la mezza
-  giornata, cioè come se fosse spuntata per tutti. Costo: un parametro a due
-  valori e uno `span` scelto invece che fisso, negli stessi due posti. Non
-  adesso perché cambierebbe la quantità di un vincolo **hard** (il D.T.B.) e di
-  un livello della catena, quindi vuole il suo giro di misure. 👁 2026-08-29.
-  → promosso a lavoro il 2026-08-30: è **L1**, il candidato più concreto.
 - ⚖ **I giorni esclusi dal conteggio delle giornate libere** non esistono da
   noi. EDT ha una casella per giorno in `Parametri → Istituto → Orari` — *«I
   giorni spuntati saranno ignorati durante il calcolo delle giornate libere»* —
@@ -327,6 +303,16 @@ nuovo, non per fastidio.
   `ignora_opzionali` al builder e accettare che builder e checker leggano
   diversamente, o portare l'opzione dentro il checker. Non adesso perché
   nessun dato lo esercita — le due basi non hanno indisponibilità d'aula.
+- ⚖ **I criteri di qualità ignorano le firme di settimana.** Contano su una
+  settimana sola (`v.occupied(...)` senza `signature`), mentre i vincoli le
+  distinguono già — `MaxGapBuilder` posta un budget per firma. Su una scuola con
+  attività quindicinali il numero che il rendiconto stampa non è quello di
+  nessuna settimana reale. Trovato il 2026-08-30 scrivendo L3, dal criterio di
+  piazzamento `Riduci i buchi quindicinali`: EDT ha un criterio apposta, e
+  averlo vuol dire che il fenomeno lo conosce. Costo: il ciclo sulle firme
+  dentro ogni criterio, e una decisione su cosa il livello minimizzi (la somma
+  sulle settimane, o la peggiore). Non adesso perché nessuna delle due basi ha
+  attività quindicinali.
 - ⚖ **Sei delle dodici voci del menu `Estrai`**, ognuna per una ragione scritta
   accanto al registro: tre riguardano la fascia variabile e il sezionamento
   (fuori per ADR-010), una la formazione classi, due sono filtri di forma e non

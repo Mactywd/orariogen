@@ -43,6 +43,21 @@ class Vocabulary:
     def half_of(self, slot):
         return 0 if slot < self.ctx.grid.morning_end_slot else 1
 
+    def gap_spans(self, key):
+        """I perimetri su cui si contano i buchi di `key`: le due mezze
+        giornate, oppure la giornata intera.
+
+        🔑 E' il parametro di EDT, non una variante interna: la casella «Non
+        conteggiare come buchi le ore libere prima o dopo la linea di fine
+        mattinata», separata per classi e per docenti. Il gemello del checker
+        e' `_gap_spans` in `domain/analysis/checkers/time_constraints.py`, e i
+        due **devono** leggere lo stesso campo: il D.T.B. e il criterio `gaps`
+        misurano la stessa quantita', una col tetto e uno senza."""
+        c = self.ctx
+        if c.settings.gaps_split_at_lunch(c.kinds.get(key)):
+            return self.halves()
+        return [range(0, c.grid.slots_per_day)]
+
     # --- occupazione -----------------------------------------------------
 
     def occupied(self, key, day, slot, signature=None):

@@ -12,6 +12,11 @@ class SchoolClass(Resource):
         Room, null=True, blank=True, on_delete=models.SET_NULL, related_name="preferred_by"
     )
     max_weekly_weight_per_student = models.PositiveSmallIntegerField(null=True, blank=True)
+    # `N.Alu` di EDT: il numero di alunni **previsto**, che è il dato con cui
+    # la catena previsionale lavora anche senza anagrafica nominativa
+    # (`docs/edt/classi.md`). NULL = non dichiarato, e non significa zero: un
+    # criterio che lo legge non conta chi non sa contare.
+    expected_students = models.PositiveSmallIntegerField(null=True, blank=True)
 
 
 class ClassPartition(models.Model):
@@ -30,6 +35,10 @@ class ClassPart(Resource):
     study_plan = models.ForeignKey(
         StudyPlan, null=True, blank=True, on_delete=models.PROTECT, related_name="parts"
     )
+    # L'effettivo della parte. ⚠ Non si deriva da quello della classe: è
+    # precisamente ciò che una suddivisione non dice — due parti della stessa
+    # partizione possono essere 12 e 11, o 20 e 3.
+    expected_students = models.PositiveSmallIntegerField(null=True, blank=True)
 
     @property
     def effective_study_plan(self):

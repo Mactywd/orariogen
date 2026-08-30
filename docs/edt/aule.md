@@ -400,9 +400,16 @@ capienza al terzo. Chiude O1 e conferma per la quarta volta la correzione del
 capienza` dice due cose insieme: che la capienza in alunni **si può superare**
 (quindi non è un vincolo — § *Cosa vincola davvero la scelta dell'aula* resta
 vero) e che EDT **preferisce non farlo**. Non è quindi inerte come sembrava: è
-un criterio soft, il terzo. Il campo `Cap.` esiste nel nostro schema
-(`Room.capacity`, dichiarato descrittivo) e non è letto da nessuno. Voce in
-meno, dichiarata.
+un criterio soft, il terzo. Il campo `Cap.` esisteva nel nostro schema
+(`Room.capacity`, dichiarato descrittivo) letto da nessuno.
+
+✅ **Colmata il 2026-08-30 (L2).** `eccedenza_capienza` è il **terzo livello**
+della catena della fase 2, dopo i minuti senza aula e i cambi — lo stesso posto
+che ha in EDT, dopo il cammino e l'aula preferenziale. Resta un criterio: l'aula
+troppo piccola si assegna lo stesso, e l'eccedenza si **dichiara** nel
+rendiconto (`Alunni oltre la capienza dichiarata`). Ha richiesto il dato che ci
+mancava, `N.Alu`: `expected_students` su classe e parte, dove `NULL` è «non lo
+so» e basta un'unità senza il numero perché il totale sia ignoto.
 
 **Il resto della finestra:**
 
@@ -425,7 +432,13 @@ meno, dichiarata.
   docenti. Sulla demo **43 righe**, contatore `0 / 43`. Il lucchetto blocca la
   singola assegnazione: *«Potete sbloccare alcune aule per consentire a EDT di
   esplorare altre combinazioni.»* È il nostro `Activity.immobility` applicato
-  all'**aula** invece che alla collocazione, e non ce l'abbiamo.
+  all'**aula** invece che alla collocazione.
+
+  ✅ **Colmata il 2026-08-30 (L2)**: `Placement.room_locked`. 🔑 Sono due
+  lucchetti e non uno — quello della collocazione blocca l'aula per conseguenza,
+  questo la blocca lasciando l'attività libera di spostarsi in griglia — e si
+  separano nei due versi. Come per l'immobilità, blocca l'aula che ha e non
+  quella che non ha: su un'assegnazione inesistente non blocca niente.
 
 **E la ripartizione, misurata.** Prima: `Palestra 1` e `Palestra 2` entrambe a
 `0h00`. Dopo `Assegna le aule alle attività`: **29h00** e **19h00**, somma 48h00

@@ -43,6 +43,20 @@ def _halves(state, slots):
     return [s for s in slots if s < boundary], [s for s in slots if s >= boundary]
 
 
+def _gap_spans(state, key, slots):
+    """I perimetri su cui contare i buchi di `key`: le due mezze giornate,
+    oppure la giornata intera.
+
+    🔑 Non è una variante del calcolo, è **il parametro di EDT**: la casella
+    «Non conteggiare come buchi le ore libere prima o dopo la linea di fine
+    mattinata», separata per classi e per docenti. Vedi
+    `InstituteSettings.gaps_split_at_lunch`, dove sta la dimostrazione che
+    spuntarla e spezzare alla linea sono la stessa cosa."""
+    if state.settings.gaps_split_at_lunch(state.kinds.get(key)):
+        return _halves(state, slots)
+    return [slots]
+
+
 @register(T.MIN_DISTRIBUTION)
 class MinDistributionChecker(_TimeChecker):
     """⚠ Non monotono: la violazione è una **deficienza** (meno giornate
@@ -223,9 +237,9 @@ class MaxGapChecker(_TimeChecker):
         sm = state.grid.slot_minutes
         total = 0
         for day, slots in days.items():
-            for half in _halves(state, slots):
-                if len(half) >= 2:
-                    total += (half[-1] - half[0] + 1 - len(half)) * sm
+            for span in _gap_spans(state, row.resource_id, slots):
+                if len(span) >= 2:
+                    total += (span[-1] - span[0] + 1 - len(span)) * sm
         cap = row.params["max_gap_minutes"]
         if total > cap:
             yield _finding(state, "max_gap", row,

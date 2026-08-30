@@ -27,6 +27,8 @@ class SolverContext:
     material_quantity: dict   # (id attività, chiave) → quantità
     time_rows: list           # righe ResourceTimeConstraint
     subject_rows: list        # [(riga SubjectConstraint, unit_keys precalcolate)]
+    settings: object          # InstituteSettings: i parametri d'istituto
+    kinds: dict               # chiave → Resource.Kind
     x: dict = field(default_factory=dict)        # (id, giorno, fascia) → BoolVar
     placed_var: dict = field(default_factory=dict)  # id → BoolVar «piazzata», solo le libere
     by_cell: dict = field(default_factory=dict)  # (chiave, giorno, fascia) → [(id, letterale)]
@@ -91,6 +93,7 @@ class SolverContext:
             activities=activities, free=free, cells=cells, tokens=tokens,
             capacity=base.capacity, material_quantity=material_quantity,
             time_rows=base.time_rows, subject_rows=base.subject_rows,
+            settings=base.settings, kinds=base.kinds,
             relax=Relaxation.build(),
             ignora_opzionali=frozenset(ignora_opzionali),
             placed_before={aid: cella for aid, cella in placed.items()

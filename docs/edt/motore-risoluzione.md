@@ -333,10 +333,20 @@ una classe con un'ora scoperta a metà giornata è un problema di sorveglianza.
 (2026-08-29, seconda osservazione dello stesso pannello: valori identici, il che
 rende la fonte replicabile). Per EDT il buco si misura sulla **giornata**, e
 questa casella ne *toglie* la pausa; da noi `MaxGapChecker` e il criterio `buchi`
-lo misurano **sempre e solo dentro la mezza giornata**, cioè si comportano come se
-la casella fosse spuntata — per **entrambe** le popolazioni. Sulla base di esempio
-saremmo quindi giusti sui docenti e sbagliati sulle classi. Non è un difetto di
-implementazione: è un parametro che non abbiamo. → debito in
+lo misuravano **sempre e solo dentro la mezza giornata**, cioè si comportavano
+come se la casella fosse spuntata — per **entrambe** le popolazioni. Sulla base
+di esempio saremmo stati giusti sui docenti e sbagliati sulle classi. Non era un
+difetto di implementazione: era un parametro che non avevamo.
+
+✅ **Colmato il 2026-08-30 (L1)**: `InstituteSettings.gaps_split_at_lunch_*`, un
+campo per popolazione, letto insieme dal checker, dal builder del D.T.B. e dal
+criterio `gaps`. 🔑 **La casella e lo spezzare alla linea sono la stessa cosa**,
+e non è un'assunzione: sulla giornata il buco è `ultima − prima + 1 −
+conteggio`, e spezzarlo alla linea toglie esattamente le fasce libere fra
+l'ultima occupata del mattino e la prima del pomeriggio — cioè, alla lettera, le
+ore libere prima o dopo la linea. ⚠ Il default resta la mezza giornata per
+entrambe (lo status quo), **non** quello di EDT: la scelta cambia la quantità di
+un vincolo hard, quindi è della scuola. → debito in
 [todo.md](../todo.md).
 
 **`Raggruppa le attività`** — ◉ `All'inizio della giornata` / ○ `Dalla fine della mattinata`

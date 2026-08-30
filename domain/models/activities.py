@@ -59,6 +59,13 @@ class Placement(models.Model):
     day = models.PositiveSmallIntegerField()
     start_slot = models.PositiveSmallIntegerField()
     assigned_room = models.ForeignKey(Room, null=True, blank=True, on_delete=models.SET_NULL)
+    # Il lucchetto **sull'aula**, distinto dall'immobilità della collocazione.
+    # In EDT è la casella per riga di `Blocco delle aule nelle attività
+    # coinvolte`, nella finestra dell'ottimizzatore: si blocca *questa*
+    # assegnazione, e l'attività resta libera di spostarsi in griglia.
+    # ⚠ Come per l'immobilità, blocca l'aula che ha e non quella che non ha:
+    # con `assigned_room` a NULL non blocca niente.
+    room_locked = models.BooleanField(default=False)
 
     class Meta:
         constraints = [

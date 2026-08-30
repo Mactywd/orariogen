@@ -78,11 +78,11 @@ def _frozen_gap_minutes(ctx, key, rep):
     grid, active = ctx.grid, ctx.states[rep].activities
     total = 0
     for day in range(grid.days_per_cycle):
-        for half in ctx.vocab.halves():
-            if not len(half):
+        for span in ctx.vocab.gap_spans(key):
+            if not len(span):
                 continue
             occupate = sorted({
-                s for s in half
+                s for s in span
                 for aid, _ in ctx.by_cell.get((key, day, s), ())
                 if aid not in ctx.free and aid in active
             })
@@ -105,11 +105,11 @@ class MaxGapBuilder(ResourceBuilder):
         cap = max(row.params["max_gap_minutes"], _frozen_gap_minutes(ctx, key, rep))
         terms = []
         for day in range(grid.days_per_cycle):
-            for half in v.halves():
-                if not len(half):
+            for span in v.gap_spans(key):
+                if not len(span):
                     continue
-                cov = v.covered(key, day, half, signature=rep)
-                for s in half:
+                cov = v.covered(key, day, span, signature=rep)
+                for s in span:
                     terms.append(cov[s] - v.occupied(key, day, s, signature=rep))
         if terms:
             model.Add(grid.slot_minutes * sum(terms) <= cap)

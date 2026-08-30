@@ -15,6 +15,98 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (sera) — L1, L2, L3: la sezione `Lavoro` nasce e si chiude lo stesso giorno** —
+  Tre voci che non aspettavano nessuno, prese in ordine di valore.
+
+  **L1 — il perimetro del buco è un parametro.** Era un debito con la misura
+  già scritta: per EDT il buco si conta sulla **giornata**, e una casella `Non
+  conteggiare come buchi le ore libere prima o dopo la linea di fine mattinata`
+  — separata per classi e per docenti — ne toglie la pausa. Noi misuravamo
+  sempre dentro la mezza giornata, cioè come se fosse spuntata per tutti.
+
+  🔑 **Le due formulazioni sono la stessa cosa, e non era un'assunzione.** Sulla
+  giornata il buco è `ultima − prima + 1 − conteggio`; spezzarlo alla linea
+  toglie esattamente le fasce libere fra l'ultima occupata del mattino e la
+  prima del pomeriggio — cioè, alla lettera, «le ore libere prima o dopo la
+  linea». La misura sta in `test_la_differenza_e_esattamente_la_corsa_libera_attorno_alla_linea`:
+  occupate 0, 2 e 5 con la linea fra 3 e 4 danno 60′ sulla mezza giornata e 180′
+  sulla giornata, e i 120′ di differenza **sono** le fasce 3 e 4. Senza questa
+  identità il parametro sarebbe stato un'approssimazione della casella di EDT;
+  con essa è la casella.
+
+  I posti che leggono il parametro sono **tre**, non due come diceva il debito:
+  `MaxGapChecker`, il builder del D.T.B. — dove il clamp di ADR-018 va calcolato
+  sullo stesso perimetro, o il tetto concederebbe un debito che non esiste — e
+  il criterio di qualità `gaps`. ⚠ I primi due e il terzo **devono** leggere lo
+  stesso campo: sono la stessa quantità, uno col tetto e uno senza, e nello
+  stesso rendiconto.
+
+  ⚠ **Il default resta lo status quo** (mezza giornata per entrambe le
+  popolazioni), e non è il default di EDT — la sua base di esempio ha la casella
+  spuntata per i docenti e **non** per le classi. Deliberato: la scelta cambia
+  la quantità di un vincolo **hard**, quindi è della scuola e non nostra. Il
+  Fermi misura identico a prima, ed è la prova che il parametro non ha cambiato
+  niente a chi non lo tocca.
+
+  **L2 — le due voci che O1 aveva lasciato sulla fase 2.** La prima: `Minimizza
+  il superamento della capienza` è il terzo dei quattro default
+  dell'ottimizzatore aule, quindi la capienza in alunni **non è un vincolo ma
+  non è nemmeno inerte** — e `Room.capacity` esisteva dal primo giorno letto da
+  nessuno. Ora è il **terzo livello** della catena della fase 2, dopo i minuti
+  senza aula e i cambi, come in EDT sta dopo il cammino e l'aula preferenziale:
+  stare stretti costa meno che restare senza aula, e il test lo tiene fermo.
+
+  🔑 **L'eccedenza è una costante, non una variabile.** Effettivo e capienza
+  sono due numeri anagrafici, quindi il livello è una somma di costanti per
+  letterale — nessuna variabile in più per coppia. E il livello **non si posta**
+  quando nessuna coppia può sforare: senza effettivi o senza capienze
+  misurerebbe la costante zero, e un livello della catena è un giro di solver.
+
+  ⚠ Ha richiesto un dato che non avevamo: `expected_students` su classe e
+  parte, che è `N.Alu` di EDT — il numero di alunni **previsto**, quello con cui
+  la catena previsionale lavora anche senza anagrafica nominativa. `NULL` è «non
+  lo so», mai zero, e **basta un'unità senza il numero perché il totale sia
+  ignoto**: sommare le sole dichiarate darebbe un numero più piccolo del vero, e
+  un'eccedenza sparirebbe in silenzio.
+
+  La seconda: il **lucchetto sulla singola assegnazione d'aula**
+  (`Placement.room_locked`), che in EDT è la casella per riga di `Blocco delle
+  aule nelle attività coinvolte`. Da noi il blocco dell'aula era un effetto
+  collaterale dell'immobilità della **collocazione**, che è un'altra cosa: ora
+  sono due lucchetti e si separano nei due versi — un'attività mobile può avere
+  l'aula bloccata, e una bloccata in griglia può cambiare aula.
+
+  **L3 — il materiale per decidere O5**, in
+  [criteri-di-piazzamento.md](criteri-di-piazzamento.md): i dieci criteri di
+  piazzamento non tradotti, uno per uno, con cosa fanno in EDT, cosa già abbiamo
+  che li tocca, il costo e la raccomandazione. Esito **sette no e tre forse**, e
+  la ragione dei no è una sola: i due meccanismi sono diversi. `Ordinamento dei
+  criteri` governa un'**euristica di ricerca** — quale cella provare — che in
+  CP-SAT non esiste, perché la ricerca la governa il solver; ciò che possiamo
+  dichiarare è un obiettivo, cioè l'altro riquadro. Le voci utili di quella
+  lista erano già state prese, da quello giusto.
+
+  ⚠ **E una prima stesura diceva una cosa più forte del vero.** Aveva marcato il
+  criterio 8 (`Evita le attività della stessa materia nella stessa ora`) come
+  «da verificare prima», sospettando che il nostro `regularity` premiasse per i
+  docenti ciò che EDT evita. Verificato: `QualityCriterion.population` fa già
+  esattamente quel filtro, la riga di regolarità si dichiara `CLASSES` come in
+  EDT, e non c'è nessun difetto — c'è un'**assenza**, che per i docenti non
+  abbiamo niente che spinga *via* dalla stessa ora. Corretto da ⚠ a 🟡 prima di
+  scriverlo, che è il motivo per cui una raccomandazione va verificata contro il
+  codice e non contro il ricordo del codice.
+
+  🔑 **E L3 ha trovato un debito che nessuno cercava**, dal criterio 5 (`Riduci
+  i buchi quindicinali`): i nostri **criteri di qualità ignorano le firme di
+  settimana**. Contano su una settimana sola, mentre i vincoli le distinguono
+  già — `MaxGapBuilder` posta un budget per firma. Su una scuola con attività
+  quindicinali il numero che il rendiconto stampa non è quello di nessuna
+  settimana reale. Che EDT abbia un criterio apposta vuol dire che il fenomeno
+  lo conosce. Aperto come debito: nessuna delle due basi lo esercita.
+
+  Suite: 833 test verdi, 17 skip. Il Fermi non cambia di un numero — i due default di
+  L1 sono lo status quo, e L2 non ha né effettivi né capienze da leggere.
+
 - **2026-08-30 (notte) — O1 chiusa: il criterio dominante è quanto camminano le persone** —
   Lanciata la ripartizione su `PALESTRE` e aperto l'ottimizzatore. I quattro
   criteri che il produttore ci trova dentro:

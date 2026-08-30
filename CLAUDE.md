@@ -45,6 +45,9 @@ docs/
   todo.md              📌 **l'unico elenco di cose da fare** — decisioni, osservazioni, debiti
   decisioni.md         ADR leggeri: decisione, alternative, motivo, data
   scope-v1.md          cosa entra in v1 e cosa no — proposta da rivedere
+  criteri-di-piazzamento.md  il materiale per decidere O5: i dieci criteri non
+                       tradotti, uno per uno, con la raccomandazione — ⚠ è un
+                       giudizio nostro, non documentazione di EDT
   modello-dominio.md   il design del modello di dominio v1 — approvato, pre-codice
 data/
   liceo-fermi/         dataset della scuola di esempio, in markdown tabellare
@@ -81,7 +84,10 @@ domain/                l'app Django del modello di dominio v1
                         per popolazione con la perdita tollerata (Arbitrato),
                         `Piazza e sistema` (place_and_fix.py) e la **seconda
                         fase** — l'assegnazione delle aule (rooms.py), modello
-                        a sé con due livelli propri
+                        a sé con tre livelli propri: i minuti senza aula, i
+                        cambi rispetto alla ripartizione precedente e
+                        l'eccedenza di capienza (L2, un criterio non un
+                        vincolo)
   ical.py               l'export iCalendar: l'orario nel telefono — l'unico
                         pezzo che *consegna* invece di calcolare, e il punto in
                         cui la fascia di calcolo smette di essere l'ora
@@ -473,12 +479,20 @@ con [ADR-020](docs/decisioni.md), ⛔ D3 il 2026-08-29 con
 [ADR-021](docs/decisioni.md), e O1 — i criteri dell'ottimizzatore aule — il
 2026-08-30.
 
-🔧 Dal 2026-08-30 il todo ha una sezione **`Lavoro`**: tre voci che non
-aspettano nessuno — **L1** il buco misurato sulla mezza giornata (in EDT è un
-parametro, ed è il debito promosso), **L2** le due voci che O1 ha lasciato sulla
-fase 2 (la capienza in alunni è un *criterio* che nessuno legge; manca il
-lucchetto sulla singola assegnazione d'aula), **L3** il materiale per decidere
-O5. Sono in ordine di valore.
+🔧 La sezione **`Lavoro`** del todo è nata e si è chiusa il 2026-08-30. **L1**:
+il perimetro su cui si misura il buco è ora un parametro d'istituto, separato
+per classi e docenti, letto insieme dal checker, dal builder del D.T.B. e dal
+criterio `gaps` — 🔑 la casella di EDT e lo spezzare alla linea sono **la stessa
+cosa**, e la differenza fra i due perimetri è esattamente la corsa libera
+attorno alla linea (misurata). Default allo status quo: la scelta cambia la
+quantità di un vincolo hard, quindi è della scuola. **L2**: la capienza in
+alunni è il **terzo livello** della catena delle aule (`eccedenza_capienza`) —
+criterio e non vincolo, come in EDT — e c'è il **lucchetto sull'aula**
+(`Placement.room_locked`), distinto dall'immobilità della collocazione. **L3**:
+[docs/criteri-di-piazzamento.md](docs/criteri-di-piazzamento.md), i dieci
+criteri uno per uno; esito **sette no e tre forse**, perché `Ordinamento dei
+criteri` governa un'euristica di ricerca che in CP-SAT non esiste. ⚠ Ha trovato
+un debito: i criteri di qualità **ignorano le firme di settimana**.
 
 Quello che segue è la **storia delle voci chiuse**, con il perché: si legge, non
 si aggiorna.

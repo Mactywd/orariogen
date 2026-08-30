@@ -48,6 +48,30 @@ def _aula_tenuta(aula, dichiarate):
     return None
 
 
+def _effettivo(act):
+    """Gli alunni che l'attivita' porta dentro l'aula, o `None` se non si sa.
+
+    Le unita' sono le classi, le parti e le parti dei raggruppamenti: l'aula la
+    riempie chi ci entra, non l'anagrafica della classe di provenienza.
+
+    ⚠ **Basta un'unita' senza `expected_students` perche' il totale sia
+    ignoto.** Sommare le sole dichiarate darebbe un numero piu' piccolo del
+    vero, e un'eccedenza sparirebbe in silenzio: meglio non misurare che
+    misurare per difetto. `NULL` e' «non lo so», mai zero — e' la stessa
+    lettura che `capacity` ha sull'aula."""
+    unita = set(act.classes.all()) | set(act.parts.all())
+    for g in act.groups.all():
+        unita |= set(g.parts.all())
+    if not unita:
+        return None
+    totale = 0
+    for u in unita:
+        if u.expected_students is None:
+            return None
+        totale += u.expected_students
+    return totale
+
+
 @dataclass
 class RoomContext:
     schedule: object
@@ -57,6 +81,7 @@ class RoomContext:
     candidates: dict          # id → set(room_id) sopravvissute ai pre-filtri
     previous: dict            # id → room_id assegnata prima del calcolo
     held: dict                # id → room_id delle **non** decisioni
+    eccedenza: dict           # (id, room_id) → alunni oltre la capienza (>= 0)
     ignora_opzionali: frozenset = frozenset()
     y: dict = field(default_factory=dict)         # (id, room_id) → BoolVar
     assigned: dict = field(default_factory=dict)  # id → BoolVar «assegnata»
@@ -89,7 +114,18 @@ class RoomContext:
                     continue
                 # Il blocco riguarda l'aula che ha, non quella che non ha:
                 # un'immobile senza assegnazione resta una decisione.
-                if rooms and not (act.immobility in _IMMOBILE and aula is not None):
+                #
+                # 🔑 Due lucchetti, non uno. L'immobilita' e' della
+                # **collocazione** e blocca l'aula per conseguenza;
+                # `room_locked` e' della **assegnazione** e lascia l'attivita'
+                # libera di spostarsi in griglia. In EDT sono due comandi
+                # diversi — bloccare una lezione, e la casella per riga di
+                # `Blocco delle aule nelle attivita' coinvolte` nella finestra
+                # dell'ottimizzatore. Prima di L2 avevamo solo il primo, e il
+                # secondo non era esprimibile.
+                bloccata = (act.immobility in _IMMOBILE
+                            or aid in state.room_locked)
+                if rooms and not (bloccata and aula is not None):
                     requests[aid] = act
                     dichiarate[aid] = rooms
                     if aula is not None:
@@ -105,9 +141,20 @@ class RoomContext:
                              states, ignora)
             for aid, act in requests.items()
         }
+        capienze = dict(Room.objects.values_list("pk", "capacity"))
+        eccedenza = {}
+        for aid, act in requests.items():
+            alunni = _effettivo(act)
+            if alunni is None:
+                continue
+            for room_id in candidates[aid]:
+                cap = capienze.get(room_id)
+                if cap is not None and alunni > cap:
+                    eccedenza[(aid, room_id)] = alunni - cap
         return cls(schedule=schedule, signatures=signatures, states=states,
                    requests=requests, candidates=candidates,
-                   previous=previous, held=held, ignora_opzionali=ignora)
+                   previous=previous, held=held, eccedenza=eccedenza,
+                   ignora_opzionali=ignora)
 
     @staticmethod
     def _filtra(aid, act, dichiarate, room_sites, states, ignora):
@@ -233,12 +280,30 @@ class RoomSolution:
 
 
 def livelli_aule(ctx, model):
-    """Due livelli, nell'ordine della spec §3.2.
+    """Due livelli, nell'ordine della spec §3.2 — piu' un terzo, quando c'e'
+    qualcosa da misurare.
 
     L1 conta i **minuti**, non le attivita': un laboratorio da 3h che resta
     senza spazio fa piu' danno di uno da 1h. L2 e' il criterio che EDT dichiara
     alla lettera — *«se possibile mantenendo le assegnazioni della precedente
-    ripartizione»*."""
+    ripartizione»*.
+
+    L3 e' `Minimizza il superamento della capienza` (`tcosCapacite`), il terzo
+    dei quattro default dell'ottimizzatore di EDT, osservato il 2026-08-30.
+    🔑 **E' un criterio, non un vincolo**, ed e' la distinzione che spiega
+    perche' la capienza non compare fra i tre vincoli della finestra `Aule
+    disponibili`: un'aula troppo piccola resta assegnabile, e se e' l'unica la
+    si prende. Sta **dopo** i due che c'erano, come in EDT sta dopo il cammino
+    e l'aula preferenziale: stare stretti costa meno che restare senza aula.
+
+    ⚠ L'eccedenza di una coppia (attivita', aula) e' nota a build time — sono
+    due numeri anagrafici — quindi il livello e' una **somma di costanti per
+    letterale**, senza una variabile in piu' per coppia.
+
+    ⚠ E il livello **non si posta** quando nessuna coppia puo' sforare: senza
+    effettivi o senza capienze dichiarate misurerebbe la costante zero, e un
+    livello della catena e' un giro di solver. E' la stessa disciplina del
+    vincolo che e' un fatto e non una decisione."""
     totale = sum(a.duration_minutes for a in ctx.requests.values())
     minuti = model.NewIntVar(0, totale, "minuti_senza_aula")
     model.Add(minuti == sum(
@@ -256,7 +321,18 @@ def livelli_aule(ctx, model):
             termini.append(1 - var)
     cambi = model.NewIntVar(0, len(ctx.previous), "cambi_aula")
     model.Add(cambi == sum(termini) + forzati)
-    return [Level("minuti_senza_aula", minuti), Level("cambi_aula", cambi)]
+    catena = [Level("minuti_senza_aula", minuti), Level("cambi_aula", cambi)]
+
+    coppie = [(ctx.y[coppia], oltre) for coppia, oltre in ctx.eccedenza.items()
+              if coppia in ctx.y]
+    if coppie:
+        peggio = defaultdict(int)
+        for (aid, _room), oltre in ctx.eccedenza.items():
+            peggio[aid] = max(peggio[aid], oltre)
+        oltre_var = model.NewIntVar(0, sum(peggio.values()), "eccedenza_capienza")
+        model.Add(oltre_var == sum(oltre * var for var, oltre in coppie))
+        catena.append(Level("eccedenza_capienza", oltre_var))
+    return catena
 
 
 def solve_rooms(schedule, *, time_limit=None, workers=None,
@@ -296,6 +372,9 @@ def solve_rooms(schedule, *, time_limit=None, workers=None,
             "assegnate": len(assegnazioni),
             "minuti_senza_aula": sum(ctx.requests[aid].duration_minutes
                                      for aid in unassigned),
+            "eccedenza_capienza": sum(
+                ctx.eccedenza.get((aid, room_id), 0)
+                for aid, room_id in assegnazioni.items()),
             "livelli": tuple(e.as_dict() for e in esiti),
             "variabili": len(proto.variables),
             "constraint": len(proto.constraints),

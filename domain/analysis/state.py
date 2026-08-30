@@ -172,6 +172,7 @@ class ScheduleState:
         self.activities = {}          # id → Activity (attive nella settimana)
         self.placed = {}              # id → Placed
         self.assigned_room = {}       # id → room_id assegnata (solo se piazzata)
+        self.room_locked = set()      # id con il lucchetto sull'aula (L2)
         self.occupancy = defaultdict(list)  # (chiave, giorno, fascia) → [activity_id]
         self.tokens = {}              # id → frozenset di chiavi
         self.material_quantity = {}   # (activity_id, chiave) → quantità
@@ -230,6 +231,8 @@ class ScheduleState:
                 state.place(a, pl.day, pl.start_slot)
                 if pl.assigned_room_id is not None:
                     state.assigned_room[a.id] = pl.assigned_room_id
+                if pl.room_locked:
+                    state.room_locked.add(a.id)
 
         year = schedule.period.school_year
         state.n_weeks = ((year.end_date - year.first_week_monday).days // 7) + 1

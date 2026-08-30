@@ -26,6 +26,42 @@ class InstituteSettings(models.Model):
     max_relaxed_constraints_per_resource = models.PositiveSmallIntegerField(
         null=True, blank=True)
 
+    # Il perimetro su cui si misura un buco, per popolazione. In EDT è la
+    # casella «Non conteggiare come buchi le ore libere prima o dopo la linea
+    # di fine mattinata», in `Parametri → Istituto → Orari`, **separata per
+    # classi e per docenti** (sulla base di esempio: spuntata per i docenti,
+    # non per le classi).
+    #
+    # 🔑 «Spuntata» equivale a «misura dentro la mezza giornata», e non è
+    # un'assunzione. Sulla giornata il buco è `ultima − prima + 1 − conteggio`;
+    # spezzarlo alla linea toglie esattamente le fasce libere fra l'ultima
+    # occupata del mattino e la prima del pomeriggio — cioè, alla lettera, «le
+    # ore libere prima o dopo la linea». La misura sta in
+    # `tests/test_gap_span.py`.
+    #
+    # ⚠ Il default è `True` per entrambe, cioè lo **status quo**: fino al
+    # 2026-08-30 il perimetro era la mezza giornata e basta. Non è il default
+    # di EDT sulle classi, ed è deliberato — la scelta cambia la quantità di un
+    # vincolo hard (il D.T.B.), quindi è della scuola e non nostra.
+    gaps_split_at_lunch_teachers = models.BooleanField(default=True)
+    gaps_split_at_lunch_classes = models.BooleanField(default=True)
+
+    #: Le popolazioni per cui EDT ha la casella. Le altre risorse non ne hanno
+    #: una da copiare: restano allo status quo.
+    _SPLIT_BY_KIND = {
+        "teacher": "gaps_split_at_lunch_teachers",
+        "class": "gaps_split_at_lunch_classes",
+        "class_part": "gaps_split_at_lunch_classes",
+    }
+
+    def gaps_split_at_lunch(self, kind):
+        """Il buco di questa popolazione si misura dentro la mezza giornata?
+
+        ⚠ Le classi **e le loro parti** leggono la stessa casella: in EDT la
+        popolazione è `Classi`, e un gruppo non ha una casella propria."""
+        campo = self._SPLIT_BY_KIND.get(kind)
+        return True if campo is None else getattr(self, campo)
+
     # Nota: load() scrive alla prima lettura (get_or_create). Nei percorsi di
     # sola lettura (domain/analysis) si usa objects.filter(pk=1).first().
     @classmethod

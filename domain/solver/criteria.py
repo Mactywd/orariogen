@@ -122,24 +122,22 @@ def buchi(ctx, model, chiavi):
     undici criteri di piazzamento, e le posizioni 1, 2, 5 e 6.
 
     La definizione si legge da `MaxGapChecker.violations`, dove la stessa
-    quantità serve a essere confrontata con il D.T.B.: per ogni mezza giornata,
+    quantità serve a essere confrontata con il D.T.B.: per ogni perimetro,
     `ultima − prima + 1 − conteggio`, in minuti. Qui è la stessa quantità senza
     il tetto.
 
     🔑 La forma `ultima − prima` chiederebbe due `IntVar` per mezza giornata.
     Si evita con l'equivalenza puntuale: una fascia è **di buco** quando è
-    libera e ha almeno un'occupazione prima e almeno una dopo, **dentro la
-    stessa mezza giornata**. Le fasce fra la prima e l'ultima occupata sono
+    libera e ha almeno un'occupazione prima e almeno una dopo, **dentro lo
+    stesso perimetro**. Le fasce fra la prima e l'ultima occupata sono
     `ultima − prima + 1`, di cui `conteggio` occupate: le restanti sono
     esattamente quelle che soddisfano la congiunzione.
 
-    ⚠ **La mezza giornata come perimetro è una scelta, e in EDT è un
-    parametro.** Là il buco si misura sulla *giornata*, e una casella
-    `Non conteggiare come buchi le ore libere prima o dopo la linea di fine
-    mattinata` — **separata per classi e per docenti** — ne toglie la pausa.
-    Noi ci comportiamo come se fosse spuntata per entrambe le popolazioni.
-    Debito dichiarato in `docs/todo.md`; toccarlo cambia anche il D.T.B., che
-    è hard.
+    🔑 **Il perimetro è un parametro** (`vocab.gap_spans`), non la mezza
+    giornata per sempre: è la casella di EDT `Non conteggiare come buchi le ore
+    libere prima o dopo la linea di fine mattinata`, separata per classi e per
+    docenti. Il criterio e il D.T.B. **devono** leggerla insieme — sono la
+    stessa quantità, uno col tetto e uno senza — e un test lo tiene fermo.
 
     ⚠ Una fascia **indisponibile** in mezzo a due lezioni conta come buco, ed è
     voluto: conta così anche nel checker, che legge i piazzamenti e non sa
@@ -149,13 +147,13 @@ def buchi(ctx, model, chiavi):
     termini = []
     for key in chiavi:
         for day in range(ctx.grid.days_per_cycle):
-            for half, span in enumerate(v.halves()):
+            for perimetro, span in enumerate(v.gap_spans(key)):
                 fasce = list(span)
                 if len(fasce) < 3:
                     continue   # sotto le tre fasce nessuna può stare in mezzo
                 occ = {s: v.occupied(key, day, s) for s in fasce}
                 for i, s in enumerate(fasce[1:-1], start=1):
-                    tag = f"{key}_{day}_{half}_{s}"
+                    tag = f"{key}_{day}_{perimetro}_{s}"
                     prima = model.NewBoolVar(f"gap_prima_{tag}")
                     model.AddMaxEquality(prima, [occ[t] for t in fasce[:i]])
                     dopo = model.NewBoolVar(f"gap_dopo_{tag}")
