@@ -26,16 +26,18 @@ stimato — e lascia tredici tabelle su trentatré vuote, `ClassPartition`,
 `ClassPart` e `Group` comprese, cioè voci ✅ dello scope v1 che nessun dataset
 rappresenta.
 
-## Stato: ondate 1–2 di 7
+## Stato: ondate 1–3 di 7
 
 1. ✅ **L'anagrafica** — sedi, indirizzi, materie, piani di studi e servizi,
    classi, docenti, aule, attività.
 2. ✅ **Gli sdoppiamenti** — partizioni, parti, raggruppamenti trasversali: la
    voce ✅ di scope v1 che nessun dataset rappresentava. Vedi
    [gruppi.md](gruppi.md).
+3. ✅ **L'asse Cardinalità** — le otto famiglie di `ResourceTimeConstraint` in
+   dieci righe, ognuna scelta **al bordo**. Vedi [vincoli.md](vincoli.md).
 
-**Nessuna riga di vincolo**: arrivano dalle ondate successive, e ognuna
-aggiorna `esiti-attesi.md` *prima* del codice che le esercita.
+Le famiglie restanti arrivano dalle ondate successive, e ognuna aggiorna
+`esiti-attesi.md` *prima* del codice che le esercita.
 
 ## Parametri
 
@@ -53,6 +55,7 @@ aggiorna `esiti-attesi.md` *prima* del codice che le esercita.
 | Fasce | 8 — mattina 08:00–13:00 (5), mensa, pomeriggio 14:00–17:00 (3) |
 | Monte ore | 27 h/sett. nei due bienni; 30 h allo scientifico e 31 h al classico nei trienni |
 | Partizioni / parti / raggruppamenti | 16 / 32 / 2 |
+| Righe di vincolo orario | 10 (8 famiglie) |
 | **Ore-alunno** | **345** — 27 nei bienni, 30 e 31 nei trienni |
 | **Ore erogate** | **361** |
 | **Attività** | **340** |
@@ -91,17 +94,17 @@ somma grossolana non basta più — dove entrano parti e raggruppamenti l'unità
 vera è l'**atomo** (ADR-020), e il predicato che la usa è
 `structural:coverage`, verificato sul dataset intero.
 
-## Misure dell'ondata 1
+## Misure, ondata 3
 
 | | |
 |---|---|
-| Modello fase 1 | 14 370 variabili, 7 700 constraint |
-| Fase 1 | `OPTIMAL`, **zero scarti**, ~3,6 s a 8 lavoratori |
+| Modello fase 1 | **15 372** variabili, **8 758** constraint (senza le righe: 14 372 / 7 704) |
+| Fase 1 | `OPTIMAL`, **zero scarti**, ~5 s a 8 lavoratori |
 | Richieste d'aula | 71 |
 | Fase 2 | `OPTIMAL`, **71 su 71**, zero rinunce, ~0,3 s |
-| Sonda dei builder | **4 su 27** (Fermi: 3) |
+| Sonda dei builder | **12 su 27** (ondata 2: 4; Fermi: 3) |
 
-⚠ **L'ondata 2 non ha allargato la sonda, ed è corretto così.** Partizioni,
+⚠ **L'ondata 2 non aveva allargato la sonda, ed era corretto così.** Partizioni,
 parti e raggruppamenti non hanno un builder proprio: entrano nel modello
 attraverso le **chiavi di occupazione** (ADR-017), cioè facendo lavorare di più
 `structural:occupation` — da 1440 a **3440** constraint — e attraverso
@@ -109,15 +112,21 @@ attraverso le **chiavi di occupazione** (ADR-017), cioè facendo lavorare di pi�
 cricchetto che contasse i constraint direbbe «cresciuto» senza dire niente di
 vero.
 
-⚠ **Quattro su ventisette non è un risultato, è un punto di partenza.** Il
+L'ondata 3 la allarga invece di **otto** in un colpo: una riga per famiglia
+di `ResourceTimeConstraint`, e ogni riga sceglie il proprio portatore perché
+quella famiglia abbia un soggetto vero.
+
+⚠ **Dodici su ventisette non è un risultato, è metà strada.** Il
 criterio di accettazione della spec è ventisette su ventisette all'ondata 7, e
 il cricchetto che ci arriva è
 [`tests/test_alighieri_sonda.py`](../../tests/test_alighieri_sonda.py): ogni
 ondata deve allargare l'insieme dichiarato lì.
 
-⚠ E il dataset **non è ancora stretto**. La spec chiede che una sola aula o un
-solo docente in meno faccia comparire gli scarti; senza una riga di vincolo la
-tensione non c'è ancora. È il lavoro delle ondate 3–6.
+⚠ E il dataset **non è ancora stretto** nel senso della spec (una sola aula o
+un solo docente in meno e compaiono gli scarti). Ma dall'ondata 3 lo è
+**famiglia per famiglia**: per otto righe su nove una tacca più stretta rende
+il modello `INFEASIBLE`. La nona — il D.T.B. — no, ed è misurato invece che
+taciuto: vedi [vincoli.md](vincoli.md).
 
 ## Indice del dataset
 
@@ -128,6 +137,7 @@ tensione non c'è ancora. È il lavoro delle ondate 3–6.
 - [docenti.md](docenti.md) — le 23 cattedre
 - [aule.md](aule.md) — le 20 aule, per sede
 - [gruppi.md](gruppi.md) — 🔑 le quattro forme di sdoppiamento, e il debito che hanno trovato
+- [vincoli.md](vincoli.md) — 🔑 le dieci righe dell'asse Cardinalità, e perché stanno al bordo
 - [esiti-attesi.md](esiti-attesi.md) — 🔑 cosa deve succedere, scritto prima di eseguire
 
 Per la **semantica** delle entità (non i dati) vedi [`docs/edt/`](../../docs/edt/).

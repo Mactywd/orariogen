@@ -19,6 +19,14 @@ rinforzata da quattro regole (spec §6):
 ⚠ Il punto 4 è il vero contratto. Senza, «l'Alighieri copre tutte le famiglie»
 significa solo «l'Alighieri ha righe in tutte le tabelle».
 
+> ⚠ **Il punto 4 è stato corretto dall'ondata 3, nella forma non nella
+> sostanza.** *Togliere la riga* si è rivelato non misurabile: senza funzione
+> di costo sopra lo scarto ogni orario a zero scarti è ottimo, e ciò che torna
+> dopo la rimozione dice quale ottimo ha trovato la ricerca, non se la riga
+> mordeva. Al suo posto si **stringe di una tacca** e si pretende
+> `INFEASIBLE` — una proprietà del modello, non del testimone. Vedi
+> [l'ondata 3](#ondata-3--lasse-cardinalità) e [vincoli.md](vincoli.md).
+
 E ha una forma economica e automatica che sta a monte della mutazione: la
 **sonda** ([`tests/sonda.py`](../../tests/sonda.py)), che avvolge `restrict` e
 `build` di ogni builder e conta celle tolte e constraint postati. Non
@@ -106,8 +114,80 @@ perché diventi rosso il giorno in cui si chiude.
 in un'ora in cui non ha lezione, e l'orario che consegneremmo sarebbe
 sbagliato pur essendo, per i nostri vincoli, impeccabile.
 
-## Ondate 3–7
+## Ondata 3 — l'asse Cardinalità
 
-Da scrivere prima di ciascuna, nell'ordine della spec §9: asse Cardinalità,
-asse Relazione, sedi e peso didattico, quote e criteri di qualità, criterio di
-accettazione.
+Otto famiglie, dieci righe, e l'atteso scritto dal disegno di
+[vincoli.md](vincoli.md): ogni riga dichiara **la forma** che deve produrre
+nell'orario, non solo che nessun finding scatti.
+
+| Famiglia | Atteso | Osservato |
+|---|---|---|
+| `min_distribution` (N02) | ≥ 4 giornate da 2 h | ✅ 4 su 5 |
+| `max_hours` (M03) | mattina ≤ 3 h, giornata ≤ 5 h ⇒ ≥ 6 h di pomeriggio | ✅ **10** al pomeriggio |
+| `max_presence` (L06) | 3 giornate lavorate, due intere vuote, presenza ≤ 5 fasce | ✅ giorni 0, 2, 4 |
+| `arrival_departure` (A01) | prima fascia libera tutti i giorni | ✅ mai la fascia 0 |
+| `free_guaranteed` (P01) | 2 giornate intere libere + 2 mezze | ✅ 3 giornate lavorate, 2 mezze libere |
+| `max_half_days` `MMG` (2A) | ≤ 7 mezze giornate | ✅ esattamente 7 |
+| `max_half_days` `MG` (R02) | mai mattina **e** pomeriggio | ✅ 5 giorni, 5 mezze |
+| `max_site_changes` (R01) | ≤ 1 cambio al giorno e nella settimana | ✅ 2 giornate, 1 cambio |
+| `max_gap_hours` (L03) | ≤ 1 ora di buco a settimana | ✅ esattamente 1 |
+| Sonda | 8 builder nuovi | ✅ **12 su 27** (era 4) |
+| Due fasi | `OPTIMAL`, zero scarti, 71 aule su 71 | ✅ 15 372 var, 8 758 constraint |
+
+E l'atteso sul **bordo**, che è il vero contratto di questa ondata: per ogni
+famiglia una tacca più stretta deve rendere il dataset `INFEASIBLE`.
+
+| Famiglia | Tacca | Atteso | Osservato |
+|---|---|---|---|
+| `min_distribution` | `min_days 5`, `180`/g | `INFEASIBLE` | ✅ 2,4 s |
+| `max_hours` | `day_minutes 240` | `INFEASIBLE` | ✅ 3,2 s |
+| `max_presence` | `days 1` | `INFEASIBLE` | ✅ 3,6 s |
+| `arrival_departure` | `not_before_slot 5` | `INFEASIBLE` | ✅ 2,2 s |
+| `free_guaranteed` | `free_days 4` | `INFEASIBLE` | ✅ 1,0 s |
+| `max_half_days` | `max_half_days 5` | `INFEASIBLE` | ✅ 4,4 s |
+| `only_half_day` | la casella sulla 2A | `INFEASIBLE` | ✅ 4,8 s |
+| `max_site_changes` | `per_day 0` | `INFEASIBLE` | ✅ 20,3 s |
+| `max_gap_hours` | `max_gap_minutes 0` | `INFEASIBLE` | ❌ **`OPTIMAL`** |
+
+### ⚠ Due attese smentite, e nessuna delle due è del motore
+
+**La prima è del dataset.** Il D.T.B. non arriva al bordo: `max_gap_minutes = 0`
+su L03 resta risolvibile, e lo resta anche **zero buchi per ogni docente e per
+ogni classe insieme**. *Quale delle due era sbagliata*: l'attesa. La ragione si
+conta — 40 fasce a settimana contro cattedre da 10–21 ore e classi da 28–32:
+la contiguità dentro una mezza giornata è gratis. Stringerla vuole una griglia
+più densa, cioè il criterio di accettazione dell'ondata 7, non una taratura di
+questa riga. Un test asserisce l'`OPTIMAL`, così diventerà rosso il giorno in
+cui il banco si stringe.
+
+**La seconda è del metodo, ed è la più importante.** La regola 4 di questo file
+— *togliere la riga deve cambiare l'orario* — è stata implementata e misurata,
+e **non regge come test**. Il modello di fase 1 non ha una funzione di costo
+sopra lo scarto: ogni orario a zero scarti è ottimo, e il solver ne restituisce
+uno arbitrario fra milioni. Se quello che torna dopo la rimozione viola la riga
+tolta, è un fatto sulla **ricerca**, non sulla riga — misurato: cambiando una
+sola riga *estranea* alla famiglia osservata il verdetto si ribaltava per **tre
+famiglie su nove**, e a `workers=8` la stessa configurazione dava risposte
+diverse a esecuzioni diverse.
+
+*Quale delle due era sbagliata*: la regola, nella sua forma letterale. La
+sostituisce lo **stringimento**, che dimostra la stessa cosa in modo più forte:
+`INFEASIBLE` è una proprietà del modello, non del testimone che torna, e una
+riga che non sopporta una tacca in più non può essere soddisfatta per caso. Il
+punto 4 resta valido in sostanza — *una famiglia solo presente non è
+esercitata* — ed è la sonda a prenderne la metà strutturale.
+
+### ⚠ E un fatto che l'ondata 3 ha reso visibile
+
+A orario **vuoto** l'Alighieri non produce più solo `activity_unplaced`: due
+delle otto famiglie sono *deficienze* (`min_distribution` e `free_guaranteed`,
+i due checker `PLACEMENT_MONOTONE = False` fra le righe del dataset) e valgono
+zero quando non c'è niente di piazzato. Per loro **piazzare ripara**. Non è
+una regressione, è la forma in cui l'analisi preventiva inganna chi la legge
+distrattamente: un orario vuoto non è «conforme tranne che per le attività da
+piazzare».
+
+## Ondate 4–7
+
+Da scrivere prima di ciascuna, nell'ordine della spec §9: asse Relazione, sedi
+e peso didattico, quote e criteri di qualità, criterio di accettazione.

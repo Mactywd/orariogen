@@ -74,3 +74,13 @@ alunni di **entrambe** le classi: `TeachingAssignment` ha una FK alla classe, e
 un raggruppamento trasversale non ci sta dentro. Il monte ore quadra e l'orario
 è corretto — è la riga di bilancio a mentire. Scritto qui perché non venga
 scoperto come sorpresa; vedi [gruppi.md](gruppi.md) §4.
+
+## I vincoli orari che portano
+
+Sette cattedre su ventitré portano una riga di `ResourceTimeConstraint`
+(ondata 3): N02 la distribuzione minima, M03 il tetto orario con la mattina
+sotto la giornata, L06 il tempo parziale, A01 l'entrata non prima della
+seconda, P01 i giorni liberi garantiti, R02 «solo mezza giornata al giorno»,
+R01 le due giornate del cappellano più il tetto ai cambi di sede, L03 il
+D.T.B. Il perché di ciascun portatore — e perché la riga sta **al bordo** —
+sta in [vincoli.md](vincoli.md).

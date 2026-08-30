@@ -52,7 +52,9 @@ docs/
 data/
   liceo-alighieri/     📐 il **banco**: costruzione nostra, non osservazione —
                        una riga per famiglia, l'esito atteso scritto prima;
-                       gruppi.md porta le quattro forme di sdoppiamento
+                       gruppi.md porta le quattro forme di sdoppiamento,
+                       vincoli.md le dieci righe dell'asse Cardinalità e
+                       perché ognuna sta **al bordo** del risolvibile
   liceo-fermi/         dataset della scuola di esempio, in markdown tabellare
     README.md          parametri, dimensionamento, indice del dataset
     discipline.md
@@ -99,10 +101,10 @@ domain/                l'app Django del modello di dominio v1
                         operazioni insiemistiche, e il perimetro che restringe
                         l'azione mai il conteggio
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture,
-                       tests/alighieri.py il **banco** (L4, ondate 1–2) e
+                       tests/alighieri.py il **banco** (L4, ondate 1–3) e
                        tests/sonda.py il **cricchetto della copertura** —
                        quali builder fanno davvero qualcosa su un dataset,
-                       asserito come insieme e non come numero; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisette builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+                       asserito come insieme e non come numero, e tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventisette builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -191,7 +193,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **seconda fase**). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **861 test verdi**, 17 skip tutti misurati e attribuiti
+> minimo. **872 test verdi**, 17 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -513,30 +515,42 @@ e ne ha aperta una quarta — **L4**, il dataset «Alighieri»: il Fermi esercit
 `ClassPartition`/`ClassPart`/`Group` comprese, cioè le voci ✅ di scope v1 che
 nessun dataset rappresenta.
 [Spec](docs/superpowers/specs/2026-08-30-alighieri-banco-a-scuola-intera-design.md)
-approvata, sette ondate, **le prime due sono fatte**: `data/liceo-alighieri/` +
+approvata, sette ondate, **le prime tre sono fatte**: `data/liceo-alighieri/` +
 `tests/alighieri.py` — 12 classi su due indirizzi e **due sedi**, 23 cattedre a
 `+/- = 0`, **345 ore-alunno e 361 erogate**, 340 attività, griglia **5 × 8** con
-la mensa; e **16 partizioni / 32 parti / 2 raggruppamenti**, cioè
-IRC-alternativa su tutte e dodici, la 2C **articolata** con un piano proprio, un
-laboratorio a mezza classe e i livelli di inglese che attraversano due classi.
-Due fasi `OPTIMAL` senza scarti né rinunce, copertura pulita.
+la mensa; **16 partizioni / 32 parti / 2 raggruppamenti**, cioè IRC-alternativa
+su tutte e dodici, la 2C **articolata** con un piano proprio, un laboratorio a
+mezza classe e i livelli di inglese che attraversano due classi; e **dieci
+righe di vincolo orario** per le otto famiglie dell'asse Cardinalità. Due fasi
+`OPTIMAL` senza scarti né rinunce, copertura pulita — 15 372 variabili e 8 758
+constraint, 71 aule su 71.
 🔑 **Accanto al Fermi, non al posto suo**: il Fermi vale perché non è stato
 progettato per superare i nostri test.
 🔑 E la **sonda è ora un test** (`tests/sonda.py`): l'insieme dei builder che
-fanno qualcosa è un cricchetto che ogni ondata deve allargare — **4 su 27**
-(occupation, room_pool, site_transition, grid) contro i 3 del Fermi, e 27 su 27
-è il criterio di accettazione. ⚠ L'ondata 2 **non** lo allarga, ed è corretto:
-gli sdoppiamenti non hanno un builder proprio, entrano dalle chiavi di
-occupazione (1440 → **3440** constraint) e da `structural:coverage`, che per
-costruzione un builder non ce l'ha.
+fanno qualcosa è un cricchetto che ogni ondata deve allargare — **12 su 27**
+dopo l'ondata 3, contro i 4 dell'ondata 1 e i 3 del Fermi, e 27 su 27 è il
+criterio di accettazione. ⚠ L'ondata 2 **non** lo allarga, ed è corretto: gli
+sdoppiamenti non hanno un builder proprio, entrano dalle chiavi di occupazione
+(1440 → **3440** constraint) e da `structural:coverage`, che per costruzione un
+builder non ce l'ha.
 🔑 **E il banco ha già prodotto il suo primo difetto — `L5`**: 📦 lo XSD dichiara
 che *l'allineamento genera l'attività complessa*, ma `Activity.alignment_ident`
 è un campo che **nessun builder e nessun checker legge**, e 13 allineamenti su
 15 escono dal solve senza una coincidenza. Non riparato (spec §8: nessuna
 modifica al motore), **fissato da un test** che diventerà rosso quando si
-chiude. ⚠ E il «stretto ma risolvibile» della spec resta **non verificato**:
-senza righe di vincolo la tensione non c'è, e affermarla sarebbe il primo modo
-di aggiustare il banco. **L1**:
+chiude.
+🔑 **E l'ondata 3 ne ha prodotto un secondo, che è del metodo**: la verifica per
+mutazione della spec — *togli la riga e l'orario deve cambiare* — **non è
+misurabile**. Senza funzione di costo sopra lo scarto ogni orario a zero scarti
+è ottimo, e ciò che torna dopo la rimozione dice quale ottimo ha trovato la
+ricerca: cambiando una riga *estranea* alla famiglia osservata il verdetto si
+ribalta per tre famiglie su nove. Al suo posto si **stringe di una tacca** e si
+pretende `INFEASIBLE`, che è una proprietà del modello e non del testimone.
+Otto righe su nove la superano; la nona è il **D.T.B.**, che non arriva al
+bordo — zero buchi per *ogni* docente e *ogni* classe resta `OPTIMAL` — ed è
+misurato e fissato da un test invece che aggiustato. ⚠ Il «stretto ma
+risolvibile» della spec resta quindi verificato **famiglia per famiglia**, non
+ancora sul dataset intero: quello è l'ondata 7. **L1**:
 il perimetro su cui si misura il buco è ora un parametro d'istituto, separato
 per classi e docenti, letto insieme dal checker, dal builder del D.T.B. e dal
 criterio `gaps` — 🔑 la casella di EDT e lo spezzare alla linea sono **la stessa

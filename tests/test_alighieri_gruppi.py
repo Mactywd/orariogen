@@ -28,12 +28,27 @@ pytestmark = pytest.mark.django_db
 
 @pytest.fixture
 def dataset():
-    return alighieri.build()
+    env = alighieri.build()
+    # 🔑 La **linea di partenza**, presa prima di piazzare qualsiasi cosa.
+    # Dall'ondata 3 il dataset porta righe di vincolo, e due delle otto
+    # famiglie sono *deficienze*: `min_distribution` e `free_guaranteed`
+    # (`PLACEMENT_MONOTONE = False`) sono **massimamente violate a orario
+    # vuoto** — zero giornate qualificanti, zero mezze giornate libere — e
+    # piazzare le **ripara**. Chiedere loro qualcosa su un orario di tre
+    # attività non significa niente, e non è ciò che questi test domandano.
+    #
+    # ⚠ Il confronto è sulla chiave **grossolana** `(causale, risorsa)` e non
+    # sulla `Finding.key`: le quantità di una deficienza cambiano a ogni
+    # piazzamento per costruzione, quindi una chiave fine direbbe «nuovo» a
+    # ogni giro. È la stessa scelta dell'oracolo differenziale (ADR-018).
+    env["partenza"] = {(f.code, f.resources) for f in check_schedule(env["schedule"])}
+    return env
 
 
-def _hard(schedule):
-    return [f for f in check_schedule(schedule)
-            if f.severity == Severity.HARD and f.code != "activity_unplaced"]
+def _hard(env):
+    return [f for f in check_schedule(env["schedule"])
+            if f.severity == Severity.HARD and f.code != "activity_unplaced"
+            and (f.code, f.resources) not in env["partenza"]]
 
 
 def _attivita(subject_code, **filtri):
@@ -75,7 +90,7 @@ def test_irc_e_alternativa_possono_stare_nella_stessa_fascia(dataset):
     for act in (irc, alt):
         Placement.objects.create(schedule=env["schedule"], activity=act,
                                  day=0, start_slot=0)
-    assert _hard(env["schedule"]) == []
+    assert _hard(env) == []
 
 
 def test_una_lezione_a_classe_intera_occupa_invece_entrambe_le_parti(dataset):
@@ -87,7 +102,7 @@ def test_una_lezione_a_classe_intera_occupa_invece_entrambe_le_parti(dataset):
     for act in (ita, irc):
         Placement.objects.create(schedule=env["schedule"], activity=act,
                                  day=0, start_slot=0)
-    codici = _hard(env["schedule"])
+    codici = _hard(env)
     assert codici and {f.code for f in codici} == {"resource_occupied"}
 
 
@@ -174,7 +189,7 @@ def test_i_due_livelli_accoppiano_1a_e_1b(dataset):
     for act in (base, ita_1b):
         Placement.objects.create(schedule=env["schedule"], activity=act,
                                  day=0, start_slot=0)
-    codici = _hard(env["schedule"])
+    codici = _hard(env)
     assert codici and {f.code for f in codici} == {"resource_occupied"}
 
 
@@ -184,7 +199,7 @@ def test_i_due_livelli_invece_convivono(dataset):
         act = _attivita("ING", groups=env["groups"][nome]).first()
         Placement.objects.create(schedule=env["schedule"], activity=act,
                                  day=0, start_slot=0)
-    assert _hard(env["schedule"]) == []
+    assert _hard(env) == []
 
 
 # ------------------------------------------------------- ⚠ il debito trovato
@@ -220,4 +235,4 @@ def test_l_allineamento_e_un_campo_che_nessuno_legge(dataset):
                              day=0, start_slot=0)
     Placement.objects.create(schedule=env["schedule"], activity=alt,
                              day=3, start_slot=6)   # tre giorni più in là
-    assert _hard(env["schedule"]) == []   # ⚠ nessuno se ne accorge
+    assert _hard(env) == []   # ⚠ nessuno se ne accorge

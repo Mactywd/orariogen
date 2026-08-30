@@ -39,11 +39,14 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > ⚠ **E provando il prodotto invece dei test si è visto che il Fermi misura
 > pochissimo**: tre builder su ventisette fanno qualcosa, tredici tabelle su
 > trentatré sono vuote.
-> È L4, ed è ciò che va fatto prima di D2. **Ondate 1 e 2 su 7 fatte** il
-> 2026-08-30: l'anagrafica dell'Alighieri e i suoi sdoppiamenti, con la sonda
-> della copertura diventata un test. 🔑 E il banco ha già prodotto il suo primo
+> È L4, ed è ciò che va fatto prima di D2. **Ondate 1–3 su 7 fatte** il
+> 2026-08-30: l'anagrafica dell'Alighieri, i suoi sdoppiamenti e l'asse
+> Cardinalità, con la sonda della copertura diventata un test — **12 builder
+> su 27** contro i 3 del Fermi. 🔑 E il banco ha già prodotto il suo primo
 > difetto — **L5**, l'allineamento è un campo che nessun builder legge — che è
-> esattamente ciò per cui esiste.
+> esattamente ciò per cui esiste; l'ondata 3 ne ha prodotto un secondo che
+> però è del **metodo**, non del motore: la verifica per mutazione va fatta
+> stringendo, non togliendo.
 
 ---
 
@@ -275,8 +278,9 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       🔑 **Accanto al Fermi, non al posto suo**: il Fermi è la trascrizione di
       una scuola osservata, e il suo valore sta tutto nel non essere stato
       progettato per superare i nostri test. ⚠ E la regola che lo tiene onesto
-      è la **verifica per mutazione**: togliere la riga di una famiglia deve
-      cambiare l'orario, o quella famiglia è presente e non esercitata.
+      è la **verifica per mutazione**: una famiglia che il dataset non può
+      violare è presente e non esercitata. (La forma della regola è cambiata
+      con l'ondata 3 — vedi sotto.)
       Spec: [2026-08-30-alighieri-banco-a-scuola-intera-design.md](superpowers/specs/2026-08-30-alighieri-banco-a-scuola-intera-design.md)
       — approvata, sette ondate.
       **Ondate 1 e 2 fatte il 2026-08-30** —
@@ -296,8 +300,27 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       `structural:occupation` da 1440 a 3440 constraint) e da
       `structural:coverage`, che un builder non ce l'ha per costruzione.
       🔑 Ha già prodotto il suo primo difetto: **L5**, qui sopra.
-      Restano le ondate 3–7: asse Cardinalità, asse Relazione, sedi e peso
-      didattico, quote e qualità, accettazione.
+      **Ondata 3 fatta il 2026-08-30** — l'asse Cardinalità
+      ([`data/liceo-alighieri/vincoli.md`](../data/liceo-alighieri/vincoli.md)):
+      le otto famiglie di `ResourceTimeConstraint` in **dieci righe**, e la
+      sonda passa da 4 a **12 su 27**, il salto più grande che una singola
+      ondata possa fare. Due fasi ancora `OPTIMAL` a zero scarti (15 372
+      variabili, 8 758 constraint; 71 aule su 71).
+      ⚠ **La regola della mutazione è stata corretta, e va saputo prima di
+      leggere le ondate seguenti.** «Togliere la riga deve cambiare l'orario»
+      non è misurabile: senza funzione di costo sopra lo scarto ogni orario a
+      zero scarti è ottimo, e ciò che torna dopo la rimozione dice quale ottimo
+      ha trovato la ricerca — misurato, cambiando una riga *estranea* alla
+      famiglia il verdetto si ribaltava per tre famiglie su nove. Al suo posto
+      si **stringe di una tacca** e si pretende `INFEASIBLE`, che è una
+      proprietà del modello e non del testimone. Otto righe su nove la
+      superano.
+      ⚠ La nona no: il **D.T.B.** non arriva al bordo, e zero buchi per *ogni*
+      docente e *ogni* classe resta `OPTIMAL` — 40 fasce contro cattedre da
+      10–21 ore, la contiguità è gratis. Misurato e fissato da un test che
+      asserisce l'`OPTIMAL`; si stringe all'ondata 7, con la griglia.
+      Restano le ondate 4–7: asse Relazione, sedi e peso didattico, quote e
+      qualità, accettazione.
 
 - [x] **L1 — il buco misurato sulla mezza giornata.** Il perimetro è ora un
       parametro d'istituto, separato per classi e per docenti

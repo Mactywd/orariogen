@@ -15,6 +15,70 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (notte) — L'Alighieri, ondata 3: l'asse Cardinalità, e la regola della mutazione che si è rotta in mano** —
+  Otto famiglie di `ResourceTimeConstraint` in **dieci righe**, e la sonda dei
+  builder passa da **4 a 12 su 27**: il salto più grande che una singola ondata
+  possa fare, perché è l'unico asse in cui una riga per famiglia sveglia un
+  builder per famiglia. Due fasi ancora `OPTIMAL` a zero scarti — **15 372
+  variabili, 8 758 constraint** contro 14 372 / 7 704 senza le righe, 71 aule
+  su 71. Dettaglio riga per riga in
+  [`data/liceo-alighieri/vincoli.md`](../data/liceo-alighieri/vincoli.md).
+
+  🔑 **Ogni riga è scelta al bordo, e questo è il contenuto del pezzo.** Il
+  pericolo di un banco non è dimenticare una famiglia — quello lo prende la
+  sonda in un secondo — è metterci una riga così larga che l'orario la
+  soddisfa da solo. Perciò per otto righe su nove **una tacca più stretta
+  rende il dataset `INFEASIBLE`**, e ogni tacca è un argomento di conteggio,
+  non una taratura trovata provando: `min_days 5` da tre ore per un docente da
+  dieci; `day_minutes 240` per uno da ventuno; dodici ore in una giornata da
+  otto fasce; venti ore in tre fasce al giorno; ventotto fasce in cinque mezze
+  giornate da cinque.
+
+  ⚠ **La regola 4 della spec è stata implementata, misurata e sostituita.**
+  Diceva: *togliere la riga di una famiglia deve cambiare l'orario*. Non è
+  misurabile. Il modello di fase 1 non ha una funzione di costo sopra lo
+  scarto, quindi **ogni orario a zero scarti è ottimo** e il solver ne
+  restituisce uno arbitrario fra milioni: se quello che torna dopo la rimozione
+  viola la riga tolta, è un fatto sulla *ricerca*, non sulla riga. La misura è
+  netta — cambiando una sola riga **estranea** alla famiglia osservata il
+  verdetto si è ribaltato per **tre famiglie su nove**, e a otto lavoratori la
+  stessa identica configurazione dava «viola» e «non viola» a esecuzioni
+  diverse. Congelarlo in un test avrebbe fissato un artefatto della ricerca,
+  che è l'errore che il tie-break di `_placed_of` ha già insegnato a non fare.
+  Al suo posto lo **stringimento**, che dimostra la stessa cosa in modo più
+  forte: `INFEASIBLE` è una proprietà del modello, e una riga che non sopporta
+  una tacca in più non può essere soddisfatta per caso.
+
+  🔑 **Il cappellano, cioè come si dà un soggetto a `max_site_changes`.**
+  Misurato: `per_day 0, per_week 0` su R01 — che insegna religione in tutte e
+  dodici le classi, quindi in entrambe le sedi — era `OPTIMAL`. Con cinque
+  giornate a disposizione può dedicarne una intera alla succursale e non
+  spostarsi mai: il vincolo c'era e non vincolava niente. La riga che gli dà un
+  soggetto è `max_presence days 2` — l'insegnante di religione che viene due
+  giorni — e con due sole giornate le dieci ore della centrale non stanno in
+  una: il cambio diventa **inevitabile**, e limitarlo a uno diventa una scelta.
+  È il caso vero delle scuole con una sede staccata, e va scritto perché la
+  strada facile era lasciare la riga larga e dichiarare la famiglia coperta.
+
+  ⚠ **Il D.T.B. non arriva al bordo, ed è dichiarato invece che aggiustato.**
+  Non solo `max_gap_minutes = 0` su L03 resta risolvibile: lo resta **zero
+  buchi per ogni docente e per ogni classe insieme**. La ragione si conta — 40
+  fasce a settimana contro cattedre da 10–21 ore e classi da 28–32 fasce: la
+  contiguità dentro una mezza giornata è gratis. Stringerla vuole una griglia
+  più densa, cioè il criterio di accettazione dell'ondata 7, non una taratura
+  di questa riga. Un test asserisce l'`OPTIMAL`, così diventerà rosso il giorno
+  in cui il banco si stringe — che è quando vogliamo saperlo.
+
+  ⚠ **E un fatto reso visibile, non introdotto**: a orario vuoto l'Alighieri
+  non produce più solo `activity_unplaced`. Due delle otto famiglie sono
+  *deficienze* — `min_distribution` e `free_guaranteed`, i due checker
+  `PLACEMENT_MONOTONE = False` fra le righe del dataset — e valgono zero quando
+  non c'è niente di piazzato: per loro **piazzare ripara**. Tre test dell'ondata
+  2 lo hanno scoperto rompendosi, e la riparazione non è stata allentare
+  l'asserzione ma prendere la **linea di partenza** prima di piazzare e
+  confrontarsi con quella, sulla chiave grossolana `(causale, risorsa)` — la
+  stessa scelta dell'oracolo differenziale di ADR-018.
+
 - **2026-08-30 (notte) — L'Alighieri, ondata 2: gli sdoppiamenti, e il primo difetto che il banco produce** —
   La voce ✅ di scope v1 ([ADR-013](decisioni.md)) che **nessun dataset
   rappresentava**: `ClassPartition`, `ClassPart` e `Group` erano tre tabelle

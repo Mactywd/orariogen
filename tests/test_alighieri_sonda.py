@@ -11,27 +11,32 @@ perché è ciò che rende il numero leggibile."""
 
 import pytest
 
+from domain.models import ResourceTimeConstraint
 from tests import alighieri, fermi, sonda
 
 pytestmark = pytest.mark.django_db
 
 
-# Ondate 1–2. Nessuna tabella di **vincoli** è ancora popolata: ciò che lavora
-# è tutto strutturale, e sono le sedi e la griglia a essere nuove rispetto al
-# Fermi.
+# Ondate 1–3. Le quattro voci strutturali vengono dall'anagrafica; le otto
+# famiglie di `ResourceTimeConstraint` dall'ondata 3, una riga per famiglia.
 #
-# ⚠ **L'ondata 2 non allarga questo insieme, ed è corretto così.** Partizioni,
-# parti e raggruppamenti non hanno un builder proprio: entrano nel modello
-# attraverso le **chiavi di occupazione** (ADR-017), cioè facendo lavorare di
-# più `structural:occupation` — **1440 → 3440** constraint — e attraverso
-# `structural:coverage`, che un builder non ce l'ha per costruzione (il solver
-# non crea né distrugge attività). Un cricchetto che contasse i constraint
-# invece dell'insieme direbbe «cresciuto» e non direbbe niente di vero.
+# ⚠ **L'ondata 2 non ha allargato questo insieme, ed era corretto così.**
+# Partizioni, parti e raggruppamenti non hanno un builder proprio: entrano nel
+# modello attraverso le **chiavi di occupazione** (ADR-017), cioè facendo
+# lavorare di più `structural:occupation` — **1440 → 3440** constraint — e
+# attraverso `structural:coverage`, che un builder non ce l'ha per costruzione
+# (il solver non crea né distrugge attività). Un cricchetto che contasse i
+# constraint invece dell'insieme direbbe «cresciuto» e non direbbe niente di
+# vero. L'ondata 3 lo allarga invece di **otto**, che è il salto più grande
+# che una sola ondata possa fare.
+T = ResourceTimeConstraint.Type
 ATTIVI = {
     "structural:occupation",
     "structural:room_pool",
     "structural:site_transition",   # 🔑 il Fermi ha zero `Site`: qui è muto
     "structural:grid",              # blocchi lunghi + intervallo mensa
+    T.MIN_DISTRIBUTION, T.MAX_HOURS, T.MAX_PRESENCE, T.ARRIVAL_DEPARTURE,
+    T.FREE_GUARANTEED, T.MAX_HALF_DAYS, T.MAX_SITE_CHANGES, T.MAX_GAP_HOURS,
 }
 
 

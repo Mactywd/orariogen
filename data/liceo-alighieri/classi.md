@@ -50,3 +50,11 @@ il criterio abbia qualcosa da misurare senza che nulla lo forzi.
 
 ⚠ `max_weekly_weight_per_student` resta `NULL` su tutte: lo accende l'ondata 5,
 con i tetti d'istituto.
+
+## Il vincolo orario che una classe porta
+
+La **2A** porta il `MMG`, il tetto di mezze giornate lavorate
+(`max_half_days 7`): ventotto fasce che cinque mattine non contengono, quindi
+due pomeriggi e non tre. È lo stesso vincolo del docente applicato alla
+classe — `docs/edt/classi.md` — e sta al bordo: a sei mezze giornate il
+dataset non regge. Vedi [vincoli.md](vincoli.md).

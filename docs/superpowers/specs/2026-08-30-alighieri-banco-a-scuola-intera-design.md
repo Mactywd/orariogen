@@ -1,7 +1,7 @@
 # L'Alighieri: il banco a scuola intera
 
 **Data**: 2026-08-30
-**Stato**: approvata — **ondate 1 e 2 di 7 fatte** il 2026-08-30
+**Stato**: approvata — **ondate 1, 2 e 3 di 7 fatte** il 2026-08-30
 **Apre**: la copertura del modello a scala reale — **ventiquattro builder su
 ventisette** non hanno mai visto un dataset
 
@@ -265,6 +265,23 @@ il solver. L'Alighieri eredita la disciplina, rinforzata:
 🔑 Il punto 4 è il vero contratto. Senza, «l'Alighieri copre tutte le famiglie»
 significa solo «l'Alighieri ha righe in tutte le tabelle».
 
+> ⚠ **Emendamento del 2026-08-30 (ondata 3): il punto 4 cambia forma, non
+> sostanza.** *Togliere la riga e vedere se l'orario cambia* è stato
+> implementato e misurato, e **non è misurabile**: il modello di fase 1 non ha
+> una funzione di costo sopra lo scarto, quindi ogni orario a zero scarti è
+> ottimo e il solver ne restituisce uno arbitrario fra milioni. Se quello che
+> torna dopo la rimozione viola la riga tolta, è un fatto sulla **ricerca**.
+> Misurato: cambiando una sola riga *estranea* alla famiglia osservata il
+> verdetto si è ribaltato per **tre famiglie su nove**, e a otto lavoratori la
+> stessa configurazione dava risposte diverse a esecuzioni diverse.
+>
+> Al suo posto: **si stringe la riga di una tacca e si pretende
+> `INFEASIBLE`**. È più forte, non più debole — `INFEASIBLE` è una proprietà
+> del modello dimostrata dal solver, non del testimone che torna, e una riga
+> che non sopporta una tacca in più non può essere soddisfatta per caso. La
+> sostanza del punto 4 resta: *una famiglia che il dataset non può violare è
+> presente e non esercitata*.
+
 E ha una forma **economica e automatica**, che diventa un test della suite: la
 sonda di §2.1 — avvolgere `restrict` e `build` di ogni builder e contare celle
 tolte e constraint postati durante `build_model` — deve riportare **zero
@@ -341,8 +358,23 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
    campo che nessun builder e nessun checker legge, e 13 allineamenti su 15
    escono dal solve senza una coincidenza. Non riparato (§8), fissato da un
    test, aperto come **L5** in `docs/todo.md`.
-3. **L'asse Cardinalità** (§3.1): otto famiglie, con l'esito atteso e la
-   verifica per mutazione di §6.4.
+3. ✅ **L'asse Cardinalità** (§3.1) (2026-08-30): otto famiglie in **dieci
+   righe** — `max_half_days` ne porta due (le sue due caselle vogliono
+   portatori diversi) e `max_presence` anche. La sonda passa da **4 a 12 su
+   27**, il salto più grande che una singola ondata possa fare. Due fasi
+   ancora `OPTIMAL` a zero scarti: 15 372 variabili, 8 758 constraint (senza
+   le righe: 14 372 / 7 704), 71 aule su 71.
+   🔑 **Otto righe su nove sono al bordo**: una tacca più stretta e il modello
+   è `INFEASIBLE`, con tacche che sono argomenti di conteggio e non tarature.
+   🔑 **Il cappellano**: `max_site_changes` non aveva un soggetto — `per_day 0,
+   per_week 0` su R01 era `OPTIMAL`, perché con cinque giornate può dedicarne
+   una intera alla succursale. La riga `max_presence days 2` è ciò che rende il
+   cambio inevitabile, ed è il caso vero delle scuole con una sede staccata.
+   ⚠ **Il D.T.B. non arriva al bordo**, ed è misurato: zero buchi per *ogni*
+   docente e *ogni* classe resta `OPTIMAL` — 40 fasce contro cattedre da 10–21
+   ore. Si stringe all'ondata 7, con la griglia; fino ad allora un test
+   asserisce l'`OPTIMAL`.
+   ⚠ **§6.4 è stata corretta da questa ondata** — vedi l'emendamento in §6.
 4. **L'asse Relazione** (§3.2): tredici tipi, idem.
 5. **Sedi, peso didattico, personale e materiali** (§3.4, §3.5).
 6. **Quote, criteri di qualità e firme di settimana** (§3.5, §4.1) — qui si

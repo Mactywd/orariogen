@@ -27,11 +27,24 @@ def test_capienza_pulita():
     assert analyze_capacity() == []
 
 
-def test_su_schedule_vuoto_solo_attivita_non_piazzate():
+def test_su_schedule_vuoto_le_due_deficienze_e_nient_altro():
+    """⚠ **Fino all'ondata 2 qui c'era scritto «solo `activity_unplaced`», e
+    l'ondata 3 l'ha reso falso.** Non è una regressione: due delle otto
+    famiglie di cardinalità sono *deficienze* — `min_distribution` chiede
+    almeno quattro giornate qualificanti, `free_guaranteed` almeno due mezze
+    giornate libere **fra quelle lavorate** — e a orario vuoto valgono zero.
+    Sono i due checker `PLACEMENT_MONOTONE = False` fra le righe del dataset,
+    e per loro piazzare **ripara**.
+
+    Sta scritto come test perché è la forma in cui l'analisi preventiva mente
+    a chi la legge distrattamente: un orario vuoto non è «conforme tranne che
+    per le attività da piazzare»."""
     env = alighieri.build()
     findings = check_schedule(env["schedule"])
-    assert {f.code for f in findings} == {"activity_unplaced"}
-    assert len(findings) == Activity.objects.count() == 340
+    da_piazzare = [f for f in findings if f.code == "activity_unplaced"]
+    assert len(da_piazzare) == Activity.objects.count() == 340
+    assert {f.code for f in findings} - {"activity_unplaced"} == {
+        "min_distribution", "free_guaranteed"}
 
 
 def test_le_due_fasi_chiudono_pulite():

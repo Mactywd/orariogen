@@ -9,9 +9,9 @@ import pytest
 from django.db.models import Q
 
 from domain.models import (
-    Activity, Break, ClassPart, ClassPartition, Discipline, Group, Room,
-    SchoolClass, Service, Site, SlotLabel, StudyPlan, Subject, Teacher,
-    TeachingAssignment,
+    Activity, Break, ClassPart, ClassPartition, Discipline, Group,
+    ResourceTimeConstraint, Room, SchoolClass, Service, Site, SlotLabel,
+    StudyPlan, Subject, Teacher, TeachingAssignment,
 )
 from tests import alighieri
 
@@ -37,6 +37,11 @@ def test_conteggi_delle_entita(dataset):
     assert ClassPartition.objects.count() == 12 + 2 + 1 + 1
     assert ClassPart.objects.count() == 32
     assert Group.objects.count() == 2
+    # Ondata 3: otto famiglie in dieci righe. `max_half_days` ne porta due (il
+    # `MMG` e il `MG`) e `max_presence` anche (il tempo parziale e il
+    # cappellano che serve alle sedi).
+    assert ResourceTimeConstraint.objects.count() == 10
+    assert len({r.type for r in ResourceTimeConstraint.objects.all()}) == 8
 
 
 def test_340_attivita_per_361_ore_erogate(dataset):

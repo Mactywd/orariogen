@@ -21,17 +21,22 @@ la voce ✅ di scope v1 ([ADR-013](../docs/decisioni.md)) che nessun dataset
 rappresentava. Quattro forme, tutte diverse fra loro — vedi `EROGAZIONI` e
 `data/liceo-alighieri/gruppi.md`.
 
-Niente vincoli ancora: arrivano dalle ondate 3 in poi, e ognuna aggiunge righe
-a `esiti-attesi.md` prima del codice che le esercita."""
+**Ondata 3 — l'asse Cardinalità.** Le otto famiglie di
+`ResourceTimeConstraint`, dieci righe, ognuna su un portatore scelto perché
+quella famiglia abbia un soggetto vero — vedi `TIME_CONSTRAINTS` e
+`data/liceo-alighieri/vincoli.md`.
+
+Le altre famiglie arrivano dalle ondate 4 in poi, e ognuna aggiunge righe a
+`esiti-attesi.md` prima del codice che le esercita."""
 
 import datetime as dt
 
 from domain import weeks
 from domain.models import (
     Activity, Break, ClassPart, ClassPartition, CompetitionClass, Discipline,
-    Group, InstituteSettings, Period, Room, Schedule, SchoolClass, SchoolYear,
-    Service, Site, SlotLabel, StudyPlan, Subject, Teacher, TeachingAssignment,
-    TimeGrid,
+    Group, InstituteSettings, Period, ResourceTimeConstraint, Room, Schedule,
+    SchoolClass, SchoolYear, Service, Site, SlotLabel, StudyPlan, Subject,
+    Teacher, TeachingAssignment, TimeGrid,
 )
 
 WEEKS_IN_YEAR = 33  # come il Fermi: periodicità S (33/33) osservata in EDT
@@ -284,8 +289,8 @@ TEACHERS = [  # id, nome, abbr., [(materia, [classi])], Mh/s, materia preferita
     ("P02", "Bruni Sofia", "BRUNI",
      [("MOT", ["2C", "1B", "2B", "3B", "4B", "5B"])], 12, "MOT"),
     # 🔑 R01 insegna in **tutte e dodici** le classi, quindi in entrambe le
-    # sedi: è il portatore naturale di `max_site_changes` (ondata 5), ed è già
-    # da qui ciò che rende `structural:site_transition` non muto.
+    # sedi: è il portatore di `max_site_changes` (ondata 3), ed è già da qui
+    # ciò che rende `structural:site_transition` non muto.
     ("R01", "Colombo Padre Egidio", "COLOM", [("IRC", None)], 12, "IRC"),
     # 🔑 R02 esiste perché l'alternativa esiste: dodici classi, dodici ore, e
     # una materia senza classe di concorso. Senza di lei la partizione
@@ -295,6 +300,69 @@ TEACHERS = [  # id, nome, abbr., [(materia, [classi])], Mh/s, materia preferita
     # scuola piccola, e il nostro modello lo rappresenta senza dire niente:
     # `Mh/s` è un numero, non una cattedra.
     ("I01", "Ricci Dario", "RICCI", [("INF", ["2C"])], 3, "INF"),
+]
+
+
+# 🔑 **L'asse Cardinalità** (ondata 3): le otto famiglie di
+# `ResourceTimeConstraint`, in dieci righe. Ogni riga dichiara la famiglia che
+# deve far scattare e il **portatore** scelto perché quella famiglia abbia un
+# soggetto vero: un tetto su un docente che non arriverebbe mai a toccarlo non
+# è un vincolo, è una riga.
+#
+# ⚠ Non sono valori realistici a caso: sono valori **al bordo**. Per otto delle
+# nove famiglie una tacca più stretta rende il dataset INFEASIBLE, ed è la
+# prova che la famiglia morde invece di essere soddisfatta per caso — vedi
+# `tests/test_alighieri_cardinalita.py` e `data/liceo-alighieri/vincoli.md`.
+# La nona (il D.T.B.) non ci arriva, ed è misurato e dichiarato lì.
+#
+# (nome, "t"|"c", portatore, tipo, params)
+TIME_CONSTRAINTS = [
+    # Le dieci ore di scienze del classico su almeno quattro giorni da due:
+    # senza, il solver le accorpa. N02 ha dieci ore, quindi 4 × 2 = 8 le sta
+    # dentro, e 5 × 3 = 15 no — che è la tacca più stretta.
+    ("min_distribution", "t", "URBAN", "min_distribution",
+     {"min_days": 4, "min_minutes_per_day": 120}),
+    # Il tetto della mattina **sotto** quello della giornata: 21 ore con al più
+    # 3 in mattinata fanno almeno 6 ore di pomeriggio. È la forma che EDT usa
+    # per spingere un docente fuori dalla fascia contesa.
+    ("max_hours", "t", "RINAL", "max_hours",
+     {"day_minutes": 300, "morning_minutes": 180}),
+    # Il tempo parziale: dodici ore in tre giorni, e presenza (buchi compresi)
+    # al più cinque fasce. Due giornate intere vuote.
+    ("max_presence", "t", "GENTI", "max_presence",
+     {"days": 3, "max_minutes": 300}),
+    # Non entra alla prima ora, e vale per tutte e cinque le giornate.
+    ("arrival_departure", "t", "VITAL", "arrival_departure",
+     {"days": 5, "not_before_slot": 1}),
+    # Due giorni liberi garantiti più due mezze giornate libere: le due soglie
+    # della stessa riga, che il builder tiene sotto **un solo** booleano.
+    ("free_guaranteed", "t", "ZANET", "free_guaranteed",
+     {"free_days": 2, "free_half_days": 2}),
+    # Il `MMG` della classe: 2A lavora 28 fasce, cinque mattine ne fanno 25,
+    # quindi sette mezze giornate sono due pomeriggi e non tre.
+    ("max_half_days", "c", "2A", "max_half_days", {"max_half_days": 7}),
+    # Il `MG`, l'altro ramo della stessa famiglia: mai mattina **e** pomeriggio
+    # nello stesso giorno. Sull'insegnante di alternativa, che ha dodici ore
+    # sparse su dodici classi.
+    ("only_half_day", "t", "DONAT", "max_half_days",
+     {"only_half_day_per_day": True}),
+    # 🔑 **Il cappellano viene due giorni.** Questa riga non è qui per
+    # `max_presence` — quello ce l'ha già GENTI — ma per dare un soggetto a
+    # `max_site_changes`: senza, R01 spalma le dodici ore su cinque giorni e
+    # dedica una giornata intera alla succursale, e allora *zero* cambi di sede
+    # è soddisfacibile e il vincolo non vincola niente. Con due sole giornate
+    # le dieci ore della centrale non stanno in una, quindi la succursale deve
+    # condividere una giornata: il cambio diventa **inevitabile**, e limitarlo
+    # a uno è una scelta. È il caso vero delle scuole con una sede staccata.
+    ("cappellano", "t", "COLOM", "max_presence", {"days": 2, "max_minutes": 480}),
+    ("max_site_changes", "t", "COLOM", "max_site_changes",
+     {"per_day": 1, "per_week": 1}),
+    # Il D.T.B.: al più un'ora di buco in tutta la settimana. ⚠ È l'unica delle
+    # nove righe che **non** è al bordo, ed è misurato: zero buchi per *ogni*
+    # docente e per *ogni* classe resta OPTIMAL. Con 40 fasce e cattedre da
+    # 10–21 ore la contiguità è gratis, e stringerla vuole una griglia più
+    # densa — cioè l'ondata 7. Vedi `esiti-attesi.md`.
+    ("max_gap_hours", "t", "CAVAL", "max_gap_hours", {"max_gap_minutes": 60}),
 ]
 
 
@@ -440,6 +508,15 @@ def build():
                         for room_name in SPECIAL_ROOMS[site].get(subject_code, ()):
                             activity.rooms.add(rooms[room_name])
         teachers[tid] = t
+
+    # L'asse Cardinalità (ondata 3). Il portatore si nomina per abbreviazione
+    # o per nome di classe: `TIME_CONSTRAINTS` resta leggibile come una tabella
+    # e non come una lista di pk.
+    per_abbr = {t.abbreviation: t for t in teachers.values()}
+    for _nome, kind, ref, tipo, params in TIME_CONSTRAINTS:
+        ResourceTimeConstraint.objects.create(
+            resource=per_abbr[ref] if kind == "t" else classes[ref],
+            type=ResourceTimeConstraint.Type(tipo), params=params)
 
     year = SchoolYear.objects.create(
         start_date=dt.date(2026, 9, 14),
