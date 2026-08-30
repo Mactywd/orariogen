@@ -15,6 +15,68 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (sera) — `Picco d'occ.` è la colonna che ADR-021 calcola** — Quattro
+  schermate della vista `Orario → Aule` e della finestra `Gestione del gruppo di
+  aule`, cercando i default dell'ottimizzatore (O1). L'ottimizzatore non si è
+  ancora aperto, ma per strada è uscita la conferma più diretta che avessimo di
+  ADR-021, e sta in una colonna che guardavamo da luglio senza capirla.
+
+  🔑 **`LAB.MUSICA`: `Qtà = 2`, `Assegnate = 0`, `Picco d'occ. = 2`.** EDT
+  conosce il picco d'occupazione di un gruppo di aule a cui non è stata assegnata
+  **nessuna** aula. Quindi quel numero è calcolato **sul piazzamento** e non
+  sull'assegnazione — è il `load` di `structural:room_pool`, esposto in una
+  colonna dell'elenco. Il giorno prima ADR-021 si era deciso su tre indizi
+  indiretti (la causale nella diagnostica del piazzamento, le cinque risorse del
+  pannello, il `Qtà`); questo è il numero stesso.
+
+  ⚠ **E costringe a rileggere `Qtà`.** `aule.md` concludeva dal 2026-07-26 che
+  `Qtà` non è il conteggio dei figli, perché `PALESTRA succ` ha `Qtà = 2` e
+  nessuna sotto-aula. Il fatto regge, l'interpretazione no: `Assegnate = 0` è
+  scritto in **arancione**, cioè per EDT quel record è **incompleto**, non
+  normale. La lettura che tiene entrambe le osservazioni è quella del titolo
+  della finestra — *«2 aule massimo»*, `Assegnate al gruppo: 2/2`: `Qtà` è la
+  capienza simultanea *e quindi* quante aule il gruppo dovrebbe contenere,
+  `Assegnate` quante ne contiene, e la differenza è uno stato ammesso ma
+  segnalato che blocca l'ottimizzatore. Per il nostro modello non cambia niente
+  (`simultaneous_capacity` resta `Qtà`); cambia la frase con cui lo si spiega.
+
+  **La finestra `Gestione del gruppo di aule`**, mai vista prima, porta altre
+  quattro cose:
+
+  - ☐ `Considera solo le attività estratte` — il **perimetro dell'estrazione
+    dentro la ripartizione delle aule**, cioè il nostro `assign_rooms
+    --estrazione`, che avevamo dedotto dalla regola generale e non osservato qui;
+  - un radio `Limita gli spostamenti dei docenti` / `delle classi`: la
+    **separazione per popolazione** esiste già nella *ripartizione*, non solo
+    nell'ottimizzatore, e senza tolleranza dichiarata. E `spostamenti` è di nuovo
+    il **cammino fisico**, terza conferma indipendente della correzione di
+    `tcosChangements` del 2026-08-29. La nostra seconda fase non ha nessuno dei
+    due criteri: voce in meno, dichiarata;
+  - 🔑 **le fasi di EDT sulle aule sono due, in due riquadri distinti**:
+    `Assegnazione delle aule` e `Ottimizzazione dell'assegnazione`, con
+    l'ottimizzatore che rifiuta finché la prima non è finita
+    (*«Ottimizzazione impossibile — solamente i gruppi di aule interamente
+    assegnati possono essere ottimizzati»*). La nostra `solve_rooms` le fa
+    **insieme**, in una catena a due livelli: differenza di forma, da sapere;
+  - i tre pallini `Totalmente libere` / `Parzialmente libere` / `Non disponibili`
+    sono gli undici `TypeIncompatibiliteSalle` (📦) collassati in tre secchi, e i
+    gruppi compaiono in grassetto **e rossi** — cioè `isGroupeDansGroupe`: un
+    gruppo non entra in un gruppo.
+
+  ⚠ **La ripartizione è massiva e distruttiva**, e lo dichiara: *«Certe modifiche
+  dell'orario per settimana saranno cancellate. Confermate l'assegnazione di
+  tutte le attività del gruppo di aule PALESTRE?»*. Cancella cioè proprio le
+  righe con maschera a una settimana che [ADR-014](decisioni.md) usa per
+  sostituzioni e aggiustamenti. Il nostro `apply_rooms` scrive `assigned_room` e
+  basta: qui siamo più conservativi di EDT, ed è la scelta giusta.
+
+  ⚠ Aperta una minuzia sulla colonna **`TOP`**: su quattro righe su cinque torna
+  `Occ. / (Qtà × 50h)` sulla griglia `5 × 10` della demo (1%, 26%, 35%, 48%), ma
+  `LAB.ARTISTICA` fa 21h → **72%** dove la formula darebbe 42%. L'ipotesi è che
+  il denominatore sia il tempo **disponibile** invece che quello totale
+  (21/29 ≈ 72%), cioè che le indisponibilità escano dal conto — **[INFERENZA]**,
+  si conferma con un tooltip.
+
 - **2026-08-30 — Tre schermate del passo 3, e un pulsante che mentiva sull'unità** —
   Chiuso il primo dei due residui di O2. Il pulsante `Inserisci / cancella una
   fascia oraria` del pannello `Parametri → Istituto → Orari` era rimasto aperto

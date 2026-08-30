@@ -106,9 +106,20 @@ mappano uno a uno sui cinque valori. Con due conseguenze scritte in
   fase aule, non solo nel piazzamento.
 
 Resta **una sola cosa** e la strada è uno screenshot: quali siano i **quattro
-valori di default** nelle caselle. Serve arrivarci — la finestra è
-`Ottimizza l'assegnazione delle aule` su un **gruppo di aule** già interamente
-assegnato, quindi va prima lanciata `Assegna le aule alle attività`.
+valori di default** nelle caselle.
+
+👁 **2026-08-30 — trovata la strada, non ancora la finestra.** Il comando non è
+una voce di menu ma un **pulsante**, in `Orario → Aule → Gestione del gruppo di
+aule`: si seleziona un gruppo, si preme `Assegna le aule alle attività`, e solo
+dopo `Ottimizza l'assegnazione delle aule` smette di rispondere
+*«Ottimizzazione impossibile»*. La ripartizione va **confermata** (avverte che
+*«certe modifiche dell'orario per settimana saranno cancellate»*), ed è il passo
+che mancava. → [aule.md](edt/aule.md)
+
+⚠ Lo stesso giro ha portato molto più di quanto O1 chiedesse — `Picco d'occ.`
+come conferma diretta di [ADR-021](decisioni.md), la finestra del gruppo di aule
+campo per campo, e una minuzia aperta sulla colonna `TOP`. Vedi il
+[changelog](changelog.md) alla data.
 
 ### O2 👁 La configurazione della griglia oraria — **chiusa, due residui**
 

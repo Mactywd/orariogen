@@ -48,6 +48,56 @@ Orario > **Aule**, `Elenco delle aule`. Colonne osservate:
 | `Categoria` | categoria dei locali scolastici |
 | `Assegnate` / `Picco d'occ.` | calcolati, valorizzati solo per `Qtà > 1` |
 
+### 👁 L'elenco intero della base del produttore (2026-08-30)
+
+Diciotto aule, e le sole righe con `Qtà > 1` portano le due colonne calcolate:
+
+| Nome | Sede | Qtà | Occ. | TOP | Assegnate | Picco d'occ. |
+|---|---|---|---|---|---|---|
+| ▷ **PALESTRE** | Principale | 2 | 48h00 | 48% | **2** | **2** |
+| **LAB.MUSICA** | Principale | 2 | 35h00 | 35% | **0** ⚠ | **2** |
+| **PALESTRA succ** | Succ. 1 | 2 | 26h00 | 26% | **0** ⚠ | **2** |
+| LAB.ARTISTICA | Principale | 1 | 21h00 | 72% | — | — |
+| LAB. LINGUISTICO | Succ. 2 | 1 | 0h30 | 1% | — | — |
+
+*(le altre tredici sono a `Qtà = 1` e `0h00`; `Cap.` è vuota su tutte e 18, e
+il gestore è `Tosco Luisa` su tutte)*
+
+🔑🔑 **`Picco d'occ.` è la quantità che ADR-021 calcola, e EDT la mette in una
+colonna.** La prova sta in `LAB.MUSICA`: `Qtà = 2`, **`Assegnate = 0`**,
+`Picco d'occ. = 2`. Cioè EDT conosce il picco di un gruppo a cui non è stata
+assegnata **nessuna** aula — quindi il picco è calcolato **sul piazzamento**,
+non sull'assegnazione. È esattamente il `load` di `structural:room_pool`, ed è
+la conferma più diretta che abbiamo che **la fase 1 conta le aule**: il numero
+esiste prima che qualunque aula sia scelta.
+
+⚠ **E `Assegnate` costringe a rileggere `Qtà`.** Il paragrafo qui sotto
+concludeva che `Qtà` non è il conteggio dei figli, perché `PALESTRA succ` ha
+`Qtà = 2` e nessuna sotto-aula. Il **fatto** resta vero, ma l'interpretazione va
+stretta: `Assegnate = 0` in **arancione** dice che per EDT quel record è
+**incompleto**, non normale. La lettura che regge entrambe le osservazioni è una
+sola, e la dà il titolo della finestra — *«PALESTRE - Gestione del gruppo di
+aule (**2 aule massimo**)»* con `Assegnate al gruppo: **2/2**`:
+
+- `Qtà` è la **capienza simultanea**, cioè quante attività il gruppo regge in
+  parallelo — ed è quindi anche quante aule *dovrebbe* contenere;
+- `Assegnate` è quante ne contiene **davvero**;
+- `Assegnate < Qtà` è uno stato ammesso ma segnalato, e blocca l'ottimizzatore
+  (*«Solamente i gruppi di aule interamente assegnati possono essere
+  ottimizzati»*).
+
+Per noi non cambia niente — `simultaneous_capacity` è `Qtà`, ed è ciò che il
+piazzamento conta — ma cambia la frase: non è che il gruppo sia irrilevante, è
+che **la capienza si dichiara prima e si popola dopo**.
+
+⚠ **`TOP` non è spiegato.** Su quattro righe su cinque torna
+`Occ. / (Qtà × 50h)` — 0h30→1%, 26h→26%, 35h→35%, 48h→48% su una settimana di
+50 fasce, che è la griglia `5 × 10` della demo. **`LAB.ARTISTICA` no**: 21h su
+50 farebbe 42%, non 72%. L'ipotesi che le riconcilia è che il denominatore sia
+il tempo **disponibile** e non quello totale (21/29 ≈ 72%), cioè che le
+indisponibilità dell'aula escano dal conto — ma è **[INFERENZA]**, e si conferma
+con un passaggio del mouse sull'intestazione della colonna.
+
 ## 🔑 L'occupazione simultanea è un campo dell'aula
 
 > ⚠ **Correzione.** Una versione precedente di questo file affermava che
@@ -244,6 +294,77 @@ delle fasi: le aule assegnate ai gruppi, i gruppi assegnati alle attività, e
 *«gli orari chiusi con tutte le attività piazzate»*. Cioè la ripartizione delle
 aule si lancia **su un orario finito** — la seconda fase, alla lettera.
 → [guida ufficiale, scheda 54-244](https://docs.index-education.com/docs_it/it-edt-supporto-scheda-54-244-assegnare-le-aule-alle-attivita.php)
+
+### 👁 La finestra `Gestione del gruppo di aule`
+
+Osservata il 2026-08-30 su `PALESTRE`. Titolo: *«PALESTRE - Gestione del gruppo
+di aule (2 aule massimo)»*. È divisa in quattro riquadri, e i due in basso sono
+**le nostre due fasi di assegnazione, separate**.
+
+**In alto a sinistra, `Assegnate al gruppo: 2/2`** — le aule membre (`Palestra
+1`, `Palestra 2`) con `Capienza` e `Occ.`. È la frazione «quante ne ha su quante
+ne dovrebbe avere».
+
+**In alto a destra, `Scelta delle aule`** — le candidate da aggiungere al gruppo,
+con i pulsanti `<<` / `>>`, un `Solo le risorse estratte` e **tre caselle di
+filtro con altrettanti pallini colorati**:
+
+| | Etichetta |
+|---|---|
+| 🟢 | `Totalmente libere` |
+| 🟠 | `Parzialmente libere` |
+| 🔴 | `Non disponibili` |
+
+Ogni riga porta il suo pallino nella colonna `Disp.`. Sulla demo sono verdi le
+quattro aule libere da ogni gruppo (`Lab. Musica 1/2`, `Palestra succ 1/2`) e
+rosse tutte le altre — fra cui, **in grassetto**, `LAB.MUSICA` e `PALESTRA
+succ`, che sono gruppi a loro volta.
+
+🔑 I tre pallini sono gli **undici `TypeIncompatibiliteSalle`** (📦) collassati in
+tre secchi. Il grassetto sui gruppi rende visibili due di quei valori —
+`isGroupeDansGroupe` e `isGroupeDeGroupe`: **un gruppo non entra in un gruppo**.
+
+**In basso, `Assegnazione delle aule`:**
+
+- ☐ **`Considera solo le attività estratte`** — 🔑 il perimetro dell'estrazione
+  **dentro la ripartizione delle aule**, che è esattamente il nostro
+  `assign_rooms --estrazione`;
+- un radio **`Limita gli spostamenti dei docenti`** / **`Limita gli spostamenti
+  delle classi`** (sulla demo: **classi**), più una barra di avanzamento a `0%`;
+- il pulsante `Assegna le aule alle attività`.
+
+🔑 **Due cose insieme, e sono entrambe nostre lacune dichiarate.** La prima: la
+**separazione per popolazione** non vive solo nel piazzamento e
+nell'ottimizzatore — c'è già nella *ripartizione*, ed è un radio a due valori
+senza tolleranza. La seconda: `spostamenti` qui è di nuovo il **cammino fisico**
+di docenti e classi, cioè `tcosChangements`, e conferma da un terzo posto la
+correzione del 2026-08-29. La nostra seconda fase non ha **nessuno** dei due:
+i suoi livelli sono `minuti senza aula` e la stabilità rispetto alla
+ripartizione precedente. Non è un errore — è una voce in meno, da dichiarare.
+
+**In basso, `Ottimizzazione dell'assegnazione`:** una sola frase — *«È necessario
+assegnare tutte le aule prima di lanciare l'ottimizzazione»* — e il pulsante
+`Ottimizza l'assegnazione delle aule`. Premuto prima della ripartizione risponde
+`Ottimizzazione impossibile` / *«Solamente i gruppi di aule interamente assegnati
+possono essere ottimizzati»*.
+
+🔑 **Quindi le fasi di EDT sulle aule sono due, non una**, e stanno in due
+riquadri distinti della stessa finestra: **ripartire** (assegnare un'aula a ogni
+attività del gruppo) e poi **ottimizzare** (rimescolare le assegnazioni secondo i
+quattro criteri). La nostra `solve_rooms` le fa **insieme**, in una catena a due
+livelli. Da dichiarare come differenza di forma.
+
+⚠ **E la ripartizione distrugge le modifiche per settimana.** La conferma prima
+di lanciarla dice, testualmente:
+
+> *«Certe modifiche dell'orario per settimana saranno cancellate.
+> Confermate l'assegnazione di tutte le attività del gruppo di aule PALESTRE?»*
+
+È un'operazione **massiva** (tutte le attività del gruppo, non le selezionate) e
+**distruttiva** su ciò che [ADR-014](../decisioni.md) modella come righe con
+maschera a una settimana — sostituzioni e aggiustamenti. Il nostro `apply_rooms`
+scrive `assigned_room` senza toccare nient'altro: **non** ha questo effetto, ed
+è la scelta migliore, ma va saputo che EDT qui è più brutale di noi.
 
 La nostra seconda fase (`domain/solver/rooms.py`) ha **due** livelli — minuti
 senza aula, poi i cambi rispetto alla ripartizione precedente — e non implementa
