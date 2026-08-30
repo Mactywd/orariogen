@@ -30,25 +30,21 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > esistente può sostituire (O3, O6), e **nove debiti** già decisi. O1 è chiusa
 > il 2026-08-30.
 >
-> 🔧 **La sezione 3, `Lavoro`, ha aperto e chiuso tre voci lo stesso giorno**
-> — L1 (il perimetro del buco), L2 (la capienza come criterio e il lucchetto
-> sull'aula) e L3 (il materiale per decidere O5) — e **una quarta è aperta**:
-> L4, il dataset Alighieri. Con L3 è arrivato anche **un debito nuovo**, che ha
-> trovato per strada: i criteri di qualità contano su una settimana sola.
+> 🔧 **La sezione 3, `Lavoro`, ha aperto e chiuso quattro voci lo stesso
+> giorno** — L1 (il perimetro del buco), L2 (la capienza come criterio e il
+> lucchetto sull'aula), L3 (il materiale per decidere O5) e **L4**, il dataset
+> Alighieri, sette ondate su sette.
 >
-> ⚠ **E provando il prodotto invece dei test si è visto che il Fermi misura
-> pochissimo**: tre builder su ventisette fanno qualcosa, tredici tabelle su
-> trentatré sono vuote.
-> È L4, ed è ciò che va fatto prima di D2. **Ondate 1–4 su 7 fatte** il
-> 2026-08-30: l'anagrafica dell'Alighieri, i suoi sdoppiamenti, l'asse
-> Cardinalità e l'asse Relazione, con la sonda della copertura diventata un
-> test — **25 builder su 27** contro i 3 del Fermi. 🔑 E il banco ha già
-> prodotto il suo primo difetto — **L5**, l'allineamento è un campo che nessun
-> builder legge — che è esattamente ciò per cui esiste; l'ondata 3 ne ha
-> prodotto un secondo che però è del **metodo**, non del motore (la verifica
-> per mutazione va fatta stringendo, non togliendo), e l'ondata 4 ha mostrato
-> che quella correzione era **troppo larga**: con un pin la rimozione torna
-> misurabile.
+> ⚠ **L4 è nato da una misura che ha corretto ciò che il progetto credeva di
+> sé**: provando il prodotto invece dei test, il Fermi esercitava **tre builder
+> su ventisette** e lasciava tredici tabelle su trentatré vuote. Ora la sonda
+> dice **27 su 27**, ed è un test che deve **restare fermo**, non salire.
+> 🔑 E il banco ha fatto il mestiere per cui esiste: ha prodotto **cinque
+> difetti** — L5, L6, L6bis, L7 e L8 — nessuno riparato, tutti fissati da un
+> test, e tutti aperti qui sotto. Ha anche corretto **due volte** il proprio metodo
+> di verifica (la tacca dell'ondata 3, il testimone puntato della 4) e ne ha
+> aggiunta una terza (la tensione con la quota, ondata 6), che l'ondata 7 ha
+> riusato per l'arbitrato.
 
 ---
 
@@ -269,7 +265,9 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       EDT) o una famiglia alleggeribile — e se le durate diverse dentro lo
       stesso ident siano ammesse.
 
-- [ ] **L4 — il Liceo "Alighieri": il banco a scuola intera.** Il modello hard
+- [x] **L4 — il Liceo "Alighieri": il banco a scuola intera.** ✅ **Chiuso il
+      2026-08-30**, sette ondate su sette; il racconto sta in coda a questa
+      voce e in [changelog.md](changelog.md). Il modello hard
       è completo, ma il dataset su cui gira il prodotto esercita **tre builder
       su ventisette** — misurato avvolgendo `restrict` e `build` di ciascuno — e
       sul Fermi in un database vero **tredici tabelle su trentatré sono
@@ -448,7 +446,69 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       giusta — in EDT l'ottimizzazione è un comando a sé, che si lancia su un
       orario che già c'è.
       🔑 Ha prodotto **un difetto**: L7, qui sotto.
-      Resta l'ondata 7: il criterio di accettazione e i comandi.
+
+      **Ondata 7 (2026-08-30) — i comandi, e il pezzo si chiude.**
+      ([`data/liceo-alighieri/comandi.md`](../data/liceo-alighieri/comandi.md))
+      Nessuna riga nuova nel dataset: la domanda dell'ultima ondata è quella a
+      valle di tutte, §7 della spec — *i cinque comandi diagnostici hanno
+      qualcosa di vero da dire su questa scuola?* Un comando che gira e
+      risponde «niente da segnalare» è verde e non prova niente.
+      Il criterio di accettazione di §6 è già soddisfatto dall'ondata 5 e resta
+      **fermo**: sonda a 27 su 27, asserita come insieme.
+      🔑 **La classifica dei vincoli ordina quindici famiglie** contro l'unica
+      del Fermi — che sono *letteralmente* le «tre indisponibilità» che §7
+      dichiara insufficienti — e la prima riga è un vincolo di materia, non
+      un'indisponibilità. La fase 5 nomina un insieme deficiente vero quando si
+      stringe il laboratorio unico della succursale; tutti e **sei** i
+      rilevatori di `Estrai` trovano almeno un'attività; `place_and_fix` costa
+      **tre** attività spostate contro l'una del Fermi; `assign_rooms` è
+      `INFEASIBLE` in fase 1 col gruppo di aule e rinuncia senza.
+      ⚠ **Due attese smentite, e sono di natura diversa** — è la ragione per cui
+      la regola 3 della spec chiede *quale* delle due era sbagliata.
+      La prima è **dell'attesa**: la classifica a riposo dà tre causali e non
+      cinque, perché `free_candidates` spiazza *tutte* le candidate prima di
+      calcolare i domini — su un orario dove niente è congelato l'occupazione
+      non occupa e un vincolo *fra due ore* non ha soggetto. La classifica va
+      misurata dove serve, cioè su un orario **quasi fatto**: lì sono quindici.
+      La seconda è del **dataset**: il tetto di non-regressione dell'arbitrato
+      **non morde**, su nessuna delle sei configurazioni misurate — quaranta
+      fasce per ventinove ore lasciano a docenti e classi abbastanza spazio da
+      non competere, e i buchi della popolazione ottimizzata scendono a zero
+      *dimostrato* in tutte. ⚠ E la strada del criterio non dimostrato è stata
+      provata e scartata: sacrificando `free_half_days_teachers` i valori sono
+      usciti 121 / 122 / 124 al crescere della tolleranza, cioè nella direzione
+      sbagliata — l'ondata 6 che si paga due volte.
+      🔑 **La risposta è la terza forma di verifica**: si mette il dataset in
+      tensione (base portata a zero da un primo arbitrato sulle classi, una
+      cella rossa in mezzo alla giornata della 1A, due ore puntate ai lati del
+      buco) e i tre verdetti tornano quelli dell'ondata 6 — `INFEASIBLE` a
+      tolleranza 0, `INFEASIBLE` a 60 e `FEASIBLE` a 180. Il buco vale 60
+      minuti per **tre chiavi**, la classe e le sue due parti.
+      🔑 **E due contratti si sono dovuti riscrivere come argomenti invece che
+      come misure**, perché la prima stesura misurava l'ottimo che la ricerca
+      aveva scelto: `place_and_fix` cerca una cella dove due attività *diverse*
+      confliggono con la terza — una per la classe, una per il docente — così
+      «almeno due si spostano» è vero per costruzione; e il gruppo di aule si
+      prova col **testimone puntato** (tre ore di fisica sulle stesse due aule
+      candidate, imposte sulla stessa cella) invece che con un calcolo libero,
+      che aveva dato 1 rinuncia in una esecuzione e 2 nell'altra.
+      ✅ **E il criterio di §4 della spec — «stretto ma risolvibile» — è
+      verificato sul dataset intero**, che è ciò che tre file del banco
+      rimandavano a quest'ondata: spegnendo `LAB-SUCC` il banco scarta **11**
+      attività (le sue), spegnendo un docente le sue ore (3, 12, 20 sui tre
+      campionati); l'aula magna, che nessuno usa, non costa niente ed è
+      corretto. 🔑 **Ma «stretto» ha due nozioni, e la spec ne dichiarava una
+      sola**: questa è stretta rispetto alle **risorse**, mentre la contiguità
+      che il D.T.B. chiede è stretta rispetto alla **densità della griglia** —
+      quaranta fasce contro cattedre da 10–21 ore la rendono gratis. I due
+      test che asseriscono l'`OPTIMAL` (il D.T.B. dell'ondata 3 e la tacca dei
+      divieti della 4) restano quindi verdi e restano giusti, e il «diventerà
+      rosso all'ondata 7» che li accompagnava era sbagliato: corretto dove
+      stava scritto.
+      🔑 Ha prodotto **un difetto**: L8, qui sotto.
+      **Il pezzo L4 è chiuso.** Restano aperti i quattro difetti che ha
+      trovato — L5, L6/L6bis, L7 e L8 — che sono suoi prodotti, non suoi
+      residui.
 
 - [ ] **L7 — i criteri di qualità ignorano le firme di settimana.** 🔑
       **Trovato dall'ondata 6 dell'Alighieri, il 2026-08-30**, ed è il debito
@@ -476,6 +536,42 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       correzione ovvia. Fissato da un test che asserisce il comportamento
       corrente, col suo ramo di controllo
       (`tests/test_alighieri_settimane.py`).
+
+- [ ] **L8 — lo scarto non è una via d'uscita universale.** 🔑 **Trovato
+      dall'ondata 7 dell'Alighieri, il 2026-08-30**, misurando il criterio
+      «stretto ma risolvibile» di §4: spegnendo la **palestra** il modello non
+      scarta, risponde `INFEASIBLE` — che è ciò che `allow_unplaced=True`
+      dovrebbe rendere impossibile, perché lo scarto esiste proprio perché
+      un'attività che non ci sta non blocchi il calcolo.
+      La causa è **una sola riga**, isolata togliendone dieci una per volta:
+      `free_guaranteed` su P01 Zanetti, il docente di scienze motorie. Con la
+      palestra spenta gli restano le sole ore della succursale, e il solver ne
+      piazza **una**, su **un** giorno. La riga chiede due giornate libere —
+      che ci sono — e due **mezze** giornate libere, che non ci sono: una mezza
+      giornata libera conta solo su un giorno **lavorato**
+      (`libera = attivo AND NOT meta`), perché è così che la conta
+      `FreeGuaranteedChecker`, e un giorno interamente vuoto contribuisce zero.
+      Con un giorno lavorato il massimo è uno.
+      🔑 **È l'immagine speculare della trappola che `FreeGuaranteedBuilder`
+      documenta**, e non è un errore del builder: contare le mezze libere su
+      tutti i giorni accetterebbe orari che il checker boccia, cioè la
+      direzione sbagliata. Il fatto nuovo è la **conseguenza**: una famiglia
+      che conta una quantità *sui giorni in cui si lavora* può diventare
+      insoddisfacibile **perché si lavora meno**.
+      ⚠ **E il costo è di prodotto, non di modello**: un utente che ha spento
+      una palestra legge `INFEASIBLE` invece di «queste dieci attività non si
+      piazzano», cioè la diagnosi peggiore delle due — e la classifica dei
+      vincoli, che saprebbe dirgli quale riga allentare, gira solo su un
+      orario, non su un modello infattibile.
+      **Da decidere quando si riapre**: se una soglia *minima* debba valere
+      solo sulle risorse che lavorano (cioè `free_half_days` condizionato ad
+      almeno un giorno attivo), o se sia il checker a doverla contare
+      diversamente. Le due strade cambiano cosa il prodotto considera legale,
+      quindi è una decisione, non un fix.
+      Non riparato (spec §8), fissato da
+      `test_l8_lo_scarto_non_e_una_via_d_uscita_universale` col suo **ramo di
+      controllo**: tolta quella riga, lo stesso dataset scarta e chiude
+      `OPTIMAL`.
 
 - [ ] **L6 — una risorsa senza sede non può servire due sedi, e non è la
       capienza.** 🔑 **Trovato dall'ondata 5 dell'Alighieri, il 2026-08-30**,

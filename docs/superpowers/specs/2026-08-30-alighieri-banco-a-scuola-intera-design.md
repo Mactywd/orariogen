@@ -1,7 +1,7 @@
 # L'Alighieri: il banco a scuola intera
 
 **Data**: 2026-08-30
-**Stato**: approvata — **ondate 1–6 di 7 fatte** il 2026-08-30
+**Stato**: ✅ **completa** — sette ondate su sette, il 2026-08-30
 **Apre**: la copertura del modello a scala reale — **ventiquattro builder su
 ventisette** non hanno mai visto un dataset
 
@@ -501,9 +501,49 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
    **zero** per il criterio `gaps`. È lo stesso difetto che `MaxGapBuilder`
    aveva fino al 2026-08-24. Non riparato (§8), fissato da un test col ramo di
    controllo.
-7. **Il criterio di accettazione e i comandi**: il test della sonda (§6, zero
-   builder inerti), la misura di ciascun comando su §7, e l'aggiornamento di
-   `CLAUDE.md`, `docs/todo.md` e del changelog con i numeri veri.
+7. ✅ **Il criterio di accettazione e i comandi** (§6, §7) — fatta il
+   2026-08-30. Nessuna riga nuova nel dataset: la domanda è quella a valle di
+   tutte le altre. Sonda **ferma a 27 su 27**, asserita come insieme.
+   🔑 **La classifica ordina quindici famiglie** in 63 righe, e la prima è un
+   vincolo di materia; sul Fermi sono tre righe e **una** causale — le «tre
+   indisponibilità» di §7, alla lettera. La fase 5 nomina un insieme
+   deficiente vero sul laboratorio unico della succursale; tutti e sei i
+   rilevatori di `Estrai` trovano qualcosa; `place_and_fix` costa **tre**
+   spostamenti contro l'uno del Fermi; `assign_rooms` è `INFEASIBLE` col
+   gruppo di aule e rinuncia senza.
+   ⚠ **Due attese smentite, di natura diversa.** La prima è **dell'attesa**:
+   a riposo la classifica dà tre causali e non cinque, perché
+   `free_candidates` spiazza *tutte* le candidate — su un orario dove niente è
+   congelato le famiglie relazionali non hanno soggetto. Va misurata su un
+   orario quasi fatto, che è dove lo strumento serve.
+   La seconda è del **dataset**: il tetto di non-regressione **non morde**, su
+   nessuna delle sei configurazioni misurate. Quaranta fasce per ventinove ore
+   non fanno competere le due popolazioni, e i buchi della popolazione
+   ottimizzata scendono a zero *dimostrato* in tutte. ⚠ La strada del criterio
+   non dimostrato è stata provata e scartata: 121 / 122 / 124 al crescere
+   della tolleranza, cioè nella direzione sbagliata.
+   🔑 **La risposta è la terza forma di verifica** (ondata 6): si mette il
+   dataset in tensione, e i tre verdetti tornano `INFEASIBLE` / `INFEASIBLE` /
+   `FEASIBLE` a tolleranza 0 / 60 / 180.
+   🔑 **E due contratti si sono riscritti come argomenti invece che come
+   misure**, perché la prima stesura misurava l'ottimo scelto dalla ricerca:
+   `place_and_fix` punta una cella a **due sfratti** (uno per la classe, uno
+   per il docente), e il gruppo di aule si prova col testimone puntato — tre
+   ore di fisica sulle stesse due aule candidate, sulla stessa cella.
+   ⚠ **Il deficit di Hall non è un totale**: 9h00 contro 8h00 su nove
+   attività, perché il certificato è un insieme **minimale**. È il verdetto
+   più utile dei due.
+   ✅ **E il criterio di §4 è verificato sul dataset intero**: spento
+   `LAB-SUCC` il banco scarta 11 attività, spento un docente le sue ore. ⚠ Ma
+   **«stretto» ha due nozioni** e questa spec ne dichiarava una sola: stretto
+   sulle **risorse** (togline una e qualcosa cade) non implica stretto sulla
+   **densità della griglia**, che è ciò che servirebbe al D.T.B. e alla tacca
+   dei divieti. I due test che asseriscono l'`OPTIMAL` restano verdi e giusti.
+   🔑 **E misurando quel bordo è uscito il quinto difetto, L8**: spegnendo la
+   palestra il modello risponde `INFEASIBLE` invece di scartare, per la sola
+   riga `free_guaranteed` — le mezze giornate libere si contano **solo sui
+   giorni lavorati**, e con un giorno lavorato il massimo è uno. Lo scarto non
+   è una via d'uscita universale.
 
 Ogni ondata è verde prima della successiva, e ogni ondata aggiunge righe a
 `esiti-attesi.md` **prima** del codice che le esercita.

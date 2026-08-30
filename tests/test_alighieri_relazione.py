@@ -326,7 +326,12 @@ def test_la_proibizione_non_sparpaglia_ed_e_una_misura():
     sempre soddisfacibile da solo, ed è il motivo per cui l'asse Relazione
     vuole il testimone puntato invece della tacca. Il test asserisce
     l'`OPTIMAL` perché diventi rosso il giorno in cui il banco si stringe
-    abbastanza da forzare lo sparpagliamento — all'ondata 7."""
+    abbastanza da forzare lo sparpagliamento.
+
+    ⚠ **E l'ondata 7 non è quel giorno**, misurato: il criterio «stretto ma
+    risolvibile» di §4 è verificato togliendo una risorsa, non
+    accorciando la griglia — e lo sparpagliamento lo forza la seconda,
+    non la prima."""
     env = alighieri.build()
     riga = _riga("two_days").get()
     riga.subject_a = riga.subject_b = Subject.objects.get(code="LAT")

@@ -70,12 +70,19 @@ lo resta **zero buchi per ogni docente e per ogni classe insieme**.
 La ragione è strutturale e si conta: 40 fasce a settimana contro cattedre da
 10–21 ore e classi da 28–32 fasce. La contiguità dentro una mezza giornata è
 gratis. Per stringere il D.T.B. serve una griglia più densa o un carico più
-alto — cioè il criterio di accettazione dell'ondata 7 (spec §4, «stretto ma
-risolvibile»), non una taratura di questa riga.
+alto, non una taratura di questa riga.
+
+⚠ **E non è il criterio di §4, come qui era scritto.** L'ondata 7 lo ha
+misurato: «stretto ma risolvibile» è **verificato** — spegnendo il laboratorio
+unico della succursale il banco scarta 11 attività, spegnendo un docente le sue
+— e il D.T.B. resta lo stesso lontano dal bordo. Sono **due nozioni diverse di
+stretto**: quella di §4 è stretta rispetto alle **risorse**, la contiguità è
+stretta rispetto alla **densità della griglia**. La spec ne dichiarava una
+sola.
 
 Il fatto è tenuto fermo da un test che asserisce **l'`OPTIMAL`**
 (`test_il_dtb_non_e_al_bordo_ed_e_una_misura`): diventerà rosso il giorno in
-cui il banco si stringe, che è quando vogliamo saperlo.
+cui la **griglia** si stringe, che è quando vogliamo saperlo.
 
 ## Le tacche più strette
 

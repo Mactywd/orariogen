@@ -77,7 +77,8 @@ E l'atteso sul **motore**:
 *stretto*: `OPTIMAL` con zero scarti, ma una sola aula o un solo docente in
 meno e comincia a scartare. Senza una riga di vincolo la tensione non c'è, e
 fingere il contrario sarebbe il primo modo di aggiustare il banco. Il criterio
-si verifica all'ondata 7, quando le famiglie ci sono tutte.
+si verifica all'ondata 7, quando le famiglie ci sono tutte — ed è verificato:
+vedi [§8 dell'ondata 7](#8-stretto-ma-risolvibile-il-criterio-di-4).
 
 ## Ondata 2 — gli sdoppiamenti
 
@@ -168,9 +169,12 @@ su L03 resta risolvibile, e lo resta anche **zero buchi per ogni docente e per
 ogni classe insieme**. *Quale delle due era sbagliata*: l'attesa. La ragione si
 conta — 40 fasce a settimana contro cattedre da 10–21 ore e classi da 28–32:
 la contiguità dentro una mezza giornata è gratis. Stringerla vuole una griglia
-più densa, cioè il criterio di accettazione dell'ondata 7, non una taratura di
-questa riga. Un test asserisce l'`OPTIMAL`, così diventerà rosso il giorno in
-cui il banco si stringe.
+più densa, non una taratura di questa riga. Un test asserisce l'`OPTIMAL`, così
+diventerà rosso il giorno in cui il banco si stringe.
+⚠ **E quel giorno non è l'ondata 7**, misurato: il criterio di §4 è
+verificato **sulle risorse** (togline una e il banco scarta), e la contiguità è
+stretta sulla **densità della griglia**. Sono due nozioni diverse di «stretto»,
+e la spec ne dichiarava una sola.
 
 **La seconda è del metodo, ed è la più importante.** La regola 4 di questo file
 — *togliere la riga deve cambiare l'orario* — è stata implementata e misurata,
@@ -250,7 +254,9 @@ sempre soddisfacibile da solo (A si concentra in un giorno, B in un altro);
 quasi ogni altro divieto. È il motivo per cui la regola del bordo qui non è la
 tacca dell'ondata 3 ma il **testimone puntato** — che vale per tutti e tredici
 i tipi, parametro o no. Un test asserisce l'`OPTIMAL` di quella tacca, così
-diventerà rosso all'ondata 7.
+diventerà rosso il giorno in cui il banco stringerà abbastanza da forzare lo
+sparpagliamento. ⚠ **Non è l'ondata 7**: vedi la nota sulle due nozioni di
+«stretto» in [§8](#8-stretto-ma-risolvibile-il-criterio-di-4).
 
 ### 🔑 E la regola 4 torna misurabile, nella forma puntata
 
@@ -578,7 +584,322 @@ quindicinale, «scienze al martedì alla terza», e cambia solo cosa ci si fa.
 | le due metà sulla stessa cella | `OPTIMAL` | ✅ |
 | una metà e l'ora settimanale sulla stessa cella | `INFEASIBLE` | ✅ |
 
-## Ondata 7
+## Ondata 7 — il criterio di accettazione e i comandi
 
-Da scrivere prima, nell'ordine della spec §9: il criterio di accettazione e i
-comandi.
+L'ultima ondata non aggiunge righe al dataset per accendere un builder: quello
+è finito all'ondata 5, e la sonda lo dice. Aggiunge la domanda che sta a valle
+di tutte le altre — **i comandi hanno qualcosa di vero da dire su questo
+dataset?** — che è §7 della spec: sette contratti, cinque per i comandi più
+il criterio **«stretto ma risolvibile»** di §4, l'ultimo rimasto senza
+verdetto, e il difetto che misurarlo ha trovato.
+
+🔑 **E la forma della prova cambia di nuovo, per la quarta volta.** La tacca
+(ondata 3), il testimone puntato (ondata 4) e la tensione con la quota
+(ondata 6) provano tutte una proprietà del **modello**. Qui si prova una
+proprietà del **dataset**: che sia abbastanza teso perché un comando
+diagnostico produca un verdetto non banale. Un comando che gira e dice «niente
+da segnalare» è verde e non prova niente — è lo stesso rischio di §6, alla
+scala del prodotto invece che a quella del builder.
+
+🔑 **E dove il verdetto è un numero che la ricerca sceglie, la quarta forma è
+l'«argomento»**: il testimone si costruisce perché il verdetto sia vero *per
+costruzione*, non perché è uscito così. Due contratti di quest'ondata sono
+stati riscritti proprio per questo — vedi §4 e §6.
+
+⚠ **Il metro è sempre il Fermi**, e la ragione è quella di §1: il Fermi non è
+stato progettato per superare i nostri test, quindi ciò che *non* riesce a
+dire misura una lacuna vera del dataset e non un difetto del comando.
+
+### 1. `analyze` — la classifica deve ordinare famiglie **diverse**
+
+| | Atteso | Osservato |
+|---|---|---|
+| causali distinte nella classifica dell'Alighieri | **≥ 5** | ⚠ **3** a riposo, **15** sulla variante satura |
+| causali distinte nella classifica del Fermi | ≤ 2 | ✅ **1**, in tre righe |
+| la classifica non è dominata da `unavailability` | la prima riga è di un'altra famiglia | ✅ la prima è `subject_half_day_gap` |
+| `famiglie_silenziose()` non è vuota, e il comando la dichiara | il D.T.B. c'è | ✅ dodici famiglie, `max_gap_hours` fra loro |
+
+La ragione per cui il numero del Fermi è basso non è un difetto del comando: è
+la stessa misura che apre il pezzo. Zero `ResourceTimeConstraint`, zero
+`SubjectConstraint` — non c'è nessuna famiglia da ordinare. Il suo esito è
+**letteralmente** la frase di §7: `{"unavailability"}`, tre righe, tre docenti.
+
+#### ⚠ Un'attesa smentita, e la sbagliata era l'attesa — ma non del tutto
+
+Sul dataset **a riposo** le causali sono tre, non cinque: `unavailability`,
+`arrival_departure`, `break_straddled`. Cioè le sole famiglie **unarie** —
+quelle che escludono una cella guardando solo l'attività che ci si prova.
+
+🔑 **La ragione non è il dataset, ed è scritta in `domain/analysis/blame.py`:
+`free_candidates` spiazza *tutte* le candidate prima di calcolare i domini.**
+Su un orario in cui nessuna attività è congelata, la pressione reciproca non
+esiste — l'occupazione non occupa niente, e un vincolo *fra due ore* non ha
+soggetto se sono libere entrambe. La classifica dei vincoli è uno strumento
+per la domanda *«il calcolo è fallito, cosa allento?»*, e quella domanda si
+pone su un orario **quasi fatto**: è così che la pone EDT, ed è così che va
+misurata.
+
+Sulla variante satura — tutto congelato tranne nove occorrenze, una per unità
+che porta una riga dei due assi — le causali sono **quindici**:
+
+| | a riposo | satura |
+|---|---:|---:|
+| righe di classifica | 5 | **63** |
+| causali distinte | 3 | **15** |
+| prima riga | `unavailability` (Ricci) | **`subject_half_day_gap` (1B)** |
+| attività esaminate | 343 | 9 |
+
+L'attesa era sbagliata nel numero e giusta nella sostanza: cinque famiglie non
+si vedono su un orario vuoto, e su uno pieno se ne vedono tre volte tante.
+
+### 2. `analyze` — un deficit di Hall **vero**, in una variante satura
+
+Il portatore è dichiarato da [aule.md](aule.md) fin dall'ondata 1: la
+succursale ha **un** laboratorio e nessun ripiego, e undici ore la settimana se
+lo contendono. Restringendo `LAB-SUCC` con l'indisponibilità **rossa** fino a
+lasciarne meno di undici, il teorema di Hall in forma deficitaria deve
+nominarlo.
+
+| | Atteso | Osservato |
+|---|---|---|
+| `analyze_hall` sul dataset base | **nessun** finding: il banco è teso ma risolvibile | ✅ vuoto |
+| con `LAB-SUCC` ridotto sotto le undici celle | ≥ 1 finding, con `LAB-SUCC` fra le risorse | ✅ **1**, risorsa satura `LAB-SUCC` |
+| il deficit dichiarato | = ore richieste − celle superstiti | ⚠ **no**: 9h00 contro 8h00 su **nove** attività |
+
+#### ⚠ Un'attesa smentita, e la sbagliata era l'attesa
+
+Undici ore e otto celle darebbero tre ore di deficit; il comando ne dichiara
+**una**, su un gruppo di **nove** attività. Non è un errore per difetto: il
+certificato di Hall è un **insieme deficiente minimale**, non un totale — la
+riduzione toglie dal gruppo ogni attività che può stare altrove, e quel che
+resta è il sottoinsieme che *dimostra* l'impossibilità.
+
+🔑 **Ed è il verdetto più utile dei due.** «Mancano tre ore» non dice dove
+guardare; «queste nove attività hanno in comune otto ore di finestra» nomina
+il gruppo da spezzare. Un totale sarebbe un numero più grande su un insieme
+più grande, cioè un consiglio peggiore.
+
+⚠ **La prima riga è un atteso, non un contorno**: un dataset che desse un
+deficit di Hall *a riposo* sarebbe un dataset rotto, non un dataset teso.
+
+### 3. `Estrai` — almeno un'attività per ciascuno dei sei rilevatori
+
+Serve una **variante guasta**, e i sei guasti si scrivono uno per uno perché
+nessun orario sano li produce insieme. Cinque si iniettano; il sesto è
+naturale, ed è quello che dice qualcosa sul prodotto.
+
+| Rilevatore | Come lo si produce | Atteso | Osservato |
+|---|---|---|---|
+| `problemi_di_aule` | **niente**: fase 1 lascia 73 richieste da assegnare | ≥ 1 | **73** |
+| `a_cavallo_dell_intervallo` | un blocco da due ore che parte all'ultima fascia della mattina | ≥ 1 | 1 |
+| `fuori_griglia` | un blocco da due ore che parte all'ultima fascia del giorno | ≥ 1 | 1 |
+| `problemi_di_sede` | due attività dello stesso docente, nelle due sedi, in fasce adiacenti | ≥ 1 | 2 |
+| `non_conformi_ai_piani_di_studi` | si cancella un'attività: il monte ore non torna più | ≥ 1 | 3 |
+| `non_rispettano_i_vincoli` | i guasti qui sopra bastano | ≥ 1 | **36** |
+
+⚠ E nessuno dei sei è **muto** — cioè in nessuno la violazione esiste senza
+un'attività da nominare. È il caso che `Rilevamento.muto` esiste per
+distinguere, e su questo orario non si presenta.
+
+🔑 **Il primo rigo è il più interessante**: un orario appena calcolato è
+*sempre* «con problemi di aule» finché non gira la seconda fase. Non è un
+guasto — è la forma a due fasi del prodotto, che il rilevatore vede.
+
+### 4. `place_and_fix` — un'imposizione che costa **più di una** attività
+
+Sul Fermi ne costa **una**, ed è la misura che §7 chiama insufficiente: con una
+sola attività spostata il minimo lessicografico di `moved` non è messo alla
+prova. Sull'Alighieri il portatore è la succursale — laboratorio unico, e le
+tre ore d'informatica inchiodate al mercoledì pomeriggio.
+
+| | Atteso | Osservato |
+|---|---|---|
+| l'imposizione scelta | `ok`, e `len(moved)` **≥ 2** | ✅ **3**, zero scartate |
+| il rendiconto del comando | nomina le attività ricollocate, una per riga | ✅ `Attività ricollocate (3)` |
+
+🔑 **E il testimone è un argomento, non una misura fortunata.** Si cerca una
+cella dove due attività *diverse* confliggono con la terza — una per la
+classe, una per il docente — e allora `len(moved) >= 2` è vero per
+costruzione: entrambe devono sgomberare, e nessun ottimo può evitarlo. Il
+numero **3** è invece ciò che la ricerca ha trovato, e non si asserisce.
+
+⚠ La prima esplorazione impose otto attività della succursale su celle
+occupate e ottenne **2** ogni volta: un dato incoraggiante e non una prova,
+perché la cella bersaglio veniva da un calcolo precedente e sarebbe cambiata
+alla prossima esecuzione.
+
+### 5. `solve --popolazione` — il tetto che **morde**
+
+Il contratto di §7 è per differenza, e non poteva essere altro: *alzare la
+tolleranza cambia il risultato*. Con un tetto che non morde, i due valori
+coincidono e l'arbitrato è decorativo.
+
+| | Atteso | Osservato |
+|---|---|---|
+| `tolleranza 0` | i buchi dei docenti restano **peggiori** che con tolleranza alta | ⚠ **no**: zero, dimostrato, a ogni tolleranza |
+| `tolleranza` alta | il valore scende, e la popolazione sacrificata peggiora | ⚠ **no**: non c'era da scendere |
+| il rendiconto | dichiara base e tetto per ogni criterio sacrificato | ✅ |
+
+⚠ **Due criteri, non i sei del dataset**, ed è una scelta dell'ondata 6 già
+pagata: i livelli che non dimostrano l'ottimo si fermano al valore che la
+ricerca *ha trovato*, e un test che li confrontasse misurerebbe la ricerca. I
+`gaps` chiudono l'ottimo in un secondo — sono l'unico genere su cui una
+differenza fra due esecuzioni è una proprietà del modello.
+
+#### ⚠ Un'attesa smentita, e la sbagliata era il **dataset**
+
+Sei configurazioni misurate — le due popolazioni, tolleranze da 0 a 6000, e la
+base portata a zero da una prima ottimizzazione — e in **tutte** i buchi della
+popolazione ottimizzata scendono a zero e lo dimostrano. Il tetto di
+non-regressione non morde perché **non c'è competizione**: quaranta fasce per
+ventinove ore di lezione lasciano a ciascuna popolazione abbastanza spazio da
+non togliere niente all'altra.
+
+| popolazione ottimizzata | tolleranza | base del sacrificato | esito |
+|---|---:|---:|---|
+| docenti | 0 / 60 / 600 | `gaps_classes` 7500 | `gaps_teachers` **0**, dimostrato |
+| classi | 0 / 600 / 6000 | `gaps_teachers` 4380 | `gaps_classes` **0**, dimostrato |
+| docenti, dopo aver azzerato le classi | 0 / 120 / 1200 | `gaps_classes` **0** | `gaps_teachers` **0**, dimostrato |
+
+⚠ **E la strada del criterio non dimostrato è stata provata e scartata**, che
+è il modo in cui l'ondata 6 si paga due volte: sacrificando
+`free_half_days_teachers` i valori sono usciti 121 / 122 / 124 al crescere
+della tolleranza — cioè nella direzione **sbagliata**, con un divario di
+oltre cento. Non è un difetto: è un livello che non dimostra il proprio
+ottimo, e la differenza fra due sue esecuzioni non dice niente sul modello.
+
+🔑 **La risposta è la terza forma di verifica dell'ondata 6: si mette il
+dataset in tensione.** Tre pezzi, ognuno necessario:
+
+1. la base si porta a **zero** con un primo arbitrato sulle classi — che è
+   letteralmente il primo dei due comandi di EDT;
+2. la classe 1A si rende **indisponibile** alla seconda fascia del lunedì
+   *prima* di quel calcolo, così l'orario di partenza resta legale. ⚠
+   Invertire i due passi dà `base: None`, ed è il modo corretto in cui
+   `_valori_di_base` dice *«l'orario di partenza non è rappresentabile in
+   questo modello»*;
+3. si **puntano** due ore di italiano ai due lati del buco, con lo stesso
+   `pinned` dell'ondata 4.
+
+| tolleranza | tetto | atteso | osservato |
+|---:|---:|---|---|
+| 0 | 0 | `INFEASIBLE` | ✅ |
+| 60 | 60 | `INFEASIBLE` — **la riga che porta l'informazione** | ✅ |
+| 180 | 180 | `FEASIBLE` | ✅ |
+
+🔑 Il buco vale 60 minuti per **tre chiavi** — la classe e le sue due parti,
+IRC e alternativa — quindi 180. È la stessa aritmetica del difetto **L7**, e
+la stessa forma della quota dell'ondata 6: *una tolleranza «più di zero» non
+basta, deve essere quella giusta.*
+
+### 6. `assign_rooms` — la contesa che il gruppo di aule risolve
+
+Il Fermi la misura già: senza `structural:room_pool` la fase 2 rinunciava a
+**8 aule su 92**, e ADR-021 le ha recuperate. La domanda dell'ondata 7 è se
+l'Alighieri porti la stessa contesa.
+
+| | Atteso | Osservato |
+|---|---|---|
+| fase 1 **senza** il builder del gruppo di aule → fase 2 | ≥ 1 rinuncia | ✅ **1** su un calcolo libero |
+| fase 1 **con** il builder → fase 2 | **0** rinunce, 73 su 73 | ✅ |
+| il deficit misurato | = il numero di rinunce, come sul Fermi | ✅ |
+
+⚠ **Se l'atteso della prima riga è smentito**, la smentita è del **dataset** e
+non del motore: vorrebbe dire che l'Alighieri non ha una contesa d'aule con più
+di una candidata abbastanza stretta, e la risposta è stringerla, non
+riscrivere l'attesa.
+
+🔑 **Ma il calcolo libero non è la prova, ed è la lezione dell'ondata 4 di
+nuovo.** «Una rinuncia» su un solve senza pin è una proprietà dell'ottimo che
+la ricerca ha scelto — la seconda esecuzione ne ha date **due**. Il testimone
+è invece **puntato**: tre ore di fisica su classi e docenti tutti diversi,
+imposte sulla stessa cella. Le loro candidate sono le stesse due aule, quindi
+il principio dei cassetti dice che non ci stanno.
+
+| | con `structural:room_pool` | senza |
+|---|---|---|
+| fase 1 | **`INFEASIBLE`** | `OPTIMAL`, zero scarti |
+| fase 2 | — | ≥ 1 rinuncia, fra le tre puntate |
+
+Il secondo ramo non è decorativo: senza, un `INFEASIBLE` dovuto a qualunque
+altra ragione sembrerebbe una prova.
+
+### 7. `assign_rooms` — la rinuncia **inevitabile**
+
+L'altra metà, e la più importante: la rinuncia esiste come stato ammesso, e un
+dataset che non sappia produrla non prova che il modello la ammetta.
+
+| | Atteso | Osservato |
+|---|---|---|
+| un'attività **immobile** in una cella dove le sue candidate sono tutte rosse | 1 rinuncia | ✅ 72 su 73 |
+| fase 1 in quella configurazione | tace, ed è corretto: non è una sua decisione | ✅ `OPTIMAL`, zero scarti |
+
+⚠ **E la fase 1 non tace su tutto: tace sulla cosa giusta.** Senza il
+ricalcolo le rinunce sono **due**, perché un'altra ora di laboratorio stava in
+quella cella; il gruppo di aule conta zero posti e la manda altrove. Le due
+condotte sono opposte e sono entrambe corrette — sulle libere agisce, e
+sull'immobile no, perché lì non c'è niente da decidere.
+
+🔑 **La seconda riga è il vero contenuto.** `RoomPoolBuilder` esce quando
+nessuna delle attività in causa è libera (*«un fatto, non una decisione»*):
+qui la si mette alla prova, perché la configurazione è illegale e nessun
+piazzamento la può riparare.
+
+### 8. «Stretto ma risolvibile», il criterio di §4
+
+L'ultimo criterio della spec rimasto senza verdetto, e tre file del banco lo
+rimandavano qui: *«la fase 1 chiude `OPTIMAL` con zero scarti, ma togliendo una
+sola aula o un solo docente comincia a scartare»*. Le ondate 3-6 lo hanno
+verificato **famiglia per famiglia**; qui si verifica sul dataset intero.
+
+| risorsa spenta | atteso | osservato |
+|---|---|---|
+| `LAB-SUCC`, il laboratorio unico della succursale | scarta | ✅ **11** scarti, cioè le attività che lo chiedono |
+| `RICCI`, lo spezzone da tre ore | scarta | ✅ **3** |
+| `COLOM` / `VITAL` | scarta | ✅ 12 / 20 |
+| `LAB-INF`, `AUL-DIS`, `A101`, `AULA-MAGNA` | — | 0 scarti, ed è corretto |
+
+⚠ **«Una» aula, non «qualunque»**: l'aula magna non la usa nessuno, e toglierla
+non deve costare niente. Il criterio dice che il banco ha un punto in cui è
+teso, e i punti si misurano.
+
+🔑 **E il criterio è soddisfatto senza portare al bordo né il D.T.B. né la
+tacca dei divieti**, che è la cosa da capire: sono **due nozioni diverse di
+«stretto»**. Questa è stretta rispetto alle **risorse** — togline una e
+qualcosa cade. La contiguità che il D.T.B. chiede è stretta rispetto alla
+**densità della griglia**: quaranta fasce contro cattedre da 10–21 ore la
+rendono gratis, e per negarla servirebbe una griglia più corta, cioè un altro
+banco. I due test che asseriscono l'`OPTIMAL` restano quindi verdi e restano
+giusti, e la frase «diventerà rosso all'ondata 7» che li accompagnava era
+sbagliata — l'ondata 7 stringe le risorse, non la griglia.
+
+### 9. ⚠ E misurando il bordo il banco ha trovato il suo quinto difetto: **L8**
+
+Spegnendo la **palestra** il modello non scarta: risponde `INFEASIBLE`, che è
+ciò che `allow_unplaced=True` dovrebbe rendere impossibile.
+
+| | osservato |
+|---|---|
+| palestra spenta | **`INFEASIBLE`**, zero scarti |
+| la stessa, tolta la riga `free_guaranteed` | `OPTIMAL`, **10** scarti |
+
+La causa è **una sola riga**, isolata togliendone dieci una per volta:
+`free_guaranteed` su P01 Zanetti, il docente di scienze motorie. Con la
+palestra spenta gli restano le sole ore della succursale, e il solver ne piazza
+**una**, su **un** giorno. La riga chiede due giornate libere — che ci sono — e
+due **mezze** giornate libere, che non ci sono: una mezza giornata libera conta
+solo su un giorno **lavorato** (`libera = attivo AND NOT meta`), perché è così
+che la conta `FreeGuaranteedChecker`, e un giorno interamente vuoto contribuisce
+zero. Con un giorno lavorato il massimo è uno.
+
+🔑 **È l'immagine speculare della trappola che il builder documenta**, e non è
+un errore del builder: contare le mezze libere su tutti i giorni accetterebbe
+orari che il checker boccia, cioè la direzione sbagliata. Il fatto nuovo è la
+**conseguenza**: una famiglia che conta una quantità *sui giorni in cui si
+lavora* può diventare insoddisfacibile **perché si lavora meno**, e lì lo
+scarto non è una via d'uscita. Un prodotto che risponde `INFEASIBLE` invece di
+«queste dieci attività non si piazzano» dà all'utente la diagnosi peggiore
+delle due.
+
+Non riparato (spec §8), fissato da un test col suo ramo di controllo, aperto
+come **L8** in [`docs/todo.md`](../../docs/todo.md).

@@ -15,6 +15,129 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (notte) — L'Alighieri, ondata 7: i comandi, e due attese smentite di natura diversa** —
+  L'ultima ondata non aggiunge una riga al dataset. Aggiunge la domanda che sta
+  a valle di tutte le altre, §7 della spec: **i cinque comandi diagnostici
+  hanno qualcosa di vero da dire su questa scuola?** Un comando che gira, non
+  va in errore e risponde *«niente da segnalare»* è verde e non prova niente —
+  è il rischio di §6 alla scala del prodotto invece che a quella del builder.
+  Dettaglio in
+  [`data/liceo-alighieri/comandi.md`](../data/liceo-alighieri/comandi.md);
+  **sedici test** in `tests/test_alighieri_comandi.py`, e la suite passa da 930
+  a **946 verdi**. **Il pezzo L4 è chiuso.**
+
+  🔑 **Il criterio di accettazione era già raggiunto, e il lavoro dell'ondata 7
+  è che resti fermo.** La sonda dice **27 su 27** dall'ondata 5, asserita come
+  **insieme** e non come numero: un builder che smettesse di lavorare mentre un
+  altro comincia passerebbe un `>= 27` e non passa un `==`.
+
+  **Cosa dicono i comandi.** La classifica dei vincoli ordina **quindici**
+  famiglie in 63 righe, e la prima è un vincolo di **materia**; sul Fermi sono
+  tre righe e **una** causale, `{"unavailability"}` — cioè *letteralmente* le
+  «tre indisponibilità» che §7 dichiara insufficienti. La fase 5 nomina **un**
+  insieme deficiente quando si stringe il laboratorio unico della succursale.
+  Tutti e **sei** i rilevatori di `Estrai` trovano almeno un'attività, e
+  nessuno è muto. `place_and_fix` costa **tre** attività spostate contro l'una
+  del Fermi. `assign_rooms` è `INFEASIBLE` in fase 1 col gruppo di aule, e
+  rinuncia senza.
+
+  ⚠ **Prima attesa smentita, e la sbagliata era l'attesa.** Sul dataset **a
+  riposo** la classifica dà **tre** causali, non le cinque previste:
+  `unavailability`, `arrival_departure`, `break_straddled` — cioè le sole
+  famiglie **unarie**. 🔑 La ragione sta in `blame.py`: `free_candidates`
+  **spiazza tutte le candidate** prima di calcolare i domini, quindi su un
+  orario dove niente è congelato l'occupazione non occupa e un vincolo *fra due
+  ore* non ha soggetto se sono libere entrambe. Ed è coerente col mestiere
+  dello strumento — *«il calcolo è fallito, cosa allento?»* è una domanda che
+  si pone su un orario **quasi fatto**. Sulla variante satura (tutto congelato
+  tranne nove occorrenze) sono quindici.
+
+  ⚠ **Seconda attesa smentita, e la sbagliata era il dataset: il tetto di
+  non-regressione non morde.** Sei configurazioni misurate — le due
+  popolazioni, tolleranze da 0 a 6000, e la base portata a zero da una prima
+  ottimizzazione — e in **tutte** i buchi della popolazione ottimizzata
+  scendono a zero e lo **dimostrano**. Non c'è competizione: quaranta fasce per
+  ventinove ore di lezione lasciano a docenti e classi abbastanza spazio da non
+  togliersi niente. ⚠ E la strada del criterio *non dimostrato* è stata provata
+  e scartata: sacrificando `free_half_days_teachers` i valori sono usciti
+  121 / 122 / 124 al crescere della tolleranza — nella direzione **sbagliata**,
+  con un divario di oltre cento. È l'ondata 6 che si paga due volte.
+
+  🔑 **La risposta è la terza forma di verifica, quella dell'ondata 6: si mette
+  il dataset in tensione.** Tre pezzi, ognuno necessario: la base si porta a
+  zero con un primo arbitrato sulle classi (che è letteralmente il primo dei
+  due comandi di EDT); la classe 1A si rende indisponibile a metà mattina
+  **prima** di quel calcolo, così l'orario di partenza resta legale — ⚠
+  invertire i due passi dà `base: None`, che è il modo corretto in cui
+  `_valori_di_base` dice *«l'orario di partenza non è rappresentabile in questo
+  modello»*; e due ore di italiano si **puntano** ai lati del buco. I tre
+  verdetti tornano quelli delle quote: `INFEASIBLE` a tolleranza 0,
+  `INFEASIBLE` a 60 — **la riga che porta l'informazione** — e `FEASIBLE` a
+  180. Il buco vale 60 minuti per **tre chiavi**, la classe e le sue due parti:
+  la stessa aritmetica di L7.
+
+  🔑 **E due contratti si sono dovuti riscrivere come argomenti invece che come
+  misure.** La prima stesura li faceva passare misurando l'ottimo che la
+  ricerca aveva scelto: otto imposizioni sulla succursale costavano 2
+  spostamenti ogni volta, e un calcolo libero senza il gruppo di aule dava una
+  rinuncia in una esecuzione e due nell'altra. Riscritti: `place_and_fix` cerca
+  una cella dove due attività **diverse** confliggono con la terza — una per la
+  classe, una per il docente — così «almeno due si spostano» è vero per
+  costruzione e nessun ottimo lo può evitare; e il gruppo di aule si prova col
+  **testimone puntato** dell'ondata 4, tre ore di fisica sulle stesse due aule
+  candidate imposte sulla stessa cella, con `INFEASIBLE` col builder e
+  `OPTIMAL` senza. È la lezione dell'ondata 3, applicata ai comandi.
+
+  🔑 **Il deficit di Hall non è «undici ore meno otto celle».** Il comando
+  dichiara **9h00 contro 8h00 su nove attività**: il certificato è un
+  **insieme deficiente minimale**, non un totale. Ed è il verdetto più utile
+  dei due — *«mancano tre ore»* non dice dove guardare, *«queste nove hanno in
+  comune otto ore di finestra»* nomina il gruppo da spezzare.
+
+  ✅ **E il criterio di §4 della spec è verificato sul dataset intero** —
+  l'ultimo rimasto senza verdetto, e tre file del banco lo rimandavano qui.
+  Spento `LAB-SUCC` il banco scarta **11** attività, cioè quelle che lo
+  chiedono; spento un docente, le sue ore (3, 12, 20 sui tre campionati);
+  l'aula magna, che nessuno usa, non costa niente. ⚠ **«Una» aula, non
+  «qualunque»**: il criterio dice che il banco ha un punto in cui è teso, e i
+  punti si misurano.
+  🔑 **Ma «stretto» ha due nozioni, e la spec ne dichiarava una sola.** Questa
+  è stretta rispetto alle **risorse** — togline una e qualcosa cade; la
+  contiguità che il D.T.B. chiede è stretta rispetto alla **densità della
+  griglia**, e con quaranta fasce contro cattedre da 10–21 ore resta gratis.
+  I due test che asseriscono l'`OPTIMAL` — il D.T.B. dell'ondata 3 e la tacca
+  dei divieti della 4 — restano verdi **e restano giusti**, e il «diventerà
+  rosso all'ondata 7» che li accompagnava era sbagliato: corretto nei tre
+  file dove stava scritto.
+
+  🔑 **E misurando quel bordo il banco ha trovato il suo quinto difetto, L8:
+  lo scarto non è una via d'uscita universale.** Spegnendo la palestra il
+  modello non scarta, risponde `INFEASIBLE` — che è ciò che
+  `allow_unplaced=True` dovrebbe rendere impossibile. La causa è **una sola
+  riga**, isolata togliendone dieci una per volta: `free_guaranteed` su P01
+  Zanetti, il docente di scienze motorie. Con la palestra spenta gli restano
+  le sole ore della succursale, e il solver ne piazza **una**, su **un**
+  giorno: la riga chiede due giornate libere — che ci sono — e due **mezze**
+  giornate libere, che non ci sono, perché una mezza giornata libera conta
+  solo su un giorno **lavorato** (`libera = attivo AND NOT meta`, com'è nel
+  checker) e con un giorno lavorato il massimo è uno.
+  🔑 È l'immagine speculare della trappola che `FreeGuaranteedBuilder`
+  documenta, e non è un errore del builder: contare le mezze libere su tutti i
+  giorni accetterebbe orari che il checker boccia. Il fatto nuovo è la
+  **conseguenza** — una famiglia che conta una quantità *sui giorni in cui si
+  lavora* può diventare insoddisfacibile **perché si lavora meno**. ⚠ E il
+  costo è di prodotto: chi ha spento una palestra legge `INFEASIBLE` invece di
+  «queste dieci attività non si piazzano», cioè la diagnosi peggiore delle
+  due. Non riparato (§8), fissato col suo ramo di controllo, aperto come
+  **L8**.
+
+  ⚠ **E la rinuncia inevitabile mostra la fase 1 che fa due cose opposte,
+  entrambe corrette.** Sulle attività **libere** il gruppo di aule conta zero
+  posti nella cella dalle candidate rosse e le manda altrove — senza il
+  ricalcolo le rinunce sono due, perché un'altra ora di laboratorio stava lì.
+  Sull'**immobile** tace, perché `RoomPoolBuilder` esce quando nessuna delle
+  attività in causa è libera: *«un fatto, non una decisione»*.
+
 - **2026-08-30 (notte) — L'Alighieri, ondata 6: l'ora quindicinale, le due forme dell'alleggerimento, e un debito che diventa una misura** —
   Tre cose che nessun dataset aveva mai messo in moto: la **seconda firma di
   settimana**, le **quote di alleggerimento** nelle due forme e la **gerarchia

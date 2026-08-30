@@ -26,7 +26,7 @@ stimato — e lascia tredici tabelle su trentatré vuote, `ClassPartition`,
 `ClassPart` e `Group` comprese, cioè voci ✅ dello scope v1 che nessun dataset
 rappresenta.
 
-## Stato: ondate 1–6 di 7
+## Stato: **completo** — sette ondate su sette
 
 1. ✅ **L'anagrafica** — sedi, indirizzi, materie, piani di studi e servizi,
    classi, docenti, aule, attività.
@@ -47,9 +47,12 @@ rappresenta.
    alleggerimento e la gerarchia completa dei criteri di qualità. 🔑 E il
    debito **L7**, che da sospetto diventa misura. Vedi
    [quindicinale-e-quote.md](quindicinale-e-quote.md).
+7. ✅ **I comandi** — la domanda che sta a valle di tutte le altre: i cinque
+   comandi diagnostici hanno qualcosa di vero da dire su questa scuola? Vedi
+   [comandi.md](comandi.md).
 
-Le famiglie restanti arrivano dalle ondate successive, e ognuna aggiorna
-`esiti-attesi.md` *prima* del codice che le esercita.
+Ogni ondata ha aggiornato `esiti-attesi.md` *prima* del codice che la
+esercita, e l'ondata 7 non fa eccezione.
 
 ## Parametri
 
@@ -171,9 +174,12 @@ che ciò che fa morda. Da qui in avanti il cricchetto
 ([`tests/test_alighieri_sonda.py`](../../tests/test_alighieri_sonda.py)) non
 deve più salire, deve **restare fermo**.
 
-⚠ E il dataset **non è ancora stretto** nel senso della spec (una sola aula o
-un solo docente in meno e compaiono gli scarti). Ma lo è **famiglia per
-famiglia**, con due prove diverse perché i due assi vogliono prove diverse:
+✅ **E dall'ondata 7 il dataset è stretto anche nel senso della spec**: una
+sola aula o un solo docente in meno e compaiono gli scarti — misurato,
+[comandi.md §7](comandi.md). ⚠ Ma «stretto» ha **due nozioni**, e la spec ne
+dichiarava una sola: quella è stretta rispetto alle **risorse**, mentre la
+contiguità che il D.T.B. chiede è stretta rispetto alla **densità della
+griglia** e resta gratis. Il banco lo è **anche famiglia per famiglia**, con due prove diverse perché i due assi vogliono prove diverse:
 sulla cardinalità otto righe su nove non sopportano una tacca più stretta
 (la nona — il D.T.B. — no, ed è misurato: [vincoli.md](vincoli.md)); sulla
 relazione tredici su tredici non sopportano il **testimone puntato**, cioè la
@@ -183,6 +189,41 @@ l'ondata 5 usa **entrambe** le prove, scegliendo secondo la natura della riga
 alleggerimenti: si mette il dataset **in tensione** e si pretende che la quota
 lo rimetta in piedi — e che senza la quota non ci stia, e che con una quota
 troppo piccola nemmeno ([quindicinale-e-quote.md](quindicinale-e-quote.md)).
+
+## Misure, ondata 7 — i comandi
+
+Nessuna riga nuova nel dataset: l'ondata 7 misura ciò che i comandi sanno dire
+su ciò che c'è. Il dettaglio, con le due attese smentite, sta in
+[comandi.md](comandi.md).
+
+| Comando | Fermi | Alighieri |
+|---|---|---|
+| `analyze`, classifica | 3 righe, **1** causale | 63 righe, **15** causali (variante satura) |
+| `analyze`, fase 5 | — | **1** insieme deficiente quando si stringe il laboratorio della succursale |
+| `extract` | — | tutti e **sei** i rilevatori con almeno un'attività |
+| `place_and_fix` | **1** attività spostata | **3**, e almeno due per costruzione |
+| `solve --popolazione` | — | il tetto morde **solo in tensione**: 0 e 60 `INFEASIBLE`, 180 `FEASIBLE` |
+| `assign_rooms` | 8 rinunce senza ADR-021 | `INFEASIBLE` col gruppo di aule, rinuncia senza |
+| §4, «stretto ma risolvibile» | — | ✅ **verificato**: `LAB-SUCC` spento costa 11 scarti, un docente le sue ore |
+
+Sedici test in
+[`tests/test_alighieri_comandi.py`](../../tests/test_alighieri_comandi.py), e
+la suite passa da 930 a **946 verdi**.
+
+🔑 **E misurando il bordo l'ondata ha trovato il quinto difetto del banco,
+`L8`**: spegnendo la palestra il modello risponde `INFEASIBLE` invece di
+scartare, per una sola riga — `free_guaranteed` conta le mezze giornate libere
+**solo sui giorni lavorati**, e con un giorno solo il massimo è uno. Una
+famiglia così può diventare insoddisfacibile *perché si lavora meno*, e lì lo
+scarto non è una via d'uscita.
+
+⚠ **Due attese smentite, e sono di natura diversa.** La classifica dei vincoli
+a riposo dà tre causali e non cinque, e la sbagliata era **l'attesa**: su un
+orario dove niente è congelato le famiglie relazionali non hanno soggetto, e
+la classifica va misurata dove serve, cioè su un orario quasi fatto. Il tetto
+di non-regressione invece non morde affatto, e lì la sbagliata era il
+**dataset**: quaranta fasce per ventinove ore lasciano a docenti e classi
+abbastanza spazio da non competere.
 
 ## Indice del dataset
 
@@ -197,6 +238,7 @@ troppo piccola nemmeno ([quindicinale-e-quote.md](quindicinale-e-quote.md)).
 - [relazioni.md](relazioni.md) — 🔑 i tredici tipi dell'asse Relazione, e il testimone puntato
 - [risorse.md](risorse.md) — 🔑 indisponibilità, peso didattico, tecnico e carrelli; e i due difetti trovati
 - [quindicinale-e-quote.md](quindicinale-e-quote.md) — 🔑 l'ora quindicinale, le due forme di alleggerimento, la gerarchia della qualità e il difetto L7
+- [comandi.md](comandi.md) — 🔑 cosa i cinque comandi sanno dire su questo banco, e le due attese smentite
 - [esiti-attesi.md](esiti-attesi.md) — 🔑 cosa deve succedere, scritto prima di eseguire
 
 Per la **semantica** delle entità (non i dati) vedi [`docs/edt/`](../../docs/edt/).

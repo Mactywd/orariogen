@@ -123,7 +123,9 @@ distinte*: il solver le impila, e l'orario esiste.
 si concentra in un giorno, B in un altro — cioè il motivo per cui questa
 ondata porta il testimone puntato invece della tacca. Un test asserisce
 l'`OPTIMAL`, così diventerà rosso il giorno in cui il banco stringerà
-abbastanza da forzare lo sparpagliamento: l'ondata 7.
+abbastanza da forzare lo sparpagliamento. ⚠ **Non è l'ondata 7**, misurato: il
+criterio «stretto ma risolvibile» di §4 si verifica togliendo una risorsa, non
+accorciando la griglia — e lo sparpagliamento lo forza la seconda.
 
 ## 🔑 Il secondo laboratorio, e perché il dataset è cresciuto
 
@@ -166,5 +168,6 @@ cattedre.
 ⚠ **I due builder che restano sono nominati**: `structural:unavailability` (il
 banco non ha ancora una riga di indisponibilità) e
 `structural:didactic_weight` (i quattro tetti di `InstituteSettings` sono
-tutti `None`, com'è fedele a EDT). Sono l'ondata 5. **27 su 27** resta il
-criterio di accettazione dell'ondata 7.
+tutti `None`, com'è fedele a EDT). Sono l'ondata 5, che porta la sonda a
+**27 su 27** — il criterio di accettazione, raggiunto due ondate prima del
+previsto.

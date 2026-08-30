@@ -203,11 +203,20 @@ def test_il_dtb_non_e_al_bordo_ed_e_una_misura():
     strutturale e si misura: 40 fasce a settimana contro cattedre da 10–21 ore
     e classi da 28–32: la contiguità dentro una mezza giornata è gratis.
 
-    Stringerla vuole una griglia più densa o un carico più alto, cioè il
-    criterio di accettazione dell'ondata 7 (spec §4, «stretto ma
-    risolvibile»). Fino ad allora la riga è **esercitata** — la sonda la vede,
-    e la forma si legge su L03 — ma non è al bordo, e questo test lo tiene
-    scritto invece di lasciarlo intuire da un test che manca."""
+    Stringerla vuole una griglia più densa o un carico più alto. La riga
+    resta **esercitata** — la sonda la vede, e la forma si legge su L03 — ma
+    non è al bordo, e questo test lo tiene scritto invece di lasciarlo intuire
+    da un test che manca.
+
+    ⚠ **L'ondata 7 ha misurato il criterio di §4 e questo test resta verde, ed
+    è corretto.** «Stretto ma risolvibile» è verificato — togliendo il
+    laboratorio unico della succursale il banco scarta 11 attività, togliendo
+    un docente le sue — ma sono **due nozioni diverse di stretto**: quella è
+    stretta rispetto alle **risorse**, la contiguità che il D.T.B. chiede è
+    stretta rispetto alla **densità della griglia**. Quaranta fasce contro
+    cattedre da 10–21 ore la rendono gratis, e per negarla servirebbe un altro
+    banco. Il «diventerà rosso all'ondata 7» che stava scritto qui era quindi
+    sbagliato: l'ondata 7 stringe le risorse, non la griglia."""
     env = alighieri.build()
     for docente in Teacher.objects.all():
         ResourceTimeConstraint.objects.update_or_create(
