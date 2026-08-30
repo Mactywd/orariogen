@@ -388,8 +388,94 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       ha reso obbligatorio quel ramo: senza, un testimone si sarebbe svuotato
       in silenzio.
       🔑 Ha prodotto **due difetti**: L6 e L6bis, qui sotto.
-      Restano le ondate 6–7: quote, criteri di qualità e firme di settimana;
-      poi il criterio di accettazione e i comandi.
+
+      **Ondata 6 (2026-08-30) — quote, qualità e firme di settimana.** L'ora
+      **quindicinale** del 5B (una settimana in laboratorio col tecnico, una di
+      teoria in aula) porta la **seconda firma di settimana** che il dataset non
+      aveva; le due forme di alleggerimento — deroga e margine — su due
+      portatori che non sono bordi di nessuna ondata precedente; e la gerarchia
+      completa dei criteri di qualità, sei righe e cinque generi.
+      🔑 **La quindicinale è la quinta forma di erogazione, e la sola che non
+      costa un'ora**: in ogni settimana ne è attiva esattamente una, quindi la
+      cattedra e il monte ore dell'alunno restano quelli. Sdoppiare e alternare
+      sono cose diverse, e la differenza è tutta nella maschera. ⚠ E
+      l'allineamento resta **vuoto**: 📦 lo XSD dice che l'allineamento genera
+      *una* collocazione, e le due metà non sono simultanee mai.
+      🔑 **Ed è il primo dataset a chiedere all'occupazione ciò che sa fare**:
+      è l'unico builder che distingue le firme, e le due metà — stessa classe,
+      stessa chiave — possono stare **nella stessa cella**. Testimone puntato:
+      `OPTIMAL` con le due metà, `INFEASIBLE` con una metà e l'ora settimanale.
+      ⚠ **Un'attesa smentita, e la sbagliata era l'attesa**: «variabili e
+      constraint circa il doppio» — no. **15 330 / 13 817** contro 15 233 /
+      12 251, cioè +0,6 % e +12,7 %. Una seconda firma non raddoppia il
+      modello: costa **quanto le attività che la distinguono**, perché le
+      variabili derivate nascono solo dove un builder posta qualcosa e
+      `OccupationBuilder` deduplica i constraint identici fra firme. ⚠ E non
+      contraddice la nota di `quality.py` sulle firme come «dimensione
+      moltiplicativa»: quella misura è sulla **fase 5**, dove ogni checker gira
+      una volta per firma. Le due quote costano 11 variabili e 4 constraint.
+      🔑 **La forma di verifica delle quote è una terza**, accanto alla tacca e
+      al testimone puntato: si mette il dataset in tensione e si pretende che
+      la quota lo rimetta in piedi, che senza non ci stia, e che con una quota
+      **troppo piccola** nemmeno. La riga di mezzo è quella che porta
+      l'informazione — è l'unica che distingue «la quota c'è» da «la quota è
+      quella giusta», ed è la mutazione che il docstring di `RelaxationQuota`
+      chiede per nome.
+      ⚠ **E le quote del dataset non sono consumate dal dataset**: una quota
+      consumata *è* una violazione nominata (la quota autorizza, non nasconde),
+      e l'ondata 3 pretende che l'orario di base non porti finding `HARD` oltre
+      alle aule.
+      ⚠ **Un test che misurava il propagatore invece del modello**: la prima
+      taratura del margine faceva passare l'infattibilità dal cambio di sede, e
+      il solver non ci arrivava — `UNKNOWN` a 180 s e a 120 s. Spostata
+      l'aritmetica sulle ore e dichiarate le due giornate col **rosso** (che il
+      pre-filtro toglie davvero) invece che col `days`, i tre casi chiudono in
+      37 s.
+      🔑 **E il verde dell'ondata 5 chiude il suo anello**: là si provava che
+      **non vieta**, qui che **conta** — col solo criterio delle preferenze
+      installato, `preferences_all` scende a zero e lo dimostra. Un pre-filtro
+      che non filtra e un criterio che non conta si somigliano molto.
+      ⚠ **E il «da solo» è una seconda attesa smentita**: sulla gerarchia
+      intera la prima misura dava zero e la seconda **1**. 🔑 Un livello sotto
+      un livello **non dimostrato** eredita l'indeterminatezza di quello — i
+      tre livelli sopra il verde esauriscono il budget, quindi vengono fissati
+      al valore che la ricerca *ha trovato*. È una proprietà della catena
+      lessicografica che nessuna misura aveva ancora esposto, ed è perché il
+      rendiconto si asserisce come «almeno un livello col divario aperto» e non
+      quali.
+      ⚠ I sei criteri di qualità portano un `solve` da 9 a **82 s**, quindi
+      `build()` **non li installa**: li chiede chi li vuole. È anche la forma
+      giusta — in EDT l'ottimizzazione è un comando a sé, che si lancia su un
+      orario che già c'è.
+      🔑 Ha prodotto **un difetto**: L7, qui sotto.
+      Resta l'ondata 7: il criterio di accettazione e i comandi.
+
+- [ ] **L7 — i criteri di qualità ignorano le firme di settimana.** 🔑
+      **Trovato dall'ondata 6 dell'Alighieri, il 2026-08-30**, ed è il debito
+      che L3 aveva aperto come sospetto il giorno prima: là si diceva «i criteri
+      di qualità ignorano le firme di settimana, e nessuna delle due basi lo
+      esercita». La seconda metà non è più vera.
+      Il testimone è aritmetico: il 5B al lunedì, l'italiano alla prima e alla
+      quarta fascia, la metà di laboratorio alla seconda e quella di teoria
+      alla terza. Nella settimana pari le fasce occupate sono 0-1-3 e il buco è
+      la 2; nella dispari sono 0-2-3 e il buco è la 1; nell'**unione** — che è
+      ciò che il criterio guarda — sono 0-1-2-3, e non c'è nessun buco.
+      Sullo stesso orario la stessa quantità vale **60 minuti in ogni settimana
+      dell'anno** per `check_schedule` e **zero** per il criterio `gaps`.
+      🔑 **E non è un difetto nuovo: è lo stesso** che `MaxGapBuilder` aveva
+      fino al 2026-08-24, descritto per esteso nel docstring di
+      `Vocabulary.covered` — *«un'occupazione che cade dentro il buco ma viene
+      da un'altra firma alza il conteggio senza spostare prima/ultima occupata,
+      e chiude nel modello unione un buco che, settimana per settimana, resta
+      aperto»*. Il builder passa `signature`, i criteri no.
+      ⚠ Da decidere prima di riparare: `quality.py` lo dichiara come
+      approssimazione con un argomento che regge — un obiettivo approssimato
+      *ordina male orari tutti legali*, non ne ammette uno illegale — e il costo
+      dell'alternativa è che le firme sono moltiplicative sui criteri come lo
+      sono sui checker. La riparazione è quindi una **decisione**, non una
+      correzione ovvia. Fissato da un test che asserisce il comportamento
+      corrente, col suo ramo di controllo
+      (`tests/test_alighieri_settimane.py`).
 
 - [ ] **L6 — una risorsa senza sede non può servire due sedi, e non è la
       capienza.** 🔑 **Trovato dall'ondata 5 dell'Alighieri, il 2026-08-30**,

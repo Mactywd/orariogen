@@ -62,6 +62,15 @@ laboratorio a mezza classe porta dentro 13 alunni, non 26.
 Categoria e tipologie non esistono nel nostro modello, e non sono un debito:
 `docs/edt/aule.md` documenta che non vincolano.
 
+## L'ora quindicinale (ondata 6)
+
+La seconda ora di scienze del 5B chiede il laboratorio **una settimana su
+due**: l'altra è teoria in aula, e non prenota niente. È il modo in cui una
+scuola spende un laboratorio conteso, e nel dataset è la ragione per cui le
+richieste d'aula restano **73** benché le attività siano 343 — un'attività in
+più che non chiede aula non è una richiesta in più. Vedi
+[quindicinale-e-quote.md](quindicinale-e-quote.md).
+
 ## Le indisponibilità delle aule (ondata 5)
 
 Il meccanismo rosso / giallo / verde è **generico sulla risorsa**, quindi vale

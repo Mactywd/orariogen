@@ -8,6 +8,7 @@ attività dicono lo stesso numero. Un banco incoerente misura sé stesso."""
 import pytest
 from django.db.models import Q
 
+from domain import weeks
 from domain.models import (
     Activity, ActivityMaterialRequirement, Break, ClassPart, ClassPartition,
     Discipline, Group, Material, ResourceTimeConstraint, ResourceUnavailability,
@@ -59,15 +60,27 @@ def test_conteggi_delle_entita(dataset):
     assert ActivityMaterialRequirement.objects.count() == 13
 
 
-def test_342_attivita_per_362_ore_erogate(dataset):
+def test_343_attivita_per_362_ore_in_ogni_settimana(dataset):
     """⚠ 362 sono le ore **erogate**, non quelle di un alunno. Lo scarto è
     tutto negli sdoppiamenti: dodici ore di attività alternativa che si
     affiancano all'IRC, tre di informatica che si affiancano al latino nella
     2C articolata, e le **due** ore di laboratorio insegnate due volte — 3A
-    dall'ondata 2, 4A dall'ondata 4."""
-    assert Activity.objects.count() == 342
-    total = sum(Activity.objects.values_list("duration_minutes", flat=True))
-    assert total == 362 * 60
+    dall'ondata 2, 4A dall'ondata 4.
+
+    🔑 E dall'ondata 6 le attività sono **343 per 362 ore**, che non è una
+    contraddizione: l'ora quindicinale del 5B è scritta come due attività di
+    cui ogni settimana ne vede una. Sommare le durate ignorando la maschera
+    darebbe 363 — cioè il difetto che `CoverageChecker` dichiara per esteso
+    (*«una coppia Q1/Q2 della stessa materia darebbe 120 minuti contro i 60
+    del piano»*). Qui si somma **per settimana**, e si pretende che tutte e
+    trentatré diano lo stesso numero."""
+    assert Activity.objects.count() == 343
+    maschere = list(Activity.objects.values_list("week_mask", "duration_minutes"))
+    per_settimana = {
+        sum(m for mask, m in maschere if weeks.week_in_mask(mask, w))
+        for w in range(alighieri.WEEKS_IN_YEAR)
+    }
+    assert per_settimana == {362 * 60}
 
 
 def test_ogni_cattedra_quadra_a_zero(dataset):
@@ -103,10 +116,17 @@ def test_copertura_a_classe_intera_quadra_col_piano(dataset):
             if per_unita.exists():
                 fuori.add((school_class.name, service.subject.code))
                 continue
-            erogate = sum(a.duration_minutes for a in Activity.objects.filter(
-                subject=service.subject, classes=school_class))
-            assert erogate == service.class_minutes, (school_class.name,
-                                                      service.subject.code)
+            # ⚠ **Per settimana, e su entrambe le firme** (ondata 6): con
+            # l'ora quindicinale del 5B la somma cruda darebbe 180 minuti
+            # contro i 120 del piano, e sarebbe un falso scostamento — il
+            # quadrimestre della scuola italiana, nella forma piccola.
+            for w in (0, 1):
+                erogate = sum(
+                    a.duration_minutes for a in Activity.objects.filter(
+                        subject=service.subject, classes=school_class)
+                    if weeks.week_in_mask(a.week_mask, w))
+                assert erogate == service.class_minutes, (school_class.name,
+                                                          service.subject.code)
     assert fuori == {("1A", "ING"), ("1B", "ING"), ("2C", "LAT"),
                      ("3A", "SCI"), ("4A", "SCI")} | {
         (c[0], m) for c in alighieri.CLASSES for m in ("IRC", "ALT")}
@@ -148,7 +168,7 @@ def test_ogni_attivita_ha_una_sede_e_le_sedi_sono_entrambe_abitate(dataset):
     assert not Activity.objects.filter(site=None).exists()
     per_sede = {s.name: Activity.objects.filter(site=s).count()
                 for s in Site.objects.all()}
-    assert per_sede == {"Centrale": 287, "Succursale": 55}
+    assert per_sede == {"Centrale": 288, "Succursale": 55}
 
 
 def test_almeno_un_docente_insegna_in_entrambe_le_sedi(dataset):

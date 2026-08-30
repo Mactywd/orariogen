@@ -26,7 +26,7 @@ stimato — e lascia tredici tabelle su trentatré vuote, `ClassPartition`,
 `ClassPart` e `Group` comprese, cioè voci ✅ dello scope v1 che nessun dataset
 rappresenta.
 
-## Stato: ondate 1–5 di 7
+## Stato: ondate 1–6 di 7
 
 1. ✅ **L'anagrafica** — sedi, indirizzi, materie, piani di studi e servizi,
    classi, docenti, aule, attività.
@@ -42,6 +42,11 @@ rappresenta.
    tre livelli, i tetti di peso didattico, il tecnico di laboratorio e i
    carrelli di portatili. 🔑 La sonda arriva al **registro intero**. Vedi
    [risorse.md](risorse.md).
+6. ✅ **Quote, qualità e firme di settimana** — l'ora quindicinale del 5B (la
+   seconda firma, e la quinta forma di erogazione), le due forme di
+   alleggerimento e la gerarchia completa dei criteri di qualità. 🔑 E il
+   debito **L7**, che da sospetto diventa misura. Vedi
+   [quindicinale-e-quote.md](quindicinale-e-quote.md).
 
 Le famiglie restanti arrivano dalle ondate successive, e ognuna aggiorna
 `esiti-attesi.md` *prima* del codice che le esercita.
@@ -65,11 +70,14 @@ Le famiglie restanti arrivano dalle ondate successive, e ognuna aggiorna
 | Righe di vincolo orario | 10 (8 famiglie) |
 | Righe di vincolo di materia | 13 (13 tipi) |
 | Righe di indisponibilità | 55 (6 righe logiche, 3 livelli, 3 tipi di risorsa) |
+| Quote di alleggerimento | 2 — una deroga e un margine |
+| Criteri di qualità | 6 (5 generi, 2 popolazioni) — ⚠ non installati da `build()` |
+| Firme di settimana | **2** — 17 settimane pari, 16 dispari |
 | Personale / materiali | 1 tecnico / 4 carrelli di portatili |
 | Peso didattico | 3 materie a 2; tetti 9 / 5 / 12 e uno di classe a 40 |
 | **Ore-alunno** | **345** — 27 nei bienni, 30 e 31 nei trienni |
-| **Ore erogate** | **362** |
-| **Attività** | **342** |
+| **Ore erogate** | **362** — *in ogni settimana* |
+| **Attività** | **343** |
 
 🔑 **Le otto fasce non sono decorazione.** `max_hours` con tetto mattutino
 diverso da quello giornaliero, `max_half_days` e le mezze giornate libere non
@@ -97,7 +105,15 @@ test le verificano tutte e tre
 - la somma dei quadri orari delle 12 classi, con le erogazioni per parte
   (`piani-di-studi.md`, `gruppi.md`);
 - la somma dei monte ore delle 23 cattedre (`docenti.md`), ciascuna a `+/- = 0`;
-- la somma delle durate delle 342 attività.
+- la somma delle durate delle attività **attive in quella settimana**.
+
+⚠ E quest'ultima riga è cambiata all'ondata 6: le attività sono **343** per
+362 ore, e non è una contraddizione. L'ora quindicinale del 5B è scritta come
+due attività di cui ogni settimana ne vede una; sommare le durate ignorando la
+maschera darebbe 363, cioè il falso scostamento che `CoverageChecker` dichiara
+per esteso — *«una coppia Q1/Q2 della stessa materia darebbe 120 minuti contro
+i 60 del piano»*. Si somma per settimana, e si pretende che tutte e trentatré
+diano lo stesso numero.
 
 ⚠ E la verifica è **per (classe, materia)**, non sui totali: è la lezione del
 Fermi, dove due materie invertite quadravano lo stesso. Dall'ondata 2 quella
@@ -105,19 +121,29 @@ somma grossolana non basta più — dove entrano parti e raggruppamenti l'unità
 vera è l'**atomo** (ADR-020), e il predicato che la usa è
 `structural:coverage`, verificato sul dataset intero.
 
-## Misure, ondata 5
+## Misure, ondata 6
 
 | | |
 |---|---|
-| Modello fase 1 | **15 233** variabili, **12 251** constraint (ondata 4: 15 545 / 11 783) |
-| Fase 1 | `OPTIMAL`, **zero scarti**, ~7 s |
-| Richieste d'aula | 73 |
+| Modello fase 1 | **15 330** variabili, **13 817** constraint (ondata 5: 15 233 / 12 251) |
+| Fase 1 | `OPTIMAL`, **zero scarti**, ~9 s |
+| Richieste d'aula | 73, invariate |
 | Fase 2 | `OPTIMAL`, **73 su 73**, zero rinunce |
-| Sonda dei builder | **27 su 27** — il registro intero (ondata 4: 25; ondata 3: 12; ondata 2: 4; Fermi: 3) |
+| Sonda dei builder | **27 su 27**, **ferma** — il cricchetto non deve più salire |
+| Con i sei criteri di qualità | `solve` da 9 a **82 s** |
 
-⚠ **Le variabili sono *scese*, ed è la prima volta.** Le indisponibilità sono
-un pre-filtro del dominio: 55 righe tolgono celle, e con esse i letterali di
-avvio che ci vivevano. I constraint salgono comunque, per i tetti di peso.
+🔑 **Una seconda firma di settimana non raddoppia il modello.** L'attesa
+diceva «circa il doppio, il vocabolario è per firma», ed era sbagliata: le
+variabili derivate nascono solo dove un builder posta qualcosa e
+`OccupationBuilder` deduplica i constraint identici fra firme, quindi la
+seconda firma costa **quanto le attività che la distinguono** — +86 variabili
+e +1562 constraint, cioè +0,6 % e +12,7 %. Le due quote ne costano 11 e 4.
+Dettaglio in [quindicinale-e-quote.md](quindicinale-e-quote.md).
+
+⚠ **All'ondata 5 le variabili erano *scese*, ed è stata la prima volta.** Le
+indisponibilità sono un pre-filtro del dominio: 55 righe tolgono celle, e con
+esse i letterali di avvio che ci vivevano. I constraint salivano comunque, per
+i tetti di peso.
 
 ⚠ **E i tetti di peso cambiano il regime di ricerca** — stesso modello,
 **439 s** con un lavoratore contro **7 s** con otto. È il primo vincolo del
@@ -153,7 +179,10 @@ sulla cardinalità otto righe su nove non sopportano una tacca più stretta
 relazione tredici su tredici non sopportano il **testimone puntato**, cioè la
 configurazione vietata imposta con `pinned` ([relazioni.md](relazioni.md)); e
 l'ondata 5 usa **entrambe** le prove, scegliendo secondo la natura della riga
-([risorse.md](risorse.md)).
+([risorse.md](risorse.md)). L'ondata 6 ne aggiunge una terza forma, per gli
+alleggerimenti: si mette il dataset **in tensione** e si pretende che la quota
+lo rimetta in piedi — e che senza la quota non ci stia, e che con una quota
+troppo piccola nemmeno ([quindicinale-e-quote.md](quindicinale-e-quote.md)).
 
 ## Indice del dataset
 
@@ -167,6 +196,7 @@ l'ondata 5 usa **entrambe** le prove, scegliendo secondo la natura della riga
 - [vincoli.md](vincoli.md) — 🔑 le dieci righe dell'asse Cardinalità, e perché stanno al bordo
 - [relazioni.md](relazioni.md) — 🔑 i tredici tipi dell'asse Relazione, e il testimone puntato
 - [risorse.md](risorse.md) — 🔑 indisponibilità, peso didattico, tecnico e carrelli; e i due difetti trovati
+- [quindicinale-e-quote.md](quindicinale-e-quote.md) — 🔑 l'ora quindicinale, le due forme di alleggerimento, la gerarchia della qualità e il difetto L7
 - [esiti-attesi.md](esiti-attesi.md) — 🔑 cosa deve succedere, scritto prima di eseguire
 
 Per la **semantica** delle entità (non i dati) vedi [`docs/edt/`](../../docs/edt/).

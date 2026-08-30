@@ -124,3 +124,12 @@ essere soddisfatta per caso.
 | Constraint, fase 1 | 7 704 | 8 758 |
 | Fase 1 | `OPTIMAL`, 0 scarti | `OPTIMAL`, 0 scarti |
 | Fase 2 | 71 su 71 | 71 su 71 |
+
+## Gli alleggerimenti (ondata 6)
+
+Due di queste righe portano una **quota**: il `MG` di R02 una *deroga*, il
+`max_presence` del cappellano un *margine*. ⚠ Nessuna delle due è consumata
+dal dataset — lo sarebbe a spese del `test_le_otto_forme_dichiarate` qui sopra,
+che pretende una base senza finding `HARD` — e i due portatori sono scelti
+apposta perché **non sono bordi**: allentare un bordo renderebbe risolvibile la
+sua tacca. Vedi [quindicinale-e-quote.md](quindicinale-e-quote.md).

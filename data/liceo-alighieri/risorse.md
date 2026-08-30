@@ -143,7 +143,7 @@ piazzamento. Il personale e i materiali non ne avevano mai visto uno.
 
 | Risorsa | Capienza | Chi la usa |
 |---|---|---|
-| **TECN**, tecnico di laboratorio | 1 | i 3 blocchi da due ore di fisica del triennio scientifico + le 4 ore di scienze a mezza classe |
+| **TECN**, tecnico di laboratorio | 1 | i 3 blocchi da due ore di fisica del triennio scientifico + le 4 ore di scienze a mezza classe + (dall'ondata 6) la metà di laboratorio dell'ora quindicinale del 5B |
 | **CARRELLO**, carrelli di portatili | 4 | i 2 livelli d'inglese (2 l'uno), l'informatica della 2C articolata (1), i 4 laboratori a mezza classe (2 l'uno) |
 
 **Il tecnico è uno solo**, quindi due laboratori non possono essere

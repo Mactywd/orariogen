@@ -1,5 +1,11 @@
 # Gruppi — le quattro forme di sdoppiamento
 
+> 🔑 **E dall'ondata 6 ce n'è una quinta, che non è uno sdoppiamento**: l'ora
+> **quindicinale** del 5B, due attività a maschere complementari. È l'unica
+> forma che **non costa un'ora** al docente — in ogni settimana ne è attiva
+> una sola — e la differenza fra *sdoppiare* e *alternare* è tutta nella
+> maschera. Vedi [quindicinale-e-quote.md](quindicinale-e-quote.md).
+
 🔑 Sono la voce ✅ di scope v1 ([ADR-013](../../docs/decisioni.md)) che **nessun
 dataset rappresentava**: sul Fermi `ClassPartition`, `ClassPart` e `Group` sono
 tre tabelle vuote, e i loro test girano su fixture sintetiche da poche righe.

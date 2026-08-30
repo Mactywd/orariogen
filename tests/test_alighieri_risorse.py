@@ -100,10 +100,11 @@ def test_le_due_risorse_che_nessun_dataset_aveva():
     assert env["tecnico"].role == "Tecnico di laboratorio"
     assert env["carrelli"].simultaneous_capacity == 4
 
-    # Il tecnico: i tre blocchi di fisica del triennio scientifico e le
-    # quattro ore di laboratorio a mezza classe.
+    # Il tecnico: i tre blocchi di fisica del triennio scientifico, le quattro
+    # ore di laboratorio a mezza classe e — dall'**ondata 6** — la metà di
+    # laboratorio dell'ora quindicinale del 5B.
     col_tecnico = Activity.objects.exclude(staff=None)
-    assert col_tecnico.count() == 7
+    assert col_tecnico.count() == 8
     assert {a.subject.code for a in col_tecnico} == {"FIS", "SCI"}
 
     # I carrelli: uno ogni dodici alunni, e solo dove si lavora a piccoli

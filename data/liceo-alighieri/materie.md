@@ -50,6 +50,16 @@ L'ondata 5 dichiara una politica di scuola: **MAT, LAT e GRE pesano 2**, cioè
 le materie d'indirizzo dei due corsi. Tutte le altre restano a 1, e i tetti
 sono in [risorse.md](risorse.md).
 
+## L'ora quindicinale (ondata 6)
+
+⚠ **SCI nel 5B vale 2 ore, e le attività sono tre.** La seconda ora è a
+settimane alterne — laboratorio e teoria — quindi il piano dice 2, ogni
+settimana ne eroga 2, e la somma cruda delle durate direbbe 3. È il falso
+scostamento che `CoverageChecker` dichiara per esteso (*«una coppia Q1/Q2
+della stessa materia darebbe 120 minuti contro i 60 del piano»*), e nel banco
+è ora un dato invece che un esempio nel docstring. Vedi
+[quindicinale-e-quote.md](quindicinale-e-quote.md).
+
 🔑 E il peso si conta **per unità-studente**, non per classe
 ([ADR-011](../../docs/decisioni.md)): con le partizioni dell'ondata 2, una
 classe non ha *un* peso settimanale, ne ha uno per parte. Il tetto di classe

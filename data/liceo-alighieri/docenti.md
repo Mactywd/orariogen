@@ -37,6 +37,12 @@ ciascuna. Vedi [gruppi.md](gruppi.md) §3.
 
 ## I tempi parziali, e lo spezzone
 
+⚠ **E N02 resta a 10 anche dopo l'ondata 6**, che è il punto della forma nuova:
+la seconda ora di scienze del 5B è **quindicinale** — una settimana in
+laboratorio, una di teoria — e in ogni settimana ne è attiva esattamente una.
+Lo sdoppiamento fa *ripetere* l'ora (N01 da 17 a 19), l'alternanza no. Vedi
+[quindicinale-e-quote.md](quindicinale-e-quote.md).
+
 🔑 **L06** (12 h), **N02** (10 h), **P01/P02** (12 h), **R01/R02** (12 h) esistono
 perché `max_presence` — *«lavora al più N giorni»* — **non ha soggetto su un
 collegio di sole cattedre piene**: con 21 ore un docente sta a scuola comunque

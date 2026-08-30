@@ -47,9 +47,10 @@ from domain import weeks
 from domain.models import (
     Activity, ActivityMaterialRequirement, Break, ClassPart, ClassPartition,
     CompetitionClass, Discipline, Group, InstituteSettings, Material, Period,
-    ResourceTimeConstraint, ResourceUnavailability, Room, Schedule, SchoolClass,
-    SchoolYear, Service, Site, SlotLabel, StaffMember, StudyPlan, Subject,
-    SubjectConstraint, Teacher, TeachingAssignment, TimeGrid,
+    QualityCriterion, RelaxationQuota, ResourceTimeConstraint,
+    ResourceUnavailability, Room, Schedule, SchoolClass, SchoolYear, Service,
+    Site, SlotLabel, StaffMember, StudyPlan, Subject, SubjectConstraint,
+    Teacher, TeachingAssignment, TimeGrid,
 )
 
 WEEKS_IN_YEAR = 33  # come il Fermi: periodicità S (33/33) osservata in EDT
@@ -253,6 +254,29 @@ EROGAZIONI = {
     ("1A", "ING"): [(("group", "ING1-BASE"), 3, "ING1")],
     ("1B", "ING"): [(("group", "ING1-AVANZ"), 3, "ING1")],
 }
+# 🔑 **L'ondata 6: l'ora quindicinale.** La seconda ora di scienze del 5B è a
+# settimane alterne — una in laboratorio col tecnico, una di teoria in aula —
+# e le due metà portano maschere **complementari**. È la quinta forma di
+# erogazione del banco, e l'unica che **non costa un'ora**: in ogni settimana
+# ne è attiva esattamente una, quindi il docente lavora due ore e l'alunno ne
+# riceve due, come prima. Lo sdoppiamento delle ondate 2 e 4 costa invece
+# l'ora in più che il docente ripete.
+#
+# ⚠ È anche l'unica riga del dataset che dà a `week_signatures` più di una
+# firma: fino all'ondata 5 ogni maschera era l'anno intero, e metà del motore
+# — l'occupazione che distingue le firme, i criteri di qualità che **non** le
+# distinguono — non aveva mai avuto un dato su cui mostrarsi.
+# ⚠ E l'allineamento resta **vuoto**, che è una scelta e non una dimenticanza:
+# 📦 lo XSD dichiara che *l'allineamento genera l'attività complessa*, cioè una
+# collocazione sola per le attività allineate. Le due metà non sono simultanee
+# — non lo sono **mai** — quindi allinearle direbbe il contrario di ciò che
+# sono. Alternare non è allineare.
+EROGAZIONI[("5B", "SCI")] = [
+    (None, 1, ""),                                   # l'ora settimanale
+    (None, 1, "", {"settimane": "pari",
+                   "aule": ("LAB-SCI", "LAB-INF"), "tecnico": True}),
+    (None, 1, "", {"settimane": "dispari", "aule": ()}),
+]
 EROGAZIONI.update({(c[0], "IRC"): [(("part", f"{c[0]}_REL"), 1, f"REL-{c[0]}")]
                    for c in CLASSES})
 EROGAZIONI.update({(c[0], "ALT"): [(("part", f"{c[0]}_ALT"), 1, f"REL-{c[0]}")]
@@ -546,11 +570,88 @@ INDISPONIBILITA = [
 ]
 
 
-def _serve_tecnico(subject_code, block, unita):
+# 🔑 **L'ondata 6: le quote di alleggerimento**, nelle due forme che la
+# finestra `Alleggerimenti` di EDT distingue — il **margine** («Autorizza un
+# supplemento di …») e la **deroga** («Non considerare …»).
+#
+# ⚠ **Nessuna delle due è consumata dal dataset**, ed è una scelta obbligata:
+# l'ondata 3 pretende che l'orario di base non porti nessun finding `HARD`
+# oltre alle aule non assegnate, e una quota consumata **è** una violazione
+# nominata — la quota autorizza, non nasconde (`domain/solver/relaxation.py`).
+# Le righe stanno qui perché i builder le leggano e postino i letterali su
+# dati veri; la tensione la mette il testimone, come per i divieti
+# dell'ondata 4. Vedi `tests/test_alighieri_quote.py`.
+#
+# ⚠ E i due portatori sono scelti perché **non sono bordi**: allentare un
+# bordo dell'ondata 3 renderebbe risolvibile la sua tacca, cioè spegnerebbe
+# un test scritto tre ondate fa. Il bordo del `MG` sta sulla 2A e non su
+# DONAT; quello di `max_presence` sta su GENTI e non su COLOM.
+#
+# (nome, famiglia, portatore, max_violations, params)
+QUOTE = [
+    # La deroga: R02 può fare mattina **e** pomeriggio una volta a settimana.
+    ("mg_donati", "half_days", "DONAT", 1, {}),
+    # Il margine: il cappellano può allungare la giornata di tre ore, e due
+    # volte — una per giornata. ⚠ Il letterale è **per giorno**, non per riga:
+    # «una volta per settimana e per docente» conta le volte che il
+    # supplemento si usa, e un letterale solo direbbe «una volta, ovunque».
+    ("presenza_cappellano", "max_presence", "COLOM", 2, {"margine": 180}),
+]
+
+
+#: 🔑 **L'ondata 6: la gerarchia dei criteri di qualità.** Cinque generi, sei
+#: righe, e le due popolazioni: è la tabella intera di `QualityCriterion`, che
+#: nessun dataset aveva. L'ordine è un **dato** e non codice, perché è il punto
+#: dichiarato del meccanismo — un criterio che non compare è un criterio
+#: *ignorato*, e la tabella vuota dà la catena senza qualità.
+#:
+#: ⚠ **`build()` non la installa**, e la ragione è una misura: con questi sei
+#: livelli un solo `solve` sul banco passa da 9 a **82 secondi**, e ogni test
+#: dell'Alighieri li pagherebbe. È la stessa ragione per cui esiste
+#: `BUDGET_QUALITA`: un livello di qualità non è lento perché difficile da
+#: ottimizzare, è lento perché **impossibile da dimostrare**. Chi vuole la
+#: qualità la chiede — `build(qualita=True)`.
+#:
+#: (genere, popolazione, rango)
+CRITERI_QUALITA = [
+    # I buchi per primi, e prima quelli dei docenti: in EDT i buchi occupano
+    # **quattro** degli undici criteri di piazzamento, e le posizioni 1, 2, 5
+    # e 6. Separati per popolazione perché EDT li dichiara tali.
+    ("gaps", "teachers", 1),
+    ("gaps", "classes", 2),
+    ("isolated", "all", 3),
+    ("free_half_days", "teachers", 4),
+    # ⚠ L'equilibrio didattico solo sulle **classi**: nella base di esempio di
+    # EDT l'orario delle classi ha questo come primo e unico criterio, e quello
+    # dei docenti non lo ha affatto. L'asimmetria è del prodotto, non nostra.
+    ("regularity", "classes", 5),
+    # Il pennello **verde**, undicesimo e ultimo: cede a tutto il resto. È il
+    # criterio che dà un posto alla riga `preferenza` dell'ondata 5, la sola
+    # indisponibilità che non vieta niente.
+    ("preferences", "all", 6),
+]
+
+
+def criteri_di_qualita():
+    """Installa `CRITERI_QUALITA`. Sta fuori da `build()` perché in EDT
+    l'ottimizzazione è un comando **separato**, che si lancia su un orario che
+    già c'è: `Ottimizza gli orari dei docenti` non è una fase del calcolo. E
+    perché quei sei livelli costano, misurati, 82 secondi a `solve`."""
+    for genere, popolazione, rango in CRITERI_QUALITA:
+        QualityCriterion.objects.create(
+            kind=QualityCriterion.Kind(genere),
+            population=QualityCriterion.Population(popolazione), rank=rango)
+
+
+def _serve_tecnico(subject_code, block, unita, extra):
     """Il tecnico sta in laboratorio: le due ore di fisica del triennio
-    scientifico e le ore di scienze a mezza classe. ⚠ È **uno**, quindi due
-    laboratori non possono essere simultanei — che è il vincolo vero delle
-    scuole, e nel nostro modello è occupazione come tutte le altre."""
+    scientifico, le ore di scienze a mezza classe e — dall'ondata 6 — la metà
+    di laboratorio dell'ora quindicinale, che lo dichiara per nome. ⚠ È
+    **uno**, quindi due laboratori non possono essere simultanei — che è il
+    vincolo vero delle scuole, e nel nostro modello è occupazione come tutte
+    le altre."""
+    if extra.get("tecnico"):
+        return True
     return (subject_code == "FIS" and block == 2) or (subject_code == "SCI"
                                                       and unita is not None)
 
@@ -576,21 +677,63 @@ def _hours(track, year, subject_code):
 
 def _erogazione(class_name, subject_code, ore):
     """Come si eroga la coppia (classe, materia): una lista di
-    `(unità, ore, allineamento)`. Il caso normale — tutto a classe intera — è
-    la riga di default, così che le quattro forme dell'ondata 2 restino
-    **eccezioni dichiarate** invece di un meccanismo generale."""
-    return EROGAZIONI.get((class_name, subject_code), [(None, ore, "")])
+    `(unità, ore, allineamento, extra)`. Il caso normale — tutto a classe
+    intera — è la riga di default, così che le forme dell'ondata 2 restino
+    **eccezioni dichiarate** invece di un meccanismo generale.
+
+    ⚠ `extra` è la quarta voce **opzionale** che l'ondata 6 ha aggiunto, e la
+    sua opzionalità è la ragione per cui la tabella non è stata riscritta: le
+    dieci righe che c'erano non dichiarano niente di nuovo, e continuano a
+    leggersi come prima. Le chiavi sono `settimane` (`"pari"` / `"dispari"`,
+    la maschera), `aule` (le candidate, che sostituiscono `SPECIAL_ROOMS`) e
+    `tecnico`."""
+    righe = EROGAZIONI.get((class_name, subject_code), [(None, ore, "")])
+    return [(u, h, i, resto[0] if resto else {}) for u, h, i, *resto in righe]
+
+
+def _settimane(spec):
+    """Le settimane in cui una riga di erogazione è attiva. ⚠ 17 e 16 su 33,
+    non 16,5: un anno con un numero dispari di settimane dà a una delle due
+    metà una volta in più, ed è un fatto del calendario e non un difetto."""
+    if spec is None:
+        return range(WEEKS_IN_YEAR)
+    resto = 0 if spec == "pari" else 1
+    return [w for w in range(WEEKS_IN_YEAR) if w % 2 == resto]
+
+
+def _maschera(spec):
+    return sum(weeks.single_week(w) for w in _settimane(spec))
 
 
 def _ore_docente(class_name, subject_code, ore):
-    """Le ore che il **docente** lavora per quella classe. ⚠ Non coincidono con
-    quelle del quadro orario appena c'è uno sdoppiamento: l'ora di laboratorio
-    a mezza classe si insegna due volte, e la riga di `TeachingAssignment` deve
-    dire la verità sul carico, non sul curriculum."""
-    return sum(h for _u, h, _i in _erogazione(class_name, subject_code, ore))
+    """Le ore che il **docente** lavora per quella classe, **in una settimana**.
+
+    ⚠ Non coincidono con quelle del quadro orario appena c'è uno sdoppiamento:
+    l'ora di laboratorio a mezza classe si insegna due volte, e la riga di
+    `TeachingAssignment` deve dire la verità sul carico, non sul curriculum.
+
+    🔑 E dall'ondata 6 il conto è **per settimana**, non una somma: una coppia
+    quindicinale porta due righe da un'ora e costa **un'ora**, perché in ogni
+    settimana ne è attiva una sola. Che il totale non dipenda dalla settimana
+    non è un'ipotesi: si calcola su tutte e trentatré e si pretende che sia lo
+    stesso numero. Un dataset le cui maschere non compongono un monte ore
+    costante fa fallire il `build`, che è il posto giusto in cui accorgersene
+    — la stessa proprietà per cui `CoverageChecker` legge la maschera invece
+    di sommare le durate."""
+    righe = _erogazione(class_name, subject_code, ore)
+    per_settimana = {
+        sum(h for _u, h, _i, extra in righe
+            if w in _settimane(extra.get("settimane")))
+        for w in range(WEEKS_IN_YEAR)
+    }
+    assert len(per_settimana) == 1, (class_name, subject_code, per_settimana)
+    return per_settimana.pop()
 
 
-def build():
+def build(qualita=False):
+    """Costruisce il banco. `qualita=True` installa anche `CRITERI_QUALITA` —
+    fuori dal default perché quei sei livelli costano 82 secondi a `solve`,
+    misurati, e la gran parte dei test del banco misura il modello **hard**."""
     settings = InstituteSettings.load()
     settings.default_max_reduced_students = 15
     settings.site_transition_slots = 1
@@ -693,7 +836,6 @@ def build():
         return sum(p.expected_students for p in groups[unita[1]].parts.all())
 
     teachers = {}
-    year_mask = weeks.full_mask(WEEKS_IN_YEAR)
     for tid, full_name, abbr, assignments, hours, preferred in TEACHERS:
         last, first = full_name.split(" ", 1)
         t = Teacher.objects.create(
@@ -712,14 +854,15 @@ def build():
                     weekly_minutes=_ore_docente(class_name, subject_code, ore) * 60,
                 )
                 site = class_sites[class_name]
-                for unita, quante, ident in _erogazione(class_name,
-                                                        subject_code, ore):
+                for unita, quante, ident, extra in _erogazione(
+                        class_name, subject_code, ore):
                     for block in BLOCKS.get((subject_code, quante),
                                             [1] * quante):
                         activity = Activity.objects.create(
                             subject=subjects[subject_code],
                             duration_slots=block, duration_minutes=block * 60,
-                            week_mask=year_mask, site=sites[site],
+                            week_mask=_maschera(extra.get("settimane")),
+                            site=sites[site],
                             alignment_ident=ident,
                             # ⚠ Solo i blocchi lunghi: un'ora singola non può
                             # attraversare niente, e dichiararlo su tutte
@@ -733,9 +876,11 @@ def build():
                             activity.parts.add(parts[unita[1]])
                         else:
                             activity.groups.add(groups[unita[1]])
-                        for room_name in SPECIAL_ROOMS[site].get(subject_code, ()):
+                        candidate = extra.get(
+                            "aule", SPECIAL_ROOMS[site].get(subject_code, ()))
+                        for room_name in candidate:
                             activity.rooms.add(rooms[room_name])
-                        if _serve_tecnico(subject_code, block, unita):
+                        if _serve_tecnico(subject_code, block, unita, extra):
                             activity.staff.add(tecnico)
                         quanti = _carrelli(subject_code, unita,
                                            _alunni(unita) or 0)
@@ -774,6 +919,15 @@ def build():
             ResourceUnavailability.objects.create(
                 resource=risorsa, day=day, slot=slot,
                 level=ResourceUnavailability.Level(livello))
+
+    if qualita:
+        criteri_di_qualita()
+
+    # Le quote di alleggerimento (ondata 6).
+    for _nome, famiglia, ref, quante, params in QUOTE:
+        RelaxationQuota.objects.create(
+            family=RelaxationQuota.Family(famiglia), resource=per_abbr[ref],
+            max_violations=quante, params=params)
 
     year = SchoolYear.objects.create(
         start_date=dt.date(2026, 9, 14),

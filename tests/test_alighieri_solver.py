@@ -42,7 +42,7 @@ def test_su_schedule_vuoto_le_due_deficienze_e_nient_altro():
     env = alighieri.build()
     findings = check_schedule(env["schedule"])
     da_piazzare = [f for f in findings if f.code == "activity_unplaced"]
-    assert len(da_piazzare) == Activity.objects.count() == 342
+    assert len(da_piazzare) == Activity.objects.count() == 343
     assert {f.code for f in findings} - {"activity_unplaced"} == {
         "min_distribution", "free_guaranteed"}
 

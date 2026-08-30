@@ -1,7 +1,7 @@
 # L'Alighieri: il banco a scuola intera
 
 **Data**: 2026-08-30
-**Stato**: approvata — **ondate 1–5 di 7 fatte** il 2026-08-30
+**Stato**: approvata — **ondate 1–6 di 7 fatte** il 2026-08-30
 **Apre**: la copertura del modello a scala reale — **ventiquattro builder su
 ventisette** non hanno mai visto un dataset
 
@@ -456,8 +456,51 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
    lo leggono in modo diverso. Il primo porta con sé la misura di **ADR-019**,
    che nessun dataset poteva dare: serviva una chiave a capienza cumulativa
    toccata da due sedi.
-6. **Quote, criteri di qualità e firme di settimana** (§3.5, §4.1) — qui si
-   attende il **rosso** sul debito delle firme.
+6. ✅ **Quote, criteri di qualità e firme di settimana** (§3.5, §4.1) — fatta
+   il 2026-08-30. L'ora **quindicinale** del 5B porta la seconda firma; le due
+   forme di alleggerimento stanno su due portatori che **non sono bordi** di
+   nessuna ondata precedente; la gerarchia della qualità è completa (cinque
+   generi, sei righe). Fase 1 `OPTIMAL` a zero scarti, **15 330 variabili e
+   13 817 constraint**; fase 2 ancora 73 su 73; sonda **ferma** a 27, che da
+   qui è il comportamento giusto.
+   🔑 **La quindicinale è la quinta forma di erogazione, e la sola che non
+   costa un'ora**: in ogni settimana ne è attiva esattamente una. Sdoppiare e
+   alternare sono cose diverse. ⚠ E l'allineamento resta vuoto — 📦 lo XSD dice
+   che l'allineamento genera *una* collocazione, e le due metà non sono
+   simultanee mai.
+   🔑 **È il primo dataset a chiedere a `structural:occupation` ciò che sa
+   fare**: è l'unico builder che distingue le firme, e le due metà — stessa
+   classe, stessa chiave — possono stare **nella stessa cella**. Testimone
+   puntato col suo ramo di controllo.
+   ⚠ **Un'attesa smentita, e la sbagliata era l'attesa**: «circa il doppio» —
+   no. Una seconda firma costa **quanto le attività che la distinguono**
+   (+0,6 % di variabili, +12,7 % di constraint), perché le derivate nascono
+   dove un builder posta e l'occupazione deduplica i constraint identici fra
+   firme. La nota di `quality.py` sulle firme «moltiplicative» vale sulla fase
+   5, non sul solver.
+   🔑 **Le quote hanno una forma di verifica propria**, la terza del banco: si
+   mette il dataset in tensione e si pretende che la quota lo rimetta in piedi,
+   che senza non ci stia, e che con una quota **troppo piccola** nemmeno. ⚠ E
+   le quote del dataset non sono consumate dal dataset: una quota consumata è
+   una violazione nominata, e §6 pretende una base senza finding `HARD`.
+   ⚠ **Un test che misurava il propagatore invece del modello**: la prima
+   taratura del margine restituiva `UNKNOWN` a 180 s e a 120 s; spostata
+   l'aritmetica sulle ore e dichiarate le giornate col rosso invece che col
+   `days`, chiude in 37 s.
+   ⚠ I sei criteri di qualità portano un `solve` da 9 a **82 s**, quindi
+   `build()` non li installa — che è anche la forma di EDT, dove
+   l'ottimizzazione è un comando a sé su un orario che già c'è.
+   ⚠ **E una seconda attesa smentita**, sul verde: sulla gerarchia intera
+   `preferences_all` è uscito 0 in una misura e 1 nell'altra. 🔑 Un livello
+   sotto un livello **non dimostrato** eredita l'indeterminatezza di quello —
+   i tre sopra il verde esauriscono il budget e vengono fissati al valore che
+   la ricerca *ha trovato*. Il test del verde installa quindi il criterio **da
+   solo**, dove lo zero è una proprietà del modello.
+   🔑 **Il rosso atteso c'è, ed è L7**: i criteri di qualità ignorano le firme
+   di settimana. Stessa quantità, 60 minuti in ogni settimana per il checker e
+   **zero** per il criterio `gaps`. È lo stesso difetto che `MaxGapBuilder`
+   aveva fino al 2026-08-24. Non riparato (§8), fissato da un test col ramo di
+   controllo.
 7. **Il criterio di accettazione e i comandi**: il test della sonda (§6, zero
    builder inerti), la misura di ciascun comando su §7, e l'aggiornamento di
    `CLAUDE.md`, `docs/todo.md` e del changelog con i numeri veri.

@@ -15,6 +15,132 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (notte) — L'Alighieri, ondata 6: l'ora quindicinale, le due forme dell'alleggerimento, e un debito che diventa una misura** —
+  Tre cose che nessun dataset aveva mai messo in moto: la **seconda firma di
+  settimana**, le **quote di alleggerimento** nelle due forme e la **gerarchia
+  completa** dei criteri di qualità. Modello di fase 1 a **15 330 variabili e
+  13 817 constraint**, `OPTIMAL` a zero scarti in ~9 s; fase 2 ancora **73 su
+  73**; sonda **ferma a 27 su 27**, che da qui è il comportamento giusto.
+  Dettaglio in
+  [`data/liceo-alighieri/quindicinale-e-quote.md`](../data/liceo-alighieri/quindicinale-e-quote.md).
+
+  🔑 **La quindicinale è la quinta forma di erogazione, e la sola che non costa
+  un'ora.** La seconda ora di scienze del 5B è a settimane alterne — una in
+  laboratorio col tecnico, una di teoria in aula — cioè due attività con
+  maschere complementari. In ogni settimana ne è attiva esattamente una, quindi
+  la cattedra di N02 resta a 10 ore e l'alunno ne riceve 2: lo sdoppiamento
+  delle ondate 2 e 4 fa **ripetere** l'ora al docente, questa no. *Sdoppiare* e
+  *alternare* sono due cose diverse, e la differenza è tutta nella maschera.
+  ⚠ E l'allineamento resta **vuoto**: 📦 lo XSD dichiara che l'allineamento
+  genera *una* collocazione, e le due metà non sono simultanee mai. Allinearle
+  direbbe il contrario di ciò che sono.
+
+  🔑 **Ed è il primo dataset a chiedere all'occupazione ciò che sa fare.**
+  `OccupationBuilder` è l'unico builder che distingue le firme di settimana — lo
+  dichiara nel suo docstring dal giorno in cui è stato scritto — e nessuno
+  gliel'aveva mai chiesto. Le due metà stanno sulla stessa classe, quindi
+  condividono la chiave di occupazione: **possono stare nella stessa cella**, e
+  solo perché le maschere non si intersecano. Testimone puntato, con il suo
+  ramo di controllo: `OPTIMAL` con le due metà sulla stessa cella,
+  `INFEASIBLE` con una metà e l'ora settimanale. Ed è poi come una scuola
+  scrive davvero un'ora quindicinale — «scienze al martedì alla terza» — e
+  cambia solo cosa ci si fa dentro.
+
+  ⚠ **Un'attesa smentita, e la sbagliata era l'attesa.** Scritta prima:
+  *«variabili e constraint circa il doppio, il vocabolario è per firma»*.
+  Misurato: **+86 variabili e +1562 constraint**, cioè +0,6 % e +12,7 %. 🔑 Una
+  seconda firma **non raddoppia il modello: costa quanto le attività che la
+  distinguono** — le variabili derivate nascono solo dove un builder posta
+  qualcosa, e `OccupationBuilder` deduplica i constraint identici fra firme. ⚠ E
+  non contraddice la nota di `quality.py` che chiama le firme *«una dimensione
+  moltiplicativa (~0,3 s per firma)»*: quella misura è sulla **fase 5**, dove
+  ogni checker gira una volta per firma. Là è moltiplicativo davvero; nel solver
+  no. La decomposizione è misurata riga per riga: ondata 5 15 233 / 12 251, con
+  le sole quote 15 244 / 12 255, con la sola quindicinale 15 319 / 13 813.
+
+  🔑 **Le quote hanno una forma di verifica propria**, la terza del banco
+  accanto alla tacca dell'ondata 3 e al testimone puntato dell'ondata 4: si
+  mette il dataset **in tensione** e si pretende che la quota lo rimetta in
+  piedi, che senza la quota non ci stia, e che con una quota **troppo piccola**
+  nemmeno. La riga di mezzo è quella che porta l'informazione — è l'unica che
+  distingue «la quota c'è» da «la quota è quella giusta», ed è la mutazione che
+  il docstring di `RelaxationQuota` chiede per nome (*«"la quota è collegata"
+  passa anche se il margine vale dieci volte quello dichiarato»*). Sul
+  cappellano: quota 0 → `INFEASIBLE` (4 + 4 fasce), quota 1 → `INFEASIBLE`
+  (4 + 7 = 11 per dodici ore), quota 2 → `OPTIMAL` (7 + 7 = 14, e ne servono
+  tredici col viaggio).
+
+  ⚠ **E le quote del dataset non sono consumate dal dataset**, che sembra una
+  rinuncia e non lo è: una quota consumata **è** una violazione nominata — la
+  quota autorizza il solver a produrla e non la nasconde — e l'ondata 3
+  pretende che l'orario di base non porti nessun finding `HARD` oltre alle aule.
+  Le righe stanno nel dataset perché i builder le leggano su dati veri (**+11
+  variabili, +4 constraint**: la misura dice che le leggono), e i due portatori
+  sono scelti perché **non sono bordi** di nessuna ondata precedente —
+  allentare un bordo dell'ondata 3 spegnerebbe la sua tacca.
+
+  ⚠ **Un test che misurava il propagatore invece del modello.** La prima
+  taratura del margine metteva la presenza a cinque fasce e faceva dimostrare
+  al caso di mezzo *5 + 7 = 12 fasce per dodici ore più la fascia di viaggio*:
+  vero, e il solver non ci arrivava — `UNKNOWN` a 180 s, e di nuovo a 120 s. Il
+  legame «solo due giornate sono attive» passa da booleani che il rilassamento
+  lineare non lega ai minuti. Due correzioni: le due giornate si dichiarano col
+  **rosso** (il pre-filtro toglie le celle, e le giornate diventano due
+  *davvero*) invece che col `days`, e l'aritmetica si sposta tutta sulle ore. I
+  tre casi chiudono in 37 s. 🔑 **Un test che misura la potenza del propagatore
+  invece di una proprietà del modello è un test che un giorno diventa rosso da
+  solo.**
+
+  🔑 **E il verde dell'ondata 5 chiude il suo anello.** La riga `preferenza`
+  mette AMATO in verde sulla prima fascia di tutti i giorni: l'ondata 5 ha
+  provato che **non vieta** — l'orario esiste lo stesso — e qui si prova che
+  **conta**: col solo criterio delle preferenze installato, `preferences_all`
+  scende a zero e lo dimostra, cioè nessuna ora di AMATO finisce alla prima
+  fascia. Un pre-filtro che non filtra e un criterio che non conta si
+  somigliano molto, e sono cose diverse.
+
+  ⚠ **E il «da solo» è una seconda attesa smentita.** Il test nasceva sulla
+  gerarchia intera, e la prima misura dava zero; la seconda ha dato **1**. Non
+  è il verde a essere incerto: i tre livelli sopra di lui esauriscono il budget
+  senza dimostrare il proprio ottimo, quindi vengono fissati al valore che la
+  ricerca *ha trovato*, che cambia da esecuzione a esecuzione — e con esso
+  cambia la regione in cui il verde deve stare. 🔑 **Un livello sotto un
+  livello non dimostrato eredita l'indeterminatezza di quello**, ed è una
+  proprietà della catena lessicografica che nessuna misura aveva ancora
+  esposto. Per la stessa ragione il rendiconto della catena asserisce che
+  **almeno un** livello chiude col divario aperto, non quali.
+
+  ⚠ **La qualità costa, e `build()` non la installa.** Sei livelli portano un
+  `solve` sul banco da 9 a **82 secondi**, e ogni test dell'Alighieri li
+  pagherebbe. È anche la forma giusta: in EDT l'ottimizzazione è un comando a
+  sé che si lancia su un orario che già c'è — `Ottimizza gli orari dei docenti`
+  non è una fase del calcolo. La catena dice quale ottimo ha dimostrato:
+  `gaps_teachers` e `gaps_classes` a **0** provati, `preferences_all` a 0
+  provato, e `isolated_all` 71, `free_half_days_teachers` 143,
+  `regularity_classes` 936 col divario aperto. La lezione del Fermi si ripete a
+  scala maggiore: un livello di qualità non è lento perché difficile da
+  ottimizzare, è lento perché **impossibile da dimostrare**.
+
+  ⚠ **E il difetto nuovo, L7: i criteri di qualità ignorano le firme di
+  settimana.** È il debito che L3 aveva aperto **il giorno prima** come
+  sospetto — *«nessuna delle due basi lo esercita»* — e la seconda metà non è
+  più vera. Testimone aritmetico: il 5B al lunedì, italiano alla prima e alla
+  quarta fascia, la metà di laboratorio alla seconda e quella di teoria alla
+  terza. Settimana pari 0-1-3, buco alla 2; settimana dispari 0-2-3, buco alla
+  1; **unione** 0-1-2-3, nessun buco. Sullo stesso orario la stessa quantità
+  vale 60 minuti in *ogni* settimana dell'anno per `check_schedule` e **zero**
+  per il criterio `gaps`. 🔑 E non è un difetto nuovo: è **lo stesso** che
+  `MaxGapBuilder` aveva fino al 2026-08-24, descritto per esteso nel docstring
+  di `Vocabulary.covered`. Il builder passa `signature`; i criteri no. Non
+  riparato (spec §8): è **L7** in `docs/todo.md`, fissato da un test col suo
+  ramo di controllo — con la metà di teoria non piazzata l'unione ha davvero il
+  buco e il criterio dice 180.
+
+  Suite: **930 verdi, 17 skip, 945 s** (ondata 5: 910 / 546 s). ⚠ I quattro
+  minuti in più non sono la seconda firma — il modello cresce dello 0,6 % —
+  ma i solve che le due nuove prove **devono** fare: sei verdetti
+  `INFEASIBLE`/`OPTIMAL` sulle quote e due catene di qualità intere.
+
 - **2026-08-30 (notte) — L'Alighieri, ondata 5: le risorse che mancavano, e i due modi di provare una riga** —
   Le **sei righe di indisponibilità** nei tre livelli, i **tetti di peso
   didattico**, il **tecnico di laboratorio** e i **quattro carrelli di
