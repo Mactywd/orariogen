@@ -15,6 +15,49 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 (notte) — L'Alighieri, ondata 1: l'anagrafica, e la sonda che diventa un cricchetto** —
+  Il primo dei sette pezzi della spec approvata. `data/liceo-alighieri/` (sette
+  file di markdown) e `tests/alighieri.py`: **12 classi** su due indirizzi
+  (A scientifico, B classico, C biennio scientifico in succursale) e **due sedi**,
+  **21 cattedre** tutte a `+/- = 0`, **345 ore-classe**, **323 attività**,
+  griglia **5 × 8** con la pausa mensa fra la quinta e la sesta fascia.
+
+  🔑 **Le otto fasce e le due sedi non sono dimensionamento, sono le due cose
+  che il Fermi non può misurare.** `max_hours` con tetto mattutino diverso da
+  quello giornaliero, `max_half_days` e le mezze giornate libere non hanno
+  soggetto su una griglia senza pomeriggio; e `structural:site_transition`
+  legge `Activity.site`, di cui il Fermi ha **zero** righe. Con l'ondata 1 quel
+  builder posta **1330** constraint, e `structural:grid` toglie **110** celle —
+  i 22 blocchi lunghi che non attraversano la mensa.
+
+  **La sonda è diventata un test** (`tests/sonda.py`,
+  `tests/test_alighieri_sonda.py`), ed è la parte che conta più dei dati:
+  l'asserzione è l'**insieme** dei builder attivi, non un numero, perché
+  `>= n` lascerebbe passare l'ondata che aggiunge una tabella senza svegliare
+  il builder che dovrebbe leggerla. Oggi **4 su 27** — occupation, room_pool,
+  site_transition, grid — contro i **3** del Fermi, che un secondo test fissa
+  accanto perché quella riga di `CLAUDE.md` non torni a essere un elenco.
+  ⚠ E scrivendola si è ripreso l'inciampo della prima stesura: `all_builders()`
+  importa i builder **pigramente**, quindi leggere `BUILDERS` prima di
+  chiamarlo dà un registro vuoto — il primo test a girare falliva e il secondo
+  passava. È il motivo per cui la sonda è un modulo con un import esplicito e
+  non uno script.
+
+  Misure: modello di fase 1 a **13 583 variabili e 5 493 constraint**, fase 1
+  `OPTIMAL` con **zero scarti** in ~2,5 s, fase 2 **66 richieste su 66** senza
+  rinunce in ~0,2 s, `analyze_capacity` pulita.
+
+  ⚠ **Ciò che l'ondata 1 dichiara di non avere.** Il criterio di §4 — *stretto
+  ma risolvibile*, cioè `OPTIMAL` a zero scarti ma con gli scarti che compaiono
+  togliendo una sola aula o un solo docente — **non è verificato, e non lo
+  sarà** finché non ci sono righe di vincolo: senza, la tensione non c'è, e
+  affermarla sarebbe il primo modo di aggiustare il banco. Sta scritto in
+  `esiti-attesi.md` come atteso dell'ondata 7, non come esito di questa.
+
+  ⚠ E `structural:unavailability` — l'unico dei tre builder attivi del Fermi
+  che l'Alighieri **non** esercita — resta inerte: le indisponibilità sono
+  righe di vincolo, e arrivano con l'asse Cardinalità.
+
 - **2026-08-30 (tarda sera) — La spec dell'Alighieri: il Fermi misura il dataset, non il modello** —
   Conseguenza diretta della prova del prodotto qui sopra, e con due misure che
   hanno smentito quello che il progetto credeva di sé.

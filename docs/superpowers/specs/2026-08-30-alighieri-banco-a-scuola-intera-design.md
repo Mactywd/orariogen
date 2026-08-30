@@ -1,7 +1,7 @@
 # L'Alighieri: il banco a scuola intera
 
 **Data**: 2026-08-30
-**Stato**: proposta, da approvare
+**Stato**: approvata — **ondata 1 di 7 fatta** il 2026-08-30
 **Apre**: la copertura del modello a scala reale — **ventiquattro builder su
 ventisette** non hanno mai visto un dataset
 
@@ -142,7 +142,7 @@ L'esito atteso si scrive **qui, prima** di lanciare il solver (§6).
 | `free_guaranteed` | un docente con 1 giorno libero garantito | un giorno interamente vuoto, **scelto dal solver** |
 | `max_half_days` | una classe con tetto di mezze giornate | pomeriggi compattati |
 | `max_site_changes` | un docente su due sedi, 1 cambio/giorno | vedi §3.4 |
-| `max_gap_hours` | un docente con D.T.B. stretto | l'unica già esercitata dal Fermi (via `InstituteSettings`) |
+| `max_gap_hours` | un docente con D.T.B. stretto | ⚠ questa riga diceva «l'unica già esercitata dal Fermi (via `InstituteSettings`)», e §2.1 la smentisce: il builder legge `row.params["max_gap_minutes"]` da righe `ResourceTimeConstraint`, di cui il Fermi ha **zero** |
 
 ### 3.2 Asse Relazione — `SubjectConstraint` (13 tipi)
 
@@ -210,7 +210,7 @@ nella seconda fase, e ADR-019 — *dentro una fascia non si viaggia*.
 | Docenti | ~22 | qualcuno a tempo parziale, qualcuno su due sedi |
 | Sedi | 2 | il minimo per avere un cambio |
 | Griglia | 5 × 8, con pausa mensa | 8 fasce danno il pomeriggio, che serve a `max_hours` e `max_half_days` |
-| Attività | ~330 | scala confrontabile col Fermi (284) |
+| Attività | ~330 → **323 realizzate** | scala confrontabile col Fermi (284) |
 | Firme di settimana | almeno una **quindicinale** | vedi §4.1 |
 
 🔑 **Stretto ma risolvibile.** Le misure interessanti stanno vicino al bordo: un
@@ -314,9 +314,19 @@ Il dataset è progettato perché ogni comando abbia qualcosa di vero da dire:
 
 ## 9. Ondate
 
-1. **L'anagrafica**: sedi, classi, indirizzi, docenti, materie, aule, piani di
-   studi, servizi; la quadratura per materia × piano verificata come sul Fermi.
-   `tests/alighieri.py` costruisce, e la trascrizione è il primo test.
+1. ✅ **L'anagrafica** (2026-08-30): sedi, classi, indirizzi, docenti, materie,
+   aule, piani di studi, servizi; la quadratura per materia × piano verificata
+   come sul Fermi. `data/liceo-alighieri/` (sette file) e `tests/alighieri.py`.
+   **12 classi, 2 indirizzi, 2 sedi, 21 cattedre a `+/- = 0`, 345 ore-classe,
+   323 attività**, griglia 5 × 8 con la mensa. Fase 1 `OPTIMAL` a zero scarti
+   (13 583 var, 5 493 constraint, ~2,5 s), fase 2 66 su 66 senza rinunce.
+   🔑 E la **sonda di §6 è già un test** (`tests/sonda.py`,
+   `tests/test_alighieri_sonda.py`) invece di aspettare l'ondata 7: l'insieme
+   dei builder attivi è un cricchetto che ogni ondata deve allargare — **4 su
+   27** oggi contro i 3 del Fermi. Anticiparlo costa nulla e toglie il modo in
+   cui una famiglia entra «presente ma non esercitata».
+   ⚠ Non verificato, e dichiarato tale: il «stretto ma risolvibile» di §4.
+   Senza righe di vincolo la tensione non esiste.
 2. **Gli sdoppiamenti** (§3.3): partizioni, parti, IRC/alternativa,
    raggruppamento trasversale. È la voce ✅ di scope v1 senza dataset, quindi
    viene prima dei vincoli.

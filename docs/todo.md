@@ -39,7 +39,9 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > ⚠ **E provando il prodotto invece dei test si è visto che il Fermi misura
 > pochissimo**: tre builder su ventisette fanno qualcosa, tredici tabelle su
 > trentatré sono vuote.
-> È L4, ed è ciò che va fatto prima di D2.
+> È L4, ed è ciò che va fatto prima di D2. **Ondata 1 su 7 fatta** il
+> 2026-08-30: l'anagrafica dell'Alighieri, e la sonda che misura la copertura
+> è diventata un test.
 
 ---
 
@@ -251,7 +253,18 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
       è la **verifica per mutazione**: togliere la riga di una famiglia deve
       cambiare l'orario, o quella famiglia è presente e non esercitata.
       Spec: [2026-08-30-alighieri-banco-a-scuola-intera-design.md](superpowers/specs/2026-08-30-alighieri-banco-a-scuola-intera-design.md)
-      — **da approvare**, sette ondate.
+      — approvata, sette ondate.
+      **Ondata 1 fatta il 2026-08-30**: l'anagrafica —
+      [`data/liceo-alighieri/`](../data/liceo-alighieri/) e
+      [`tests/alighieri.py`](../tests/alighieri.py). 12 classi su 2 indirizzi e
+      2 sedi, 21 cattedre a `+/- = 0`, 345 ore-classe, 323 attività, griglia
+      5×8 con la mensa. Due fasi `OPTIMAL` senza scarti né rinunce.
+      🔑 E la **sonda è ora un test** ([`tests/sonda.py`](../tests/sonda.py)):
+      l'insieme dei builder attivi è un cricchetto che ogni ondata deve
+      allargare — **4 su 27** oggi, contro i 3 del Fermi, e 27 su 27 è il
+      criterio di accettazione dell'ondata 7.
+      Restano le ondate 2–7: sdoppiamenti, asse Cardinalità, asse Relazione,
+      sedi e peso didattico, quote e qualità, accettazione.
 
 - [x] **L1 — il buco misurato sulla mezza giornata.** Il perimetro è ora un
       parametro d'istituto, separato per classi e per docenti
