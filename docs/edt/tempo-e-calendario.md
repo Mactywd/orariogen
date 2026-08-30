@@ -74,9 +74,9 @@ bisogna dire **da quale capo**, e il perché è l'allineamento — il rango di u
 fascia esistente cambia solo se se ne aggiunge una *prima* di essa.
 
 ⚠ Ma **ai bordi non è l'unico modo**: il pannello `Parametri → Istituto → Orari`
-porta un pulsante `Inserisci / cancella una fascia oraria` (👁 2026-08-29), che è
-un'operazione posizionale. Le due strade coesistono, e quale sia la differenza —
-se non che una è di conversione e l'altra di manutenzione — **non è osservato**.
+porta un pulsante `Inserisci / cancella una fascia oraria`, che è un'operazione
+posizionale. Le due strade coesistono, e la differenza è ora osservata — §
+*Inserisci / cancella una fascia oraria* qui sotto.
 
 ⚠ **Il ciclo pluri-settimanale non è raggiungibile da questa finestra.** I giorni
 mostrati sono i sette della settimana e nient'altro; `NombreJoursParCycle > 7` — che
@@ -327,6 +327,99 @@ generatore automatico è `primo_orario + rango × (durata_reale + durata_fra)`, 
 tutto il resto è personalizzazione. L'export iCal fa la cosa giusta a leggere le
 etichette invece di `slot_minutes` — con `Durata tra le fasce orarie > 0` le due
 grandezze **divergono per costruzione**, non per un caso limite.
+
+#### 👁 La radio non filtra: commuta il pannello
+
+Osservato il 2026-08-30. Passando a `● Fasce orarie` il riquadro `Creazione
+automatica degli orari` **sparisce del tutto**, e restano le sole anteprime, con
+i ranghi `1…10` al posto degli orari; il pulsante in fondo diventa
+`Personalizza le fasce orarie`.
+
+🔑 Dice una cosa che il solo elenco dei campi non diceva: **le etichette
+ordinali non si generano.** Non c'è niente da calcolare, perché *sono* i ranghi;
+l'unica operazione è rinominarle a mano. Il generatore esiste solo per
+l'orologio. È la distinzione fra le due nozioni di «ora» — la fascia di calcolo
+e l'orologio, che l'export iCal ha incontrato dal lato del codice — messa in UI
+come **due pulsanti radio**.
+
+#### 👁 L'orologio conferma i ranghi, per la terza volta
+
+Con `Primo orario 08:00`, `Durata reale 60`, `Durata tra le fasce 0`, i dieci
+ranghi della demo cadono così (👁 2026-08-30):
+
+| Rango | Orologio | |
+|---|---|---|
+| 1–6 | 08:00 → 14:00 | mattina (`M1…M6`) |
+| **7** | **14:00 → 15:00** | la **pausa** di mezza giornata, che è una fascia |
+| 8–10 | 15:00 → 18:00 | pomeriggio (`P1…P3`) |
+
+Cioè **6 + 1 + 3 = 10** letto sull'orologio invece che sui tre conteggi del
+passo 1: due strade indipendenti allo stesso numero.
+
+E gli intervalli: `09:50–10:00` è la coda del rango **2**, `11:50–12:00` la coda
+del rango **4**. Sono i ranghi 2 e 4 della tabella `RECREATION` del binario.
+Con la colonna `Nr. fasce orarie dopo l'ultimo intervallo` (2 e 2, che sono i
+salti) fanno **tre letture indipendenti** che combaciano sulla stessa
+trasformazione. Conferma anche, da un'altra angolazione, che i dieci minuti
+sono ritagliati *dentro* la fascia precedente e non allungano la giornata.
+
+⚠ **Un'etichetta che non torna.** Il secondo intervallo si chiama `Intervallo
+del pomeriggio` ma sta alle **11:50**, cioè *prima* della pausa delle 14:00 —
+quindi nella mezza giornata del mattino. O i due nomi sono posizionali
+(«primo» e «secondo») con un'etichetta fuorviante, o l'ingranaggio ⚙ accanto a
+`Intervallo` porta una configurazione per mezza giornata che non abbiamo
+aperto. **Non osservato**, e vale un'occhiata prima di dedurne qualcosa: è lo
+stesso genere di dettaglio che aveva fatto leggere il rango vuoto 6 come «la
+mensa».
+
+### 👁 `Inserisci / cancella una fascia oraria` — è una migrazione, non un parametro
+
+Osservata il 2026-08-30, dal passo 3. La finestra chiude il residuo aperto il
+2026-08-29: le due strade per cambiare il numero di fasce **non sono due modi
+di fare la stessa cosa**.
+
+| Campo | Valore |
+|---|---|
+| radio | `● Aggiungi una fascia oraria` · `○ Cancella una fascia oraria` |
+| `A partire da` | tendina |
+| `Durata di` | tendina |
+
+E due frasi stampate dentro la finestra, che sono il contenuto vero:
+
+> *«Le attività, gli intervalli e i limiti della mezza-giornata collocati dopo …
+> verranno scalati di: …»*
+
+> *«Qualunque sia la durata aggiunta o rimossa, EDT visualizzerà sempre un
+> numero intero di lezioni»*
+
+🔑 **L'unità non è la fascia: è la durata.** Il pulsante si chiama «una fascia
+oraria», ma il campo dice `Durata di` e la nota in corsivo spiega perché — si
+inserisce **tempo**, e il numero di lezioni è ciò che EDT ne *deriva*,
+arrotondando all'intero. Il nome del comando mente sull'unità.
+
+🔑 **E l'operazione riallinea, dichiarandolo.** Ciò che sta *dopo* il punto di
+inserimento viene **scalato**, e la frase elenca esattamente tre cose:
+**attività**, **intervalli**, **limiti della mezza giornata**. È la risposta
+alla domanda che il residuo poneva — sì, si può inserire in mezzo, e sì, i
+ranghi successivi slittano.
+
+**La differenza fra le due strade, finalmente:**
+
+| | `File → Strumenti → Cambia i parametri della griglia oraria` | `Parametri → Istituto → Orari` |
+|---|---|---|
+| unità | fasce (*N* fasce) | **durata** (minuti) |
+| posizione | solo a un'**estremità** della giornata | **qualunque**, `A partire da` |
+| effetto su ciò che esiste | nessuno se si aggiunge in coda | **scala** attività, intervalli e limiti di mezza giornata |
+| natura | **conversione** della griglia | **manutenzione** di un orario esistente |
+
+**Per noi.** Nessuna delle due operazioni esiste nel nostro modello — la griglia
+è un dato, non qualcosa che si modifica a orario fatto — e resta fuori scope.
+Ma se un giorno si farà, questa finestra ne dà la semantica e la mappa è
+uno-a-uno con tre campi che abbiamo già: `Placement.start_slot`, il
+`boundary_slot` degli intervalli e il limite di mezza giornata della griglia.
+Cioè **è una migrazione di dati, non un cambio di configurazione**, ed è la
+ragione per cui EDT la tiene in un pannello diverso da quello che converte la
+griglia.
 
 ## Il calendario
 

@@ -139,14 +139,26 @@ delle fasce orarie` e `Durata tra le fasce orarie` — la *durata reale* è un
 campo **diverso** dalla durata della fascia di calcolo, e sta in un'altra
 finestra.
 
-Restano due residui, entrambi minori:
+👁 **Il primo dei due residui è chiuso il 2026-08-30**: il pulsante
+`Inserisci / cancella una fascia oraria` è **una migrazione, non un
+parametro**. L'unità non è la fascia ma la **durata** (`Durata di`, e *«EDT
+visualizzerà sempre un numero intero di lezioni»*), la posizione è libera
+(`A partire da`), e ciò che sta dopo viene **scalato** — la finestra elenca
+attività, intervalli e limiti della mezza giornata. Le due strade sono quindi
+davvero diverse: una **converte** la griglia ai bordi, l'altra **manutiene** un
+orario esistente da qualunque punto. → [tempo-e-calendario.md](edt/tempo-e-calendario.md)
 
-1. Il pulsante **`Inserisci / cancella una fascia oraria`**, che è
-   un'operazione **posizionale** e convive con l'aggiungi/togli-ai-bordi della
-   finestra di conversione. Quale sia la differenza non è osservato.
-2. Dove si imposta il **`Ciclo personalizzato`** (`NombreJoursParCycle > 7`):
-   nella finestra di conversione **non c'è**, quindi vive nel solo wizard di
-   creazione — da confermare.
+Resta **un** residuo: dove si imposta il **`Ciclo personalizzato`**
+(`NombreJoursParCycle > 7`). Nella finestra di conversione **non c'è**, quindi
+vive nel solo wizard di creazione — da confermare.
+
+👁 Nello stesso giro, due cose in più sul passo 3: la radio
+`Orari / Fasce orarie` **commuta il pannello** invece di filtrarlo (in modo
+`Fasce orarie` il generatore sparisce, perché le etichette ordinali *sono* i
+ranghi e non si generano), e l'orologio conferma per la **terza** via i ranghi
+2 e 4 degli intervalli e il 6+1+3 della mezza giornata. ⚠ E ha aperto una
+minuzia: `Intervallo del pomeriggio` sta alle 11:50, cioè nella mezza giornata
+del mattino — o il nome è posizionale, o l'ingranaggio ⚙ nasconde altro.
 
 ### O3 🧪 La semantica del monte ore tripartito — **esperimento, non osservazione**
 

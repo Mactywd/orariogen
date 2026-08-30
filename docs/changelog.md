@@ -15,6 +15,65 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-30 — Tre schermate del passo 3, e un pulsante che mentiva sull'unità** —
+  Chiuso il primo dei due residui di O2. Il pulsante `Inserisci / cancella una
+  fascia oraria` del pannello `Parametri → Istituto → Orari` era rimasto aperto
+  come «operazione posizionale, differenza non osservata». La finestra lo
+  spiega, e non è quello che il nome lascia credere:
+
+  - 🔑 **l'unità non è la fascia, è la durata.** Il campo si chiama `Durata di`,
+    non «numero di fasce», e la nota in corsivo dice perché: *«Qualunque sia la
+    durata aggiunta o rimossa, EDT visualizzerà sempre un numero intero di
+    lezioni»*. Si inserisce **tempo**; il numero di lezioni è ciò che EDT ne
+    deriva. Il nome del comando mente sull'unità;
+  - 🔑 **e l'operazione riallinea, dichiarandolo**: *«Le attività, gli intervalli
+    e i limiti della mezza-giornata collocati dopo … verranno scalati di: …»*.
+    Sì, si inserisce in mezzo; sì, i ranghi successivi slittano; e le tre cose
+    che slittano sono nominate una per una.
+
+  Quindi le due strade non erano due modi di fare la stessa cosa: la finestra di
+  conversione della griglia aggiunge o toglie **fasce** a un'**estremità**,
+  questa aggiunge o toglie **durata** in una **posizione qualsiasi** e scala ciò
+  che segue. Una **converte** la griglia, l'altra **manutiene** un orario
+  esistente — ed è per questo che stanno in due pannelli diversi. ⚠ Per noi
+  resta fuori scope, ma la mappa è uno-a-uno con tre campi che abbiamo già
+  (`Placement.start_slot`, il `boundary_slot` degli intervalli, il limite di
+  mezza giornata della griglia): se un giorno si farà, è una **migrazione di
+  dati**, non un cambio di configurazione.
+
+  Due cose in più dallo stesso pannello, entrambe conferme e una utile:
+
+  - la radio `Definizione delle etichette relative a: Orari | Fasce orarie`
+    **commuta il pannello**, non lo filtra: in modo `Fasce orarie` il riquadro
+    `Creazione automatica degli orari` sparisce del tutto e restano i ranghi
+    `1…10`. 🔑 Le etichette ordinali **non si generano** — *sono* i ranghi — e
+    l'unica operazione è rinominarle. Il generatore esiste solo per l'orologio:
+    è la distinzione fra le due nozioni di «ora» che l'export iCal aveva
+    incontrato dal lato del codice, qui come due pulsanti radio;
+  - l'orologio conferma i ranghi per la **terza** via indipendente. Con
+    `08:00 + 60 + 0`, la pausa di mezza giornata (`14:00–15:00`) è il rango 7 di
+    10 — cioè **6 + 1 + 3** letto sull'orologio invece che sui conteggi — e i
+    due intervalli (`09:50–10:00`, `11:50–12:00`) sono le code dei ranghi **2** e
+    **4**, che sono i ranghi di `RECREATION` nel binario e i salti `2` e `2`
+    della colonna in UI.
+
+  ⚠ Aperta una minuzia: `Intervallo del pomeriggio` sta alle **11:50**, cioè
+  *prima* della pausa delle 14:00 e quindi nella mezza giornata del mattino. O i
+  nomi sono posizionali, o l'ingranaggio ⚙ porta una configurazione per mezza
+  giornata che non abbiamo aperto. Non dedurne niente prima di guardare: è lo
+  stesso genere di dettaglio che aveva fatto leggere il rango vuoto 6 come «la
+  mensa».
+
+  📖 **E trovato dove sta `Assegna le aule alle attività`**, che era il
+  prerequisito bloccante di O1: non è una voce di menu ma un **pulsante dentro
+  una finestra** — `Orario → Aule → Gestione del gruppo di aule`, si seleziona
+  un gruppo, si preme il pulsante. Ne discende perché il menu `Elabora`,
+  trascritto per intero il 2026-07-26, non nomina mai le aule: l'assegnazione
+  non passa di lì. `Gestione del gruppo di aule` era già fra le stringhe
+  estratte e non era stata collegata al comando. La guida elenca anche tre
+  precondizioni, e la terza conferma alla lettera l'ordine delle due fasi:
+  *«gli orari chiusi con tutte le attività piazzate»*.
+
 - **2026-08-29 (sera) — D3: la fase 1 impara a contare le aule, e la risposta era già nel repo** —
   D3 chiedeva se accettare le rinunce della seconda fase come conseguenza
   dichiarata o insegnare al piazzamento a contare le aule. La domanda sembrava

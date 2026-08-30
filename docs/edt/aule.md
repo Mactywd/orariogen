@@ -231,6 +231,20 @@ E l'ottimizzatore lavora **su un gruppo di aule alla volta**, non globalmente:
 *«Solamente i gruppi di aule interamente assegnati possono essere ottimizzati»*,
 e la ripartizione va lanciata prima (`Assegna le aule alle attività`).
 
+📖 **Dove sta quel comando**, che nelle stringhe non si vedeva: non è una voce
+di menu ma un **pulsante dentro una finestra**, e il percorso è
+**`Orario → Aule → Gestione del gruppo di aule`** → si seleziona un gruppo
+dall'elenco → `Assegna le aule alle attività`. Ne discende perché il menu
+`Elabora`, trascritto per intero il 2026-07-26, non ha nessuna voce sulle aule:
+l'assegnazione non passa da lì. `Gestione del gruppo di aule` era già fra le
+stringhe (`Gestion du groupe de salles`) e non era stata collegata.
+
+📖 La guida elenca anche **tre precondizioni**, che sono la conferma dell'ordine
+delle fasi: le aule assegnate ai gruppi, i gruppi assegnati alle attività, e
+*«gli orari chiusi con tutte le attività piazzate»*. Cioè la ripartizione delle
+aule si lancia **su un orario finito** — la seconda fase, alla lettera.
+→ [guida ufficiale, scheda 54-244](https://docs.index-education.com/docs_it/it-edt-supporto-scheda-54-244-assegnare-le-aule-alle-attivita.php)
+
 La nostra seconda fase (`domain/solver/rooms.py`) ha **due** livelli — minuti
 senza aula, poi i cambi rispetto alla ripartizione precedente — e non implementa
 nessuno dei cinque criteri di EDT. **Resta da osservare in UI** solo quali siano
