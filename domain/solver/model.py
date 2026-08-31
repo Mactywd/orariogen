@@ -115,7 +115,14 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
                              ignora_opzionali=ignora_opzionali, pinned=pinned)
     catena = livelli(ctx, model, arbitrato)
 
+    atterraggi = {}
+
     def estrai(solver):
+        # ⚠ Si fotografa **insieme** ai piazzamenti, e per la stessa ragione:
+        # l'ultimo livello concluso è lo stato che verrà restituito, e leggere
+        # i tetti da un altro solver darebbe numeri di un orario diverso.
+        atterraggi.update({nome: solver.Value(var)
+                           for nome, var in ctx.arbitraggi_var.items()})
         return {aid: (day, slot) for (aid, day, slot), var in ctx.x.items()
                 if solver.Value(var)}
 
@@ -152,7 +159,8 @@ def solve(schedule, extraction=None, time_limit=None, allow_unplaced=True,
             "minuti_scartati": sum(ctx.activities[aid].duration_minutes
                                    for aid in unplaced),
             "livelli": tuple(e.as_dict() for e in esiti),
-            "arbitraggi": tuple(ctx.arbitraggi),
+            "arbitraggi": tuple(dict(a, valore=atterraggi.get(a["nome"]))
+                                for a in ctx.arbitraggi),
             "pin_fuori_dominio": tuple(ctx.pin_fuori_dominio),
             "lavoratori": workers,
             "variabili": len(proto.variables),

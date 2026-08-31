@@ -46,6 +46,24 @@ class InstituteSettings(models.Model):
     gaps_split_at_lunch_teachers = models.BooleanField(default=True)
     gaps_split_at_lunch_classes = models.BooleanField(default=True)
 
+    # I giorni che **non contano** come giornata (o mezza giornata) libera. In
+    # EDT è una casella per giorno nella stessa finestra — «I giorni spuntati
+    # saranno ignorati durante il calcolo delle giornate libere».
+    #
+    # ⚠ **Non è la maschera dei giorni lavorativi**, ed è tutta la voce: il
+    # giorno resta in griglia e ci si lavora, semplicemente non vale come
+    # giornata libera. Un sabato in cui nessuno ha lezione non regala a ogni
+    # docente il suo giorno libero garantito.
+    #
+    # Maschera a bit sull'indice di giorno del ciclo, come `Activity.week_mask`
+    # lo è sulle settimane: il bit `d` acceso esenta il giorno `d`. Default 0,
+    # cioè lo status quo — tutti i giorni contano.
+    free_day_exempt_mask = models.PositiveSmallIntegerField(default=0)
+
+    def counts_as_free(self, day: int) -> bool:
+        """Il giorno `day` può valere come giornata (o mezza giornata) libera?"""
+        return not (self.free_day_exempt_mask >> day) & 1
+
     #: Le popolazioni per cui EDT ha la casella. Le altre risorse non ne hanno
     #: una da copiare: restano allo status quo.
     _SPLIT_BY_KIND = {

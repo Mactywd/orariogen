@@ -38,10 +38,55 @@ class Activity(models.Model):
     )  # spezzamento padre/figlio (TypeParenteCours)
     alignment_ident = models.CharField(max_length=50, blank=True)  # stesso ident = attività complessa
     week_mask = models.PositiveBigIntegerField()
+    #: La relazione *sostituisce* di ADR-014 (in EDT `RELATIONCOURSSUBSTITUT`,
+    #: 161 record verificati): questa riga rimpiazza quella annuale nelle
+    #: settimane della **propria** maschera. È anche il campo `natura` che
+    #: quell'ADR chiedeva — un'attività è un sostituto se lo dichiara — e la
+    #: *soppressione dell'occorrenza* originale ne discende invece di essere
+    #: una seconda tabella: una sola verità, e nessun modo di scriverne due
+    #: che si contraddicono.
+    #: ⚠ Non è la cancellazione di EDT (`ANNULATIONCOURS`), che è un'ora **non
+    #: tenuta** e non ha un sostituto: quella resta fuori.
+    substitutes = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE,
+        related_name="substituted_by")
 
     respects_breaks = models.BooleanField(default=False)
     priority = models.BooleanField(default=False)
     immobility = models.CharField(max_length=20, choices=Immobility.choices, default=Immobility.NONE)
+
+
+def effective_week_masks(pairs=None):
+    """`{id attività: maschera effettiva}` — la maschera dichiarata **meno** le
+    settimane in cui un sostituto la rimpiazza.
+
+    🔑 È l'altra metà di ADR-014, e senza di essa quella decisione è mezza: il
+    sostituto ha un bit solo e compare da sé, ma l'originale resta annuale
+    (161/161 nella base di EDT), quindi le due ore si sovrappongono nella
+    settimana sostituita — due lezioni nel calendario del docente, e per
+    l'analisi un conflitto di occupazione su una classe che in realtà ha
+    un'ora sola.
+
+    ⚠ **Vale ovunque si legga una maschera**, non solo nell'export: il punto
+    non è che il calendario mostri una cosa e i checker un'altra, è che
+    l'orario di quella settimana *è* uno solo. I quattro lettori — le firme di
+    settimana, lo stato, la capienza e l'iCal — passano tutti di qui.
+
+    `pairs` sono le coppie `(id, maschera)` già in mano al chiamante, così chi
+    ha già filtrato (per esempio le sospese) non rifà la query."""
+    if pairs is None:
+        pairs = Activity.objects.values_list("id", "week_mask")
+    coperte = {}
+    # ⚠ Un sostituto **sospeso** non sopprime niente: se l'ora di rimpiazzo non
+    # si tiene, quella che si tiene è di nuovo l'originale. È la stessa
+    # esclusione che ogni lettore di maschere applica di suo, e va ripetuta qui
+    # perché questa query non passa dalla loro.
+    for original, mask in (Activity.objects
+                           .filter(substitutes__isnull=False)
+                           .exclude(immobility=Activity.Immobility.SUSPENDED)
+                           .values_list("substitutes_id", "week_mask")):
+        coperte[original] = coperte.get(original, 0) | mask
+    return {i: m & ~coperte.get(i, 0) for i, m in pairs}
 
 
 class ActivityMaterialRequirement(models.Model):

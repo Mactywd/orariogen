@@ -88,7 +88,16 @@ def mezze_giornate_libere(ctx, model, chiavi):
     deliberata: quel checker conta le mezze libere **solo sui giorni che
     lavorano**, perché il vincolo garantisce tempo libero *dentro* la settimana
     lavorativa. Il criterio invece ordina orari fra loro, e una giornata intera
-    libera è il caso migliore — non un caso da non contare."""
+    libera è il caso migliore — non un caso da non contare.
+
+    ⚠ **E per la stessa ragione i giorni esenti non si filtrano qui**, mentre
+    il checker e il builder li filtrano. `free_day_exempt_mask` dice *«questo
+    giorno non conta come giornata libera»*, cioè parla di una **garanzia**; il
+    criterio non conta giornate libere, minimizza mezze giornate **occupate**.
+    Filtrarlo trasformerebbe «occupa meno» in «occupa altrove», cioè
+    spingerebbe il lavoro *sul* giorno esente — un'istruzione che la casella
+    non dà. Se un giorno debba anche essere preferito come discarica è una
+    domanda diversa, e nessuna osservazione di EDT la risponde."""
     v, per_firma = ctx.vocab, []
     for rep in firme(ctx, chiavi):
         termini = [v.half_active(key, day, half, signature=rep)

@@ -9,7 +9,7 @@ import datetime as dt
 
 import pytest
 
-from domain import ical
+from domain import ical, weeks
 from domain.ical import LabelsMancanti, esporta, occorrenze
 from domain.models import Activity, Holiday, Room, SlotLabel
 from tests.analysis_helpers import make_activity, mini_school, place
@@ -328,3 +328,108 @@ def test_fermi_misurato():
     blocco.save()
     _, spezzato, _ = esporta(schedule, dtstamp=QUANDO)
     assert spezzato == eventi_n + fermi.WEEKS_IN_YEAR
+
+
+# ── La sostituzione oscura l'originale ──────────────────────────────────────
+
+
+def _sostituzione():
+    """L'orario minimo di ADR-014: un'ora annuale e un sostituto sulla
+    **stessa** cella con la maschera di una settimana sola. È la forma
+    verificata sui 161 record di EDT — stessa classe, stessa aula, cambia il
+    docente — e l'originale resta annuale, che è la parte che questo test
+    esiste per rendere innocua."""
+    env = mini_school()
+    etichette(env["grid"])
+    annuale = make_activity(env["subject"], teachers=[env["teacher"]],
+                            classes=[env["klass"]])
+    place(env["schedule"], annuale, day=0, slot=0)
+    supplente = _docente_supplente()
+    sostituto = make_activity(env["subject"], teachers=[supplente],
+                              classes=[env["klass"]],
+                              mask=weeks.single_week(2))
+    place(env["schedule"], sostituto, day=0, slot=0)
+    return env, annuale, sostituto
+
+
+def _docente_supplente():
+    from domain.models import Teacher
+    return Teacher.objects.create(name="Supplente", last_name="Supplente",
+                                  first_name="Ada")
+
+
+def _settimane_di(occ, activity):
+    return sorted({(o.date - dt.date(2026, 9, 14)).days // 7
+                   for o in occ if o.activity_id == activity.pk})
+
+
+def test_la_sostituzione_oscura_l_originale():
+    """Il debito chiuso, **col suo ramo di controllo**: senza la relazione le
+    due ore compaiono entrambe nella settimana 2 — che è il difetto — e con la
+    relazione l'annuale salta quella settimana e basta quella."""
+    env, annuale, sostituto = _sostituzione()
+
+    prima, _ = occorrenze(env["schedule"])
+    assert _settimane_di(prima, annuale) == [0, 1, 2, 3]
+    assert _settimane_di(prima, sostituto) == [2]
+
+    sostituto.substitutes = annuale
+    sostituto.save()
+    dopo, _ = occorrenze(env["schedule"])
+    assert _settimane_di(dopo, annuale) == [0, 1, 3]
+    assert _settimane_di(dopo, sostituto) == [2]
+
+
+def test_la_soppressione_e_per_settimana_non_per_attivita():
+    """⚠ La distinzione che il campo deve reggere: `substitutes` non cancella
+    l'originale, gli toglie **le settimane del sostituto**. Due sostituti su
+    due settimane diverse ne tolgono due, e ciò che resta è ancora l'ora
+    annuale — non un residuo da ricostruire altrove."""
+    env, annuale, sostituto = _sostituzione()
+    sostituto.substitutes = annuale
+    sostituto.save()
+    altro = make_activity(env["subject"], teachers=[_docente_supplente()],
+                          classes=[env["klass"]], mask=weeks.single_week(0))
+    altro.substitutes = annuale
+    altro.save()
+    place(env["schedule"], altro, day=0, slot=0)
+
+    occ, _ = occorrenze(env["schedule"])
+    assert _settimane_di(occ, annuale) == [1, 3]
+
+
+def test_la_sostituzione_non_e_un_conflitto_di_occupazione():
+    """🔑 La ragione per cui il filtro non vive nell'export. Sostituto e
+    originale stanno sulla **stessa** cella della stessa classe: senza la
+    relazione quella settimana ha due ore dove la classe ne ha una, e
+    `check_schedule` lo dice — giustamente, perché è ciò che i dati
+    affermavano. Con la relazione il conflitto sparisce perché sparisce il
+    fatto, non perché qualcuno lo abbia messo a tacere."""
+    from domain.analysis.conformity import check_schedule
+    from domain.analysis.findings import Severity
+    env, annuale, sostituto = _sostituzione()
+
+    prima = [f for f in check_schedule(env["schedule"])
+             if f.severity == Severity.HARD and f.code == "resource_occupied"]
+    assert prima, [f.code for f in check_schedule(env["schedule"])]
+
+    sostituto.substitutes = annuale
+    sostituto.save()
+    dopo = [f for f in check_schedule(env["schedule"])
+            if f.severity == Severity.HARD and f.code == "resource_occupied"]
+    assert dopo == []
+
+
+def test_un_sostituto_sospeso_non_sopprime_niente():
+    """⚠ La sospensione è l'ora che **non si tiene**: se non si tiene il
+    rimpiazzo, quella che si tiene è di nuovo l'originale. Senza questa
+    esclusione la settimana 2 resterebbe vuota per entrambi — il peggiore dei
+    due esiti, perché toglie un'ora invece di sceglierne una."""
+    env, annuale, sostituto = _sostituzione()
+    sostituto.substitutes = annuale
+    sostituto.immobility = Activity.Immobility.SUSPENDED
+    sostituto.save()
+
+    occ, _ = occorrenze(env["schedule"])
+    assert _settimane_di(occ, annuale) == [0, 1, 2, 3]
+    assert _settimane_di(occ, sostituto) == []

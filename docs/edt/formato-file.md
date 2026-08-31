@@ -133,6 +133,12 @@ Cioè una supplenza è: *la stessa lezione, della stessa classe, nella stessa au
 in una sola settimana, con un docente diverso* — più `ANNULATIONCOURS`, che
 sopprime l'occorrenza annuale sottostante (112 dei 122 originali).
 
+⚠ **Quel 112 su 122 è la ragione per cui da noi la soppressione si *deriva* e
+non è una tabella.** In EDT le due cose sono indipendenti, e dieci originali
+hanno un sostituto senza soppressione: non sappiamo cosa siano, e derivare li
+rende irrappresentabili. Scelta dichiarata nell'emendamento del 2026-08-31 ad
+[ADR-014](../decisioni.md), ed è lì che si riapre se quei dieci si osservano.
+
 `REMPLACEMENTLONG` (3 record) è la sola **testata**, decodificata come
 `(ident ABSENCERESSOURCE, docente supplente, data inizio, data fine)` e verificata:
 le assenze 407–415 del docente **37**, supplente **100** — gli stessi 37→100 dei 20

@@ -16,6 +16,14 @@ dice l'orario; che debba esserne una, lo dice il dato. Senza il dato restano
 due scostamenti su ogni classe italiana, ed è il comportamento giusto: non è
 deducibile da nessuna proprietà dell'orario.
 
+🔑 **E le alternative sono un caso dell'opzione, non l'unico** (ADR-026). Un
+gruppo dice *«di queste se ne segue una»*; una riga può però essere un'opzione
+**fuori** da ogni gruppo — un corso che si sceglie o no — e allora il vincolo
+non è «esattamente una» ma «zero o tutta». `Service.elective` lo dichiara, e la
+copertura la salta quando l'unità non ne ha nemmeno un'ora. Il gruppo ha la
+precedenza: dice di più, e su una riga che ne fa parte questo campo non si
+legge.
+
 🔑 **Ma è un predicato su una settimana**, e non è la stessa cosa. Il monte ore
 di un `Service` è **settimanale**, e `check_schedule` valuta ogni checker una
 volta per firma di settimana su `state.activities`, che la maschera filtra:
@@ -93,8 +101,15 @@ class CoverageChecker(Checker):
                     # Seguita una sola: resta da misurarne il monte ore, ed è
                     # la misura ordinaria sulla materia che l'alunno fa.
                     elettive.discard(seguite[0])
+            opzioni = state.elective_services.get(plan_id, ())
             for subject_id in sorted(expected.keys() | actual.keys()):
                 if subject_id in elettive:
+                    continue
+                # ADR-026: un'opzione fuori gruppo non è dovuta, quindi
+                # riceverne **zero** ore non è uno scostamento. Riceverne
+                # *alcune* sì: chi la segue la deve tutta, ed è la stessa
+                # misura ordinaria che vale per la riga eletta di un gruppo.
+                if subject_id in opzioni and not actual.get(subject_id, 0):
                     continue
                 want, got = expected.get(subject_id, 0), actual.get(subject_id, 0)
                 if want != got:

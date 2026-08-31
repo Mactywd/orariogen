@@ -246,6 +246,38 @@ cambiare un dato per comodità invece che per una lettura.
 
 ---
 
+## I giorni esenti dal conteggio delle giornate libere
+
+La casella per giorno di `Parametri → Istituto → Orari` — *«i giorni spuntati
+saranno ignorati durante il calcolo delle giornate libere»* — implementata il
+2026-08-31 come `InstituteSettings.free_day_exempt_mask`. ⚠ **Non è la maschera
+dei giorni lavorativi**: il giorno resta in griglia e ci si lavora, non vale
+come giornata libera.
+
+🔑 **Sul banco si prova col testimone puntato, e la forma è misurata e non
+scelta.** La tacca non ci arriva: con otto fasce al giorno le dodici ore di
+ZANET stanno comodamente nei giorni esenti, e stringere la maschera a **tre**
+giorni su cinque restituisce `OPTIMAL` con zero scarti. È la stessa lezione
+dell'ondata 4 in un'altra veste — un parametro che cambia *quali giorni
+contano* non sparpaglia un carico, quindi il verdetto non si ribalta
+stringendolo.
+
+Il testimone si costruisce invece dall'orario che il banco trova da sé: si
+congela ZANET dov'è atterrato e si esentano **esattamente i giorni che gli
+erano rimasti liberi**, che restano lavorativi per tutti gli altri. Ciò che
+era una garanzia soddisfatta diventa una garanzia senza appoggio, e i due rami
+sono la stessa istanza con gli stessi pin — l'unica differenza è il parametro
+d'istituto.
+
+⚠ **Ha portato un secondo clamp**, con una ragione diversa da quella di L8:
+quello nasce dal piazzamento (una mezza giornata libera la offre solo un giorno
+lavorato), questo dalla maschera — con k giorni contabili non se ne possono
+avere più di k liberi. Senza, esentare quattro giorni su cinque renderebbe
+`INFEASIBLE` una riga da due giorni liberi per colpa di un parametro
+d'istituto invece che dell'orario.
+
+---
+
 ## Cosa esercita, in una riga
 
 | Famiglia | Prova |
@@ -256,3 +288,4 @@ cambiare un dato per comodità invece che per una lettura.
 | `structural:occupation`, ramo **cumulativo** | testimone puntato (`2 + 2 + 2 > 4`) |
 | `structural:site_transition` su una risorsa senza sede | tacca sulla capienza (4 / 3 / 2) — era il difetto **L6** |
 | ADR-019 | misurato nell'analisi, su un orario scritto a mano |
+| `free_day_exempt_mask` | testimone puntato (ZANET congelato, esenti i suoi giorni liberi) — la tacca è misurata e non arriva |

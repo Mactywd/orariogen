@@ -159,24 +159,48 @@ class FreeGuaranteedChecker(_TimeChecker):
 
     ⚠ `free_days` non ha lo stesso problema e non prende lo stesso
     trattamento: lavorare meno *aumenta* i giorni liberi, quindi quel minimo
-    non è mai reso irraggiungibile dallo scarto."""
+    non è mai reso irraggiungibile dallo scarto.
+
+    🔑 **E non tutti i giorni contano.** `InstituteSettings.free_day_exempt_mask`
+    porta la casella per giorno di EDT — *«i giorni spuntati saranno ignorati
+    durante il calcolo delle giornate libere»* — che **non** è la maschera dei
+    giorni lavorativi: il giorno resta in griglia e ci si lavora. Un giorno
+    esente non entra fra i `free_days` quando è vuoto, e nemmeno fra le mezze
+    quando è lavorato. ⚠ Ne discende che la soglia raggiungibile di L8 si
+    misura sui giorni lavorati **e contabili**, non su tutti quelli lavorati:
+    esentare un giorno abbassa il tetto delle mezze, perché quel giorno smette
+    di poterne offrire una."""
     TYPE = T.FREE_GUARANTEED
     PLACEMENT_MONOTONE = False
 
     def violations(self, state, row, days):
-        free_days = [d for d in range(state.grid.days_per_cycle) if d not in days]
+        conta = state.settings.counts_as_free
+        free_days = [d for d in range(state.grid.days_per_cycle)
+                     if d not in days and conta(d)]
         free_halves = 0
+        lavorati = 0
         for day, slots in days.items():
+            if not conta(day):
+                continue
+            lavorati += 1
             morning, afternoon = _halves(state, slots)
             free_halves += (not morning) + (not afternoon)
         min_mezze = row.params.get("free_half_days", 0)
-        soglia_mezze = min(min_mezze, len(days))
-        short_days = len(free_days) < row.params.get("free_days", 0)
+        soglia_mezze = min(min_mezze, lavorati)
+        min_giorni = row.params.get("free_days", 0)
+        # ⚠ Anche i giorni prendono il clamp, ma per l'**altra** ragione: non
+        # il piazzamento (che liberando giorni aiuta sempre), la maschera. Con
+        # k giorni contabili non se ne possono avere piu' di k liberi, e una
+        # riga che ne chiedesse di piu' sarebbe insoddisfacibile per un
+        # parametro d'istituto invece che per l'orario.
+        contabili = sum(1 for d in range(state.grid.days_per_cycle) if conta(d))
+        soglia_giorni = min(min_giorni, contabili)
+        short_days = len(free_days) < soglia_giorni
         short_halves = free_halves < soglia_mezze
         if short_days or short_halves:
             yield _finding(state, "free_guaranteed", row,
                            free_days=len(free_days), free_half_days=free_halves,
-                           min_free_days=row.params.get("free_days", 0),
+                           min_free_days=min_giorni,
                            min_free_half_days=min_mezze)
 
 

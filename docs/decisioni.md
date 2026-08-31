@@ -425,6 +425,45 @@ va scritta due volte.
 
 **Data.** 2026-07-26
 
+**Emendamento del 2026-08-31 — la relazione esiste, e la soppressione ne
+discende.** Due delle quattro conseguenze qui sopra restavano scritte e non
+implementate, ed erano la metà che fa funzionare la decisione: *«serve una
+relazione sostituisce»* e *«serve una soppressione dell'occorrenza annuale»*.
+Senza, il sostituto compariva ma l'originale — annuale, 161/161 — restava
+accanto: due lezioni nella stessa cella della stessa classe, che l'export
+mostrava come due eventi e i checker come un conflitto di occupazione.
+
+`Activity.substitutes` è la relazione, ed è **anche** il campo *natura* che
+questo ADR chiedeva: un'attività è un sostituto se lo dichiara, e non serve un
+enum accanto che possa contraddirlo. La **soppressione non è una seconda
+tabella**: si deriva — l'originale non si tiene nelle settimane della maschera
+dei suoi sostituti. Due scritture per lo stesso fatto sono due modi di
+scriverlo diverso, e la relazione porta già l'informazione: quale ora, quali
+settimane.
+
+⚠ **Ed è una semplificazione rispetto a EDT, dichiarata, non una lettura del
+suo modello.** Lì le due cose sono davvero indipendenti: `ANNULATIONCOURS` è
+una tabella a sé, e sopprime **112 dei 122** originali
+([formato-file.md](edt/formato-file.md)) — cioè dieci originali hanno un
+sostituto e *nessuna* soppressione. Non sappiamo cosa siano quei dieci
+(compresenza voluta? un residuo? un'ora spostata e non sostituita?), e derivare
+la soppressione li rende irrappresentabili da noi. Il prezzo si paga volentieri
+finché nessun dato lo esercita: l'alternativa è una seconda tabella che una
+scuola può riempire in contraddizione con la prima, per un caso di cui non
+conosciamo il significato. Se un giorno lo si osserva, è **qui** che la voce si
+riapre.
+
+⚠ **Il filtro non vive nell'export**, ed è la parte che vale. Il difetto era
+scritto come «l'iCal mostra due eventi», ma l'orario di quella settimana *è*
+uno solo: `effective_week_masks` sta sul modello e la leggono tutti e quattro i
+lettori di maschere — le firme di settimana, `ScheduleState`, l'analisi di
+capienza e l'iCal — perché un calendario che mostrasse una cosa e i checker
+un'altra sarebbe lo stesso difetto con un passo in più. Il solver ne eredita
+per costruzione: legge lo stato, non le maschere.
+
+⚠ **Resta fuori la cancellazione senza sostituto** (`ANNULATIONCOURS`): un'ora
+non tenuta e basta è un fatto diverso, e nessun dato la esercita.
+
 ---
 
 ## ADR-015 — Perimetro funzionale di v1: le sei decisioni contese
@@ -1194,5 +1233,74 @@ primo fissa i secchi distinti al proprio ottimo, il secondo assume il valore
 complementare e non sceglie più niente. **Non c'è un vincolo che lo vieti** —
 sarebbe una proibizione su una configurazione che non fa danno, solo nulla — e
 un test la misura invece di dichiararla.
+
+**Data.** 2026-08-31
+
+---
+
+## ADR-026 — Il tronco comune è un asse a sé: «se ne segue una» non risponde a «è dovuta?»
+
+**Decisione.** `Service.elective` — un booleano sulla riga di servizio che dice
+se quella riga è **dovuta da tutti gli alunni del piano** o è un'**opzione**.
+La copertura per alunno la legge così: un'opzione **fuori** da ogni gruppo di
+alternative si salta quando l'unità non ne ha nemmeno un'ora, e si misura
+normalmente quando ne ha. *Zero o tutta*, non «quanta ne capita».
+
+**Il default è `False`**, cioè tronco comune, che è lo status quo: senza il
+campo ogni riga del piano era dovuta da tutti. Nessuna migrazione di dati, e
+nessun dataset esistente cambia verdetto.
+
+**Alternative considerate.**
+
+1. **Copiare l'enumerazione `MS` di EDT** — otto codici più il vuoto: `S`
+   (`Tronc commun`), `N` Normale, `O` Obbligatoria, `F` Facoltativa, `L`
+   Locale, `D` DNL, `R` Religioso, `X` Extra. Scartata perché sarebbe copiare
+   un'enumerazione di cui **nessun comportamento è mai stato osservato**: la
+   colonna è vuota su ogni riga di entrambe le basi, `RELIGIONE` compresa nella
+   base del produttore, dove è un servizio dovuto da tutti i 390 alunni del
+   piano. EDT ha il campo, non il dato. Sette valori che non sappiamo
+   distinguere sono peggio di due che sappiamo leggere — e la partizione che
+   conta la sappiamo: `S` da una parte, gli altri sette dall'altra, perché
+   sono tutti forme di opzione.
+2. **Dedurlo da `election_group`** — «una riga senza gruppo è dovuta a tutti».
+   È ciò che il codice faceva, ed è il falso positivo che questo ADR corregge:
+   un corso che si sceglie o no *non* ha un'alternativa con cui formare un
+   gruppo, quindi non c'è niente da cui dedurre.
+3. **Un gruppo di un solo elemento** (`election_group="TEATRO"` su una riga
+   sola). Riuscirebbe, ma dicendo il falso: `election_mismatch` pretende
+   **esattamente una** seguita, quindi chi non sceglie il corso sarebbe
+   segnalato. Il gruppo unitario non è l'opzione, è l'obbligo travestito.
+
+**Motivo.** Le due domande sono diverse e nessuna implica l'altra nel verso che
+serve. `election_group` risponde a *«di queste se ne segue una»* e vincola un
+**insieme**; `elective` risponde a *«questa è dovuta da tutti?»* e vale sulla
+**riga**. Una riga in un gruppo risponde «no» per costruzione — e infatti lì il
+campo non si legge, il gruppo ha la precedenza perché dice di più — ma il verso
+opposto è vuoto: da «non è in un gruppo» non discende «è dovuta a tutti».
+
+È lo **stesso falso positivo** che ADR-020 ha corretto su un altro ingresso.
+Là il piano-catalogo faceva risultare ogni alunno debitore sia di religione sia
+di alternativa; qui fa risultare ogni alunno debitore di un corso che nessuno
+gli ha assegnato. La forma è identica: un catalogo letto come curriculum.
+
+**⚠ Ciò che questo ADR non fa.** Non tocca il solver, e non poteva: la
+copertura è `PLACEMENT_INDEPENDENT` — il modello non crea né distrugge
+attività, quindi non ha un builder da aggiornare. Il campo cambia **cosa si
+segnala**, non cosa si piazza.
+
+**⚠ E nessun dataset lo esercita**, che è la stessa condizione con cui la voce
+è stata aperta e non una scoperta. Né il Fermi né l'Alighieri hanno una riga
+opzionale fuori gruppo, e **il banco non è stato piegato per averne una**:
+inventarla vorrebbe dire rifare la quadratura di 345 ore-alunno, 362 erogate e
+343 attività per esercitare un campo che non tocca il piazzamento — churn su
+cinque documenti di misure per zero informazione nuova. Lo esercitano tre test
+unitari, ognuno **col proprio ramo di controllo**: la stessa riga senza il
+campo produce lo scostamento, l'opzione seguita a metà lo produce lo stesso, e
+marcare una riga di gruppo non spegne `election_mismatch`.
+
+**Conseguenza per l'ingresso dei dati.** È un dato che la scuola deve saper
+dire, e non è deducibile da nessuna proprietà dell'orario — come
+`election_group` prima di lui. Va nell'elenco di *ciò che l'agente di ingresso
+deve chiedere* (D2), accanto alle alternative.
 
 **Data.** 2026-08-31

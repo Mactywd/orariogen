@@ -124,7 +124,13 @@ def test_il_tetto_di_non_regressione_morde():
 
 def test_la_tolleranza_e_dichiarata_nel_rendiconto():
     """Base e tetto sono il rendiconto del comando: un tetto che non si vede è
-    un risultato che l'utente non sa spiegarsi."""
+    un risultato che l'utente non sa spiegarsi.
+
+    🔑 E **dove il criterio è atterrato** è il terzo numero, aggiunto il
+    2026-08-31: base 1 e tetto 4 non dicono se la tolleranza è servita. Qui il
+    valore è 2 — un punto peggio della base, due dei tre concessi rimasti
+    inutilizzati — e senza quel numero non si saprebbe né che il
+    peggioramento c'è stato né quanto margine è avanzato."""
     env, a1, a2 = _tensione()
     _regolare(env, a1, a2)
     _criteri()
@@ -132,7 +138,7 @@ def test_la_tolleranza_e_dichiarata_nel_rendiconto():
     stats = solve(env["schedule"], workers=1,
                   arbitrato=Arbitrato(P.TEACHERS, 3)).stats
     assert stats["arbitraggi"] == (
-        {"nome": "regularity_classes", "base": 1, "tetto": 4},)
+        {"nome": "regularity_classes", "base": 1, "tetto": 4, "valore": 2},)
 
 
 def test_la_base_e_il_valore_che_il_livello_da_sullo_stesso_orario():
@@ -195,8 +201,12 @@ def test_senza_orario_di_partenza_non_c_e_tetto():
     soluzione = solve(env["schedule"], workers=1,
                       arbitrato=Arbitrato(P.TEACHERS, 0))
     assert soluzione.status == "OPTIMAL"
+    # ⚠ Il valore raggiunto si dice **anche** senza tetto, ed è lì che serve
+    # di più: nessuno stava tenendo fermo quel criterio, e il rendiconto dice
+    # dove è finito invece di tacere.
     assert soluzione.stats["arbitraggi"] == (
-        {"nome": "regularity_classes", "base": None, "tetto": None},)
+        {"nome": "regularity_classes", "base": None, "tetto": None,
+         "valore": 2},)
     # senza tetto il docente si compatta liberamente
     assert _livelli(soluzione)["free_half_days_teachers"] == 1
 
@@ -279,3 +289,25 @@ def test_in_coda_la_stabilita_prende_il_budget_della_qualita():
     con = {lv.nome: lv.limite
            for lv in livelli(ctx, model, Arbitrato(P.TEACHERS, 0))}
     assert con["spostamenti"] == BUDGET_QUALITA
+
+
+def test_il_rendiconto_dice_quando_la_tolleranza_e_servita_davvero():
+    """Il terzo numero contro i primi due, sulla stessa istanza a due
+    tolleranze diverse. Base e tetto crescono insieme e non distinguono niente;
+    il valore raggiunto sì — a tolleranza 0 il criterio resta inchiodato alla
+    base, a tolleranza 3 ne consuma uno.
+
+    ⚠ È il debito che questo test chiude: fino al 2026-08-31 il rendiconto
+    diceva *entro cosa* il criterio doveva restare e mai *dove è finito*, e le
+    due corse qui sotto erano indistinguibili."""
+    env, a1, a2 = _tensione()
+    _regolare(env, a1, a2)
+    _criteri()
+
+    stretto = solve(env["schedule"], workers=1,
+                    arbitrato=Arbitrato(P.TEACHERS, 0)).stats["arbitraggi"][0]
+    assert (stretto["tetto"], stretto["valore"]) == (1, 1)
+
+    largo = solve(env["schedule"], workers=1,
+                  arbitrato=Arbitrato(P.TEACHERS, 3)).stats["arbitraggi"][0]
+    assert (largo["tetto"], largo["valore"]) == (4, 2)

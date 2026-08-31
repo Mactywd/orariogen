@@ -233,17 +233,28 @@ di mezza giornata l'orologio salta invece di proseguire, quindi un'attività a
 cavallo non è **un** evento. Lì l'avevamo dedotta dalle `SlotLabel`; qui è un
 parametro dichiarato, con una casella per accenderlo.
 
-⚠ **E c'è una maschera che non abbiamo.** In fondo alla griglia, una casella per
-giorno (`Lun. Mar. Mer. Giov. Ven.`, tutte vuote sulla demo) con la legenda:
+✅ **E c'è una seconda maschera** (implementata il 2026-08-31). In fondo alla
+griglia, una casella per giorno (`Lun. Mar. Mer. Giov. Ven.`, tutte vuote sulla
+demo) con la legenda:
 
 > *«I giorni spuntati saranno ignorati durante il calcolo delle giornate libere.»*
 
 Non è la maschera dei giorni lavorativi — quella sta nella griglia oraria e
 toglie il giorno dalla base. Questa è un **secondo** filtro, che lascia il giorno
 lavorativo ma lo esclude dal conteggio di `giornate libere` / `mezze giornate
-libere`. I nostri `FreeGuaranteedChecker` e `FreeGuaranteedBuilder` contano su
-tutti i `days_per_cycle` senza eccezioni: → fra i **debiti dichiarati** di
-[todo.md](../todo.md).
+libere`. Da noi è `InstituteSettings.free_day_exempt_mask`, letta insieme dal
+checker e dal builder.
+
+⚠ **Ha portato un secondo clamp**, e la ragione non è quella di L8: quello nasce
+dal piazzamento (una mezza libera la offre solo un giorno lavorato), questo dalla
+maschera — con k giorni contabili non se ne possono avere più di k liberi, e
+senza il clamp esentare quattro giorni su cinque renderebbe insoddisfacibile una
+riga da due giorni liberi per colpa di un parametro d'istituto.
+⚠ **Il criterio di qualità `1/2 giornate libere` non la legge**, ed è
+dichiarato: la casella parla di una *garanzia*, il criterio minimizza mezze
+giornate **occupate**, e filtrarlo trasformerebbe «occupa meno» in «occupa
+altrove» — cioè spingerebbe il lavoro *sul* giorno esente, che la casella non
+dice.
 
 🔑 **La mezza giornata è l'unità di misura di un'intera famiglia di vincoli**:
 `Massimo di mezze giornate di lavoro`, `mezze giornate libere garantite`,

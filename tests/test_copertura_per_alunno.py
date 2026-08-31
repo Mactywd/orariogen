@@ -273,3 +273,83 @@ def test_due_piani_propri_nella_stessa_combinazione_sono_un_errore_di_dato():
     assert {f.quantities["plans"] for f in ambigui} == {2}
     # l'unità ambigua non si misura: nessun verdetto di copertura su di essa
     assert [f for f in findings if f.code == "coverage_mismatch"] == []
+
+
+# ── ADR-026: l'opzione fuori da ogni gruppo ─────────────────────────────────
+#
+# `election_group` risponde a *«di queste se ne segue una»*, e vincola un
+# gruppo. Resta senza risposta *«questa è dovuta da tutti?»*, che è la domanda
+# del `MS` di EDT: una riga può essere un'opzione **fuori** da ogni gruppo — un
+# corso che si sceglie o no — e allora il vincolo non è «esattamente una» ma
+# **zero o tutta**. Senza il campo, quella riga è indistinguibile dal tronco
+# comune e chi non la segue risulta debitore.
+
+
+def _con_opzione(minuti_erogati=None):
+    """Una classe con italiano (tronco comune) e un corso opzionale da un'ora.
+    `minuti_erogati=None` significa che l'opzione **non è erogata** alla
+    classe: è il caso di chi non l'ha scelta."""
+    env = mini_school(days=2, slots=2)
+    opzionale = _materia(env, "OPZ", "Corso opzionale")
+    make_activity(env["subject"], teachers=[env["teacher"]],
+                  classes=[env["klass"]], slots=1)
+    if minuti_erogati:
+        make_activity(opzionale, teachers=[_docente("Neri")],
+                      classes=[env["klass"]], slots=minuti_erogati // 60)
+    Service.objects.all().delete()
+    _servizio(env["plan"], env["subject"], 60)
+    env["opzionale"] = opzionale
+    return env
+
+
+def _scostamenti(env):
+    return [f for f in _hard(env["schedule"]) if f.code == "coverage_mismatch"]
+
+
+@pytest.mark.django_db
+def test_l_opzione_non_seguita_non_e_uno_scostamento():
+    """Il ramo che il campo apre, con **accanto il suo controllo**: la stessa
+    identica riga senza `elective` produce lo scostamento, quindi il verde non
+    è il verde di un predicato che non guarda più niente."""
+    env = _con_opzione()
+    _servizio(env["plan"], env["opzionale"], 60, elective=False)
+    soluzione = solve(env["schedule"], workers=1, allow_unplaced=False)
+    apply(soluzione, env["schedule"])
+    assert [f.quantities for f in _scostamenti(env)] == [
+        {"expected_minutes": 60, "actual_minutes": 0}]
+
+    _servizio(env["plan"], env["opzionale"], 60, elective=True)
+    assert _scostamenti(env) == []
+
+
+@pytest.mark.django_db
+def test_l_opzione_seguita_si_deve_tutta():
+    """«Zero o tutta», non «quanta ne capita». Chi sceglie il corso ne è
+    debitore come di qualunque altra riga: due ore erogate su tre attese
+    restano uno scostamento, e il campo non le perdona."""
+    env = _con_opzione(minuti_erogati=120)
+    _servizio(env["plan"], env["opzionale"], 180, elective=True)
+    soluzione = solve(env["schedule"], workers=1, allow_unplaced=False)
+    apply(soluzione, env["schedule"])
+    assert [f.quantities for f in _scostamenti(env)] == [
+        {"expected_minutes": 180, "actual_minutes": 120}]
+
+
+@pytest.mark.django_db
+def test_il_gruppo_ha_la_precedenza_sull_opzione():
+    """Le due marcature sulla stessa riga non sono un conflitto: `elective` è
+    **implicato** dall'appartenenza a un gruppo, che dice di più.
+
+    ⚠ Ciò che questo tiene fermo è l'**ordine**, non la raccolta: il salto
+    dell'opzione va dopo il verdetto del gruppo. Anticiparlo — o applicarlo a
+    tutte le righe marcate — farebbe passare in silenzio un'unità che non
+    segue né religione né alternativa, che è esattamente il caso per cui
+    `election_mismatch` esiste."""
+    env = _irc(alternativa_su_parte=False)
+    for materia in (env["religione"], env["alternativa"]):
+        _servizio(env["plan"], materia, 60, election_group="IRC", elective=True)
+    soluzione = solve(env["schedule"], workers=1, allow_unplaced=False)
+    apply(soluzione, env["schedule"])
+    codici = sorted(f.code for f in _hard(env["schedule"])
+                    if f.code in ("coverage_mismatch", "election_mismatch"))
+    assert codici == ["election_mismatch"], codici

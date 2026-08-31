@@ -6,7 +6,8 @@ from .teachers import Teacher, TeachingAssignment
 from .time import (
     Break, Holiday, Period, Schedule, SchoolYear, SlotLabel, TimeGrid,
 )
-from .activities import Activity, ActivityMaterialRequirement, Placement
+from .activities import (Activity, ActivityMaterialRequirement, Placement,
+                         effective_week_masks)
 from .constraints import (
     Extraction, RelaxationQuota, ResourceTimeConstraint,
     ResourceUnavailability, SubjectConstraint,
@@ -21,6 +22,7 @@ __all__ = [
     "Break", "Holiday", "Period", "Schedule", "SchoolYear", "SlotLabel",
     "TimeGrid",
     "Activity", "ActivityMaterialRequirement", "Placement",
+    "effective_week_masks",
     "Extraction", "RelaxationQuota", "ResourceTimeConstraint",
     "ResourceUnavailability", "SubjectConstraint",
 ]

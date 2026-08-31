@@ -787,3 +787,88 @@ def test_min_distribution_status_quo_non_rappresentabile_non_blocca():
     soluzione = solve(env["schedule"], time_limit=30)
     assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
     assert soluzione.placements[libera.id][0] == 0
+
+
+# ── I giorni esenti dal conteggio delle giornate libere ─────────────────────
+#
+# `InstituteSettings.free_day_exempt_mask` porta la casella per giorno di EDT:
+# *«i giorni spuntati saranno ignorati durante il calcolo delle giornate
+# libere»*. ⚠ **Non** e' la maschera dei giorni lavorativi — il giorno resta in
+# griglia e ci si lavora — ed e' tutta la voce: un sabato in cui nessuno ha
+# lezione non regala a ogni docente il suo giorno libero garantito.
+
+
+def _esenta(*giorni):
+    from domain.models import InstituteSettings
+    s = InstituteSettings.load()
+    s.free_day_exempt_mask = sum(1 << g for g in giorni)
+    s.save()
+
+
+def test_il_giorno_esente_non_vale_come_giornata_libera():
+    """Il ramo che la maschera apre, **col suo controllo**. Cinque giorni, una
+    sola attivita': quattro giorni restano vuoti e la riga da un giorno libero
+    e' soddisfatta senza sforzo. Con l'attivita' inchiodata al lunedi' e i
+    quattro giorni liberi tutti esenti, l'unico giorno che conta e' proprio
+    quello lavorato: la garanzia non ha piu' dove appoggiarsi."""
+    env = mini_school()
+    attivita = make_activity(env["subject"], teachers=[env["teacher"]],
+                             classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED, params={"free_days": 1})
+    for giorno in range(1, 5):
+        for slot in range(6):
+            ResourceUnavailability.objects.create(
+                resource=env["klass"], day=giorno, slot=slot,
+                level=ResourceUnavailability.Level.HARD)
+    libero = solve(env["schedule"], time_limit=30, allow_unplaced=False)
+    assert libero.status in ("OPTIMAL", "FEASIBLE"), libero.stats
+    apply(libero, env["schedule"])
+    assert violazioni(env["schedule"], {"free_guaranteed"}) == set()
+
+    _esenta(1, 2, 3, 4)
+    stretto = solve(env["schedule"], time_limit=30, allow_unplaced=False)
+    assert stretto.status == "INFEASIBLE", stretto.stats
+    assert attivita.pk  # l'istanza e' la stessa: cambia solo il parametro
+
+
+def test_esentare_tutti_i_giorni_non_rende_infattibile():
+    """⚠ Il clamp sui **giorni**, che non e' L8 e ha un'altra ragione: L8
+    nasce dal piazzamento, questo dalla maschera. Con zero giorni contabili
+    nessun orario puo' offrire una giornata libera, e senza il clamp la riga
+    sarebbe insoddisfacibile per colpa di un parametro d'istituto — che e'
+    esattamente la forma di errore che ADR-018 esiste per evitare, qui su un
+    dato anagrafico invece che sul passato."""
+    env = mini_school()
+    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED,
+        params={"free_days": 3, "free_half_days": 2})
+    _esenta(0, 1, 2, 3, 4)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    apply(soluzione, env["schedule"])
+    assert violazioni(env["schedule"], {"free_guaranteed"}) == set()
+
+
+def test_il_giorno_esente_non_offre_mezze_giornate_libere():
+    """La seconda meta' della casella, sul conteggio delle **mezze**: con una
+    sola attivita' il giorno lavorato ne offre una, e la soglia di L8 e' quel
+    massimo. Esentando quel giorno i giorni contabili lavorati diventano zero,
+    quindi la soglia scende a zero — non a `INFEASIBLE`, che sarebbe la stessa
+    pretesa impossibile di L8 con un altro ingresso."""
+    env = mini_school()
+    make_activity(env["subject"], teachers=[env["teacher"]], classes=[env["klass"]])
+    ResourceTimeConstraint.objects.create(
+        resource=env["klass"], type=T.FREE_GUARANTEED,
+        params={"free_half_days": 1})
+    for giorno in range(1, 5):
+        for slot in range(6):
+            ResourceUnavailability.objects.create(
+                resource=env["klass"], day=giorno, slot=slot,
+                level=ResourceUnavailability.Level.HARD)
+    _esenta(0)
+    soluzione = solve(env["schedule"], time_limit=30, allow_unplaced=False)
+    assert soluzione.status in ("OPTIMAL", "FEASIBLE"), soluzione.stats
+    apply(soluzione, env["schedule"])
+    assert violazioni(env["schedule"], {"free_guaranteed"}) == set()

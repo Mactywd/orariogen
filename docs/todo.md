@@ -17,20 +17,30 @@ perché è ciò che decide chi può muoverla:
 
 Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la data).
 
-> **Stato al 2026-08-30.** Nessuna voce ✅ di [scope-v1.md](scope-v1.md) è
+> **Stato al 2026-08-31.** Nessuna voce ✅ di [scope-v1.md](scope-v1.md) è
 > rimasta senza implementazione: il motore, l'analisi, le due fasi, `Estrai`,
 > `Piazza e sistema` e l'export iCal ci sono tutti. E **D1 è sciolta**
 > ([ADR-020](decisioni.md)): la copertura misura l'atomo e l'alternativa è un
 > dato dichiarato, quindi **l'import non è più bloccato**.
 >
-> **Niente blocca il calcolo.** Restano **due decisioni** di prodotto
-> (D2 e D4, che dal 2026-08-28 sono la stessa domanda: il confine con
-> **Aurora**), **una sola osservazione sostanziale** in EDT — l'ultimo residuo
-> di O2, il `Ciclo personalizzato` — più le due minuzie da tooltip di **O7**,
-> **due esperimenti** che nessun dato esistente può sostituire (O3, O6), e
-> **sette debiti** già decisi (erano nove: L6bis e L7 ne hanno pagati due).
-> O1 è chiusa il 2026-08-30, **O5 il 2026-08-31** ([ADR-025](decisioni.md):
-> due criteri di piazzamento tradotti su dieci).
+> **Niente blocca il calcolo, e non resta lavoro da fare.** Ciò che è ancora
+> aperto aspetta **una persona davanti a EDT** o **la decisione su Aurora**, e
+> nient'altro:
+>
+> - **due decisioni** di prodotto (D2 e D4, che dal 2026-08-28 sono la stessa
+>   domanda: il confine con **Aurora**);
+> - **tre osservazioni** che richiedono la UI e che nessuno può fare al posto
+>   di chi ha il prodotto: l'ultimo residuo di O2 (il `Ciclo personalizzato`) e
+>   le due minuzie da tooltip di **O7**;
+> - **quattro debiti** dichiarati, tutti con la ragione scritta accanto.
+>
+> O1 è chiusa il 2026-08-30; il 2026-08-31 si chiudono **O5**
+> ([ADR-025](decisioni.md): due criteri di piazzamento tradotti su dieci),
+> **O6** ([ADR-026](decisioni.md): l'asse tronco comune/opzione), **O3** (i due
+> campi restano, dichiarati osservazione e non funzionalità) e **tre dei sette
+> debiti** — i giorni esenti dal conteggio delle giornate libere, il valore
+> raggiunto dal criterio sacrificato, e la sostituzione che oscura l'originale
+> (emendamento ad [ADR-014](decisioni.md)).
 >
 > 🔧 **La sezione 3, `Lavoro`, ha aperto e chiuso quattro voci lo stesso
 > giorno** — L1 (il perimetro del buco), L2 (la capienza come criterio e il
@@ -151,17 +161,19 @@ ranghi e non si generano), e l'orologio conferma per la **terza** via i ranghi
 2 e 4 degli intervalli e il 6+1+3 della mezza giornata. ⚠ E ha aperto una
 minuzia, che sta in **O7**: `Intervallo del pomeriggio` alle 11:50.
 
-### O3 🧪 La semantica del monte ore tripartito — **esperimento, non osservazione**
+### O3 🧪 La semantica del monte ore tripartito — ✅ **chiusa il 2026-08-31**
 
 `Ridotto` (*durata con alunni ridotti*) e `Sdop.` (*durata con alunni
-sdoppiati*) sono nel nostro schema dal primo giorno (`reduced_minutes`,
-`split_minutes`) e **letti da nessuno**.
+sdoppiati*) restano nello schema (`reduced_minutes`, `split_minutes`), **letti
+da nessuno**, con un commento sul modello che dice cosa sono: **osservazione
+registrata e non funzionalità**.
 
-⚠ Riclassificata il 2026-08-29: **nessuna delle due basi che abbiamo le
-compila** — né il Fermi né quella del produttore, dove sono vuote su tutte le
-righe di tutti i piani. Non c'è niente da guardare: «come nascono i gruppi» si
-vede solo **compilandole**. E D1 è sciolta, quindi non sblocca più niente: la
-domanda che resta è se tenere i due campi o toglierli.
+La domanda era «tenerli o toglierli», e la risposta è tenerli. Non c'è niente
+da guardare — nessuna delle due basi che abbiamo li compila, né il Fermi né
+quella del produttore, dove sono vuoti su ogni riga di ogni piano — quindi
+implementarli vorrebbe dire scrivere codice su un dato che non esiste;
+toglierli vorrebbe dire perdere un campo che EDT **ha davvero**. Lo schema
+dichiara quindi ciò che sa, e dichiara anche di non leggerlo.
 
 ### O4 👁 Quali aule chiede ogni materia
 
@@ -173,43 +185,28 @@ resta nostra scelta di dimensionamento. → `docs/edt/aule.md`
 
 ---
 
-### O6 🧭 `MS` — la modalità di scelta del servizio — **letta; resta una scelta**
+### O6 🧭 `MS` — la modalità di scelta del servizio — ✅ **chiusa il 2026-08-31**
 
-Nata da [ADR-020](decisioni.md), che ne ha usato la *forma* senza poterne
-copiare l'enumerazione. `MS` (*Modalità di scelta*, FR `Modalité d'élection`) è
-una colonna della riga di servizio, **vista in UI** e vuota su tutte le righe
-del Fermi; i sette codici — `N` Normale, `O` Obbligatoria, `F` Facoltativa, `L`
-Accademica, `D` DNL, **`R` Religioso**, `X` Extra — vengono dalle **stringhe**
-(📦) e il loro *comportamento* non è mai stato osservato: cosa cambia per il
-piazzamento, e se EDT ne derivi qualcosa o sia solo un'etichetta.
+Decisa con [ADR-026](decisioni.md): `Service.elective`, un booleano. **Non**
+l'enumerazione a otto codici — `S` (`Tronc commun`) contro `N/O/F/L/D/R/X`, che
+sono tutte forme di opzione — ma la **partizione** che quell'enumerazione
+descrive, perché di quei codici nessun comportamento è mai stato osservato: la
+colonna è vuota su ogni riga di entrambe le basi, `RELIGIONE` compresa nella
+base del produttore, dove è dovuta da tutti i 390 alunni del piano. EDT ha il
+campo, non il dato.
 
-👁 **Osservata il 2026-08-29**, e il risultato è un'assenza: la colonna esiste,
-il tooltip conferma il nome — *«Modalità di scelta del servizio»* — ed è
-**vuota su ogni riga della base del produttore**, `RELIGIONE` compresa, che lì
-è un servizio ordinario dovuto da tutti i 390 alunni del piano. **EDT ha il
-campo, non il dato**: nemmeno la sua base di riferimento distingue chi fa
-religione da chi fa alternativa. → emendamento ad [ADR-020](decisioni.md).
+La copertura per alunno lo legge così: un'opzione **fuori** da ogni gruppo di
+alternative si salta quando l'unità non ne ha nemmeno un'ora, e si misura
+normalmente quando ne ha — *zero o tutta*. È lo stesso falso positivo che
+ADR-020 ha corretto su un altro ingresso: un catalogo letto come curriculum.
 
-👁 **E la tendina è stata aperta**: i codici sono **otto** più il vuoto, non
-sette. Mancava `S = Senza`, che non è «nessun valore» ma **`Tronc commun`**, il
-percorso curricolare — la riga che tutti seguono. Tutti gli altri sono forme di
-**opzione**. E `L` è `Locale` (`Ajout académique au programme`, aggiunta locale
-al programma), non «Accademica»: falso amico, corretto anche nel
-[glossario](edt/glossario-it-fr.md). Tabella completa con le spiegazioni in
-[piani-di-studi.md](edt/piani-di-studi.md).
+⚠ **Nessun dataset lo esercita**, che è la condizione con cui la voce era
+aperta e non una scoperta; e il banco non è stato piegato per averne uno. Lo
+esercitano tre test unitari, ognuno col proprio ramo di controllo.
 
-**Resta una decisione, non un'osservazione.** `MS` risponde a *«questa riga è
-dovuta da tutti?»*; `Service.election_group` a *«di queste se ne segue una»*.
-Sono complementari, e noi abbiamo solo il secondo — quindi una riga che fosse
-opzione **fuori** da ogni gruppo verrebbe ancora contata come dovuta da tutti,
-lo stesso falso positivo che [ADR-020](decisioni.md) ha corretto su un altro
-ingresso. Da decidere se aggiungere l'asse (un booleano basta: *tronco comune*
-contro *opzione*), sapendo che **nessun dato lo esercita** — `MS` è vuota su
-entrambe le basi.
-
-L'esperimento residuo — compilare `MS = R` e guardare se cambia il piazzamento —
-è sceso di priorità: un campo che il produttore non compila nemmeno nella
-propria base difficilmente muove il motore.
+👁 **L'esperimento residuo resta possibile e resta ultimo**: compilare `MS = R`
+in EDT e guardare se il piazzamento cambia. Un campo che il produttore non
+compila nemmeno nella propria base difficilmente muove il motore.
 
 ### O7 👁 Due minuzie da un tooltip ciascuna
 
@@ -660,7 +657,11 @@ decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
 ## 4. Debiti dichiarati
 
 Già decisi, e la decisione è stata «non adesso». Si riaprono con un motivo
-nuovo, non per fastidio.
+nuovo, non per fastidio. **Erano sette; il 2026-08-31 se ne pagano tre** — i
+giorni esenti dal conteggio delle giornate libere, il valore raggiunto dal
+criterio sacrificato e la sostituzione che oscura l'originale — e i quattro che
+restano sono quelli la cui riparazione costerebbe più di ciò che comprerebbe,
+o che nessun dato esercita.
 
 - ⚖ **L'oracolo differenziale perde il peggioramento** di una violazione già
   presente, per le famiglie che nominano il secchio invece del violatore: la
@@ -676,22 +677,6 @@ nuovo, non per fastidio.
   noi non è separabile per attività, perché i vincoli di A non sono *di* A. Una
   versione parziale sarebbe un modello mentale incoerente, peggiore
   dell'assenza.
-- ⚖ **L'arbitrato non dice dove è atterrato** il criterio sacrificato: il
-  rendiconto porta base e tetto, non il valore raggiunto. Costerebbe una
-  seconda valutazione riappaiata per nome.
-- ⚖ **La sostituzione non oscura l'originale** nell'export iCal: per
-  [ADR-014](decisioni.md) il sostituto compare da sé, ma l'originale è annuale
-  e continua a comparire nella stessa settimana — manca la relazione fra i due
-  (`RELATIONCOURSSUBSTITUT` di EDT).
-- ⚖ **I giorni esclusi dal conteggio delle giornate libere** non esistono da
-  noi. EDT ha una casella per giorno in `Parametri → Istituto → Orari` — *«I
-  giorni spuntati saranno ignorati durante il calcolo delle giornate libere»* —
-  che **non** è la maschera dei giorni lavorativi: il giorno resta in griglia e
-  ci si lavora, ma non conta come giornata (o mezza giornata) libera.
-  `FreeGuaranteedChecker` e `FreeGuaranteedBuilder` contano su tutti i
-  `days_per_cycle`. Costo: un campo maschera sulla griglia e un filtro nei due
-  posti. Non adesso perché nessun dato lo esercita — sul Fermi il sabato non c'è
-  proprio. 👁 2026-08-29.
 - ⚖ **Sei delle dodici voci del menu `Estrai`**, ognuna per una ragione scritta
   accanto al registro: tre riguardano la fascia variabile e il sezionamento
   (fuori per ADR-010), una la formazione classi, due sono filtri di forma e non
@@ -728,6 +713,40 @@ perché nessuno debba ricostruire *perché*.
 
 Il racconto è in [changelog.md](changelog.md), alla data.
 
+- [x] **2026-08-31 (sera)** — **Tre debiti su sette pagati**, e ognuno ha
+      portato una decisione più grande della riparazione. I **giorni esenti dal
+      conteggio delle giornate libere** (`InstituteSettings.free_day_exempt_mask`)
+      hanno aggiunto un **secondo clamp** accanto a quello di L8, con un'altra
+      ragione: quello nasce dal piazzamento, questo dalla maschera — con k
+      giorni contabili non se ne possono avere più di k liberi. ⚠ E il criterio
+      di qualità `free_half_days` **non** li filtra, dichiarato: la casella
+      parla di una *garanzia*, il criterio minimizza mezze giornate
+      **occupate**, e filtrarlo trasformerebbe «occupa meno» in «occupa
+      altrove». Il **valore raggiunto dal criterio sacrificato** si legge
+      dallo stesso solver che chiude l'ultimo livello — nessun secondo
+      `Solve` — e la prima misura ha subito detto qualcosa che base e tetto
+      non dicevano: su `test_la_tolleranza_e_dichiarata_nel_rendiconto` il
+      criterio *peggiora davvero* di un punto, e due dei tre concessi
+      restano inutilizzati. La **sostituzione che oscura l'originale** è
+      l'emendamento ad [ADR-014](decisioni.md): `Activity.substitutes` è la
+      relazione *e* il campo `natura` che quell'ADR chiedeva, la soppressione
+      dell'occorrenza **si deriva** invece di essere una seconda tabella, e
+      🔑 il filtro **non vive nell'export** — `effective_week_masks` sta sul
+      modello e la leggono tutti e quattro i lettori di maschere, perché
+      l'orario di quella settimana è uno solo e un calendario che mostrasse
+      una cosa e i checker un'altra sarebbe lo stesso difetto con un passo in
+      più.
+- [x] **2026-08-31** — **O6, la modalità di scelta del servizio**, decisa con
+      [ADR-026](decisioni.md): `Service.elective`. Non l'enumerazione a otto
+      codici ma la **partizione** che descrive — tronco comune contro opzione —
+      perché di quei codici nessun comportamento è osservabile: `MS` è vuota su
+      entrambe le basi. Chiude lo stesso falso positivo di ADR-020 su un altro
+      ingresso: un'opzione **fuori** da ogni gruppo veniva contata come dovuta
+      da tutti.
+- [x] **2026-08-31** — **O3, il monte ore tripartito**: i due campi **restano**,
+      dichiarati sul modello come osservazione registrata e non funzionalità.
+      Implementarli sarebbe scrivere codice su un dato che non esiste;
+      toglierli sarebbe perdere un campo che EDT ha davvero.
 - [x] **2026-08-31** — **O5, i dieci criteri di piazzamento**, decisa con
       [ADR-025](decisioni.md): **due sì e otto no**. Entrano il 4
       (`Distribuisci nella settimana le attività della stessa materia`, sulle

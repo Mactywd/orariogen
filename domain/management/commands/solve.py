@@ -153,8 +153,20 @@ class Command(BaseCommand):
                         "non è completo, o una vecchia collocazione non è più "
                         "ammissibile.")
                 else:
+                    # Dove è atterrato, non solo entro cosa doveva restare: il
+                    # margine è ciò che dice se la tolleranza dichiarata è
+                    # servita o è rimasta inutilizzata.
+                    if a["valore"] is None:
+                        dove = "non raggiunto (nessun livello concluso)"
+                    elif a["valore"] > a["base"]:
+                        dove = (f"atterrato a {a['valore']} "
+                                f"(+{a['valore'] - a['base']} sulla base, "
+                                f"{a['tetto'] - a['valore']} di margine)")
+                    else:
+                        dove = (f"atterrato a {a['valore']} "
+                                f"({a['base'] - a['valore']} meglio della base)")
                     self.stdout.write(f"  {a['nome']}: base {a['base']}, "
-                                      f"tetto {a['tetto']}")
+                                      f"tetto {a['tetto']}, {dove}")
 
         if soluzione.status not in ("OPTIMAL", "FEASIBLE"):
             colpa = ("a bloccare è un vincolo sulle attività congelate o sui "

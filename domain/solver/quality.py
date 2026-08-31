@@ -246,6 +246,11 @@ def livelli_di_qualita(ctx, model, arbitrato=None):
 def _posta_i_tetti(ctx, model, arbitrato, sacrificati):
     """`valore <= base + tolleranza`, e il rendiconto su `ctx.arbitraggi`.
 
+    Il rendiconto porta **tre** numeri per criterio: la `base` (il valore
+    sull'orario di partenza), il `tetto` (base + tolleranza) e il `valore`
+    raggiunto, che `solve` riempie dall'ultimo livello concluso — o lascia a
+    `None` se la catena non ha trovato niente.
+
     ⚠ Un tetto può rendere il modello **infattibile**: l'orario di partenza lo
     soddisfa per costruzione, ma può essere illegale rispetto ai vincoli hard
     (qui un orario in violazione è uno stato ammesso) e quindi irraggiungibile.
@@ -255,12 +260,21 @@ def _posta_i_tetti(ctx, model, arbitrato, sacrificati):
     base = _valori_di_base(ctx, [riga for riga, _ in sacrificati])
     for riga, var in sacrificati:
         nome = _nome(riga)
+        # 🔑 La variabile si conserva perché il rendiconto possa dire **dove il
+        # criterio è atterrato**, non solo entro quale tetto doveva restare:
+        # base 420 / tetto 425 non distingue «sfiorato» da «rimasto largo», e
+        # la differenza è ciò che dice se la tolleranza dichiarata serviva.
+        # ⚠ Non costa un secondo `Solve`: il valore si legge dallo stesso
+        # solver che ha chiuso l'ultimo livello della catena.
+        ctx.arbitraggi_var[nome] = var
         if base is None:
-            ctx.arbitraggi.append({"nome": nome, "base": None, "tetto": None})
+            ctx.arbitraggi.append({"nome": nome, "base": None, "tetto": None,
+                                   "valore": None})
             continue
         tetto = base[nome] + arbitrato.tolleranza
         model.Add(var <= tetto)
-        ctx.arbitraggi.append({"nome": nome, "base": base[nome], "tetto": tetto})
+        ctx.arbitraggi.append({"nome": nome, "base": base[nome], "tetto": tetto,
+                               "valore": None})
 
 
 def _assegnazione_di_partenza(ctx):

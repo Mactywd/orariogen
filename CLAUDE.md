@@ -85,8 +85,9 @@ requirements.txt       ortools (serve solo al prototipo)
 config/                progetto Django minimale (solo settings, niente view)
 domain/                l'app Django del modello di dominio v1
   analysis/             il sottosistema di analisi: predicati con causali nominate, dominio residuo (S.P.), capienza,
-                        la copertura misurata **per alunno** (ADR-020:
-                        l'unità è l'atomo, non la parte), il **picco del gruppo
+                        la copertura misurata **per alunno** (ADR-020: l'unità
+                        è l'atomo; ADR-026: l'opzione fuori gruppo è *zero o
+                        tutta*), il **picco del gruppo
                         di aule** (ADR-021, room_pool.py: Hall su un insieme, non
                         un totale — le aule che la fase 1 conta senza assegnarle),
                         il violatore di Hall (fase 5, hall.py), lo scarto come
@@ -110,7 +111,9 @@ domain/                l'app Django del modello di dominio v1
                         vincolo)
   ical.py               l'export iCalendar: l'orario nel telefono — l'unico
                         pezzo che *consegna* invece di calcolare, e il punto in
-                        cui la fascia di calcolo smette di essere l'ora
+                        cui la fascia di calcolo smette di essere l'ora; la
+                        sostituzione oscura l'originale, ma il filtro sta sul
+                        modello (`effective_week_masks`) e non qui
   extraction.py         `Estrai`: la selezione di lavoro come operazione —
                         criteri, i sei rilevatori di problemi, le quattro
                         operazioni insiemistiche, e il perimetro che restringe
@@ -208,7 +211,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **seconda fase**). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **960 test verdi**, 17 skip tutti misurati e attribuiti
+> minimo. **972 test verdi**, 17 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -539,15 +542,21 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
       + rango`.
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
-**Due** decisioni — D2 e D4, che sono la stessa domanda: il confine con
-**Aurora** — **una sola osservazione sostanziale** ancora aperta in EDT (il
-`Ciclo personalizzato`) più due minuzie da tooltip, due esperimenti e sette
-debiti dichiarati. **Nessuna blocca il calcolo**: ⛔ D1 è sciolta il 2026-08-28
-con [ADR-020](docs/decisioni.md), ⛔ D3 il 2026-08-29 con
-[ADR-021](docs/decisioni.md), O1 — i criteri dell'ottimizzatore aule — il
-2026-08-30, e **O5 il 2026-08-31** ([ADR-025](docs/decisioni.md)).
-🔧 **La sezione `Lavoro` del todo è vuota**: ciò che resta aspetta una persona
-o EDT, non del codice.
+**Nulla che si possa fare da qui.** Restano **due** decisioni — D2 e D4, che
+sono la stessa domanda: il confine con **Aurora** — **tre osservazioni** che
+richiedono la UI di EDT (il `Ciclo personalizzato`, le due minuzie di O7) e
+**quattro** debiti dichiarati. ⛔ D1 è sciolta il 2026-08-28 con
+[ADR-020](docs/decisioni.md), ⛔ D3 il 2026-08-29 con
+[ADR-021](docs/decisioni.md), O1 il 2026-08-30, e il 2026-08-31 **O5**
+([ADR-025](docs/decisioni.md)), **O6** ([ADR-026](docs/decisioni.md):
+`Service.elective` — la partizione di `MS`, non la sua enumerazione, perché di
+quei codici EDT ha il campo e non il dato) e **O3** (i due campi restano,
+dichiarati osservazione e non funzionalità). Dei sette debiti ne sono pagati
+**tre**: i giorni esenti dal conteggio delle giornate libere, il valore
+raggiunto dal criterio sacrificato, e la sostituzione che oscura l'originale
+(emendamento ad [ADR-014](docs/decisioni.md): `Activity.substitutes` è la
+relazione *e* la `natura`, e la soppressione **si deriva** invece di essere una
+seconda tabella).
 
 🔧 La sezione **`Lavoro`** del todo ha aperto e chiuso **quattro** voci il
 2026-08-30. **L1**: il perimetro su cui si misura il buco è ora un parametro

@@ -449,7 +449,12 @@ def test_il_tetto_di_non_regressione_e_una_questione_di_taglia():
 
 def test_il_comando_solve_dichiara_base_e_tetto():
     """Il rendiconto dell'arbitrato, dal comando: chi è stato sacrificato, da
-    quale base e fino a quale tetto."""
+    quale base, fino a quale tetto e **dove è atterrato**.
+
+    ⚠ L'ultimo dei tre è del 2026-08-31 ed era un debito: base e tetto non
+    distinguono un criterio che ha consumato la tolleranza da uno che l'ha
+    lasciata intera, e quella è la differenza che dice se il numero dichiarato
+    serviva."""
     env = _orario_pieno()
     QualityCriterion.objects.create(kind=K.GAPS, population=P.TEACHERS, rank=1)
     QualityCriterion.objects.create(kind=K.GAPS, population=P.CLASSES, rank=2)
@@ -460,6 +465,7 @@ def test_il_comando_solve_dichiara_base_e_tetto():
     testo = out.getvalue()
     assert "gaps_classes" in testo
     assert "gaps_teachers" in testo
+    assert "atterrato a " in testo, testo
 
 
 # --------------------------------------------------------------------------

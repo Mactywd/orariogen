@@ -486,3 +486,46 @@ def test_il_giallo_su_un_aula_a_piu_candidate_lo_vede_anche_la_fase_1():
     fase2 = solve_rooms(env["schedule"], workers=8,
                         ignora_opzionali=(Resource.Kind.ROOM,))
     assert list(fase2.unassigned) == []
+
+
+def test_il_giorno_esente_non_vale_come_giornata_libera_per_ZANET():
+    """La casella per giorno di EDT sul banco intero, in forma di **testimone
+    puntato**, e la forma non è una scelta di gusto: `free_day_exempt_mask` non
+    riduce un carico, cambia **quali giorni contano**, quindi la tacca non ci
+    arriva — con otto fasce al giorno le dodici ore di ZANET stanno comodamente
+    nei giorni esenti, e stringere la maschera restituisce `OPTIMAL` (misurato:
+    tre giorni esenti su cinque, zero scarti).
+
+    Il testimone invece è esatto, e si costruisce dall'orario che il banco
+    trova da sé. ZANET ha due giorni liberi garantiti su cinque, quindi ne
+    lavora al più tre; si congela il suo orario dov'è atterrato e si esentano
+    **esattamente i giorni che gli erano rimasti liberi**, che restano
+    lavorativi per tutti gli altri. Ciò che era una garanzia soddisfatta
+    diventa una garanzia senza appoggio: i giorni contabili sono ora solo
+    quelli su cui ZANET è inchiodato.
+
+    ⚠ I due rami sono la stessa istanza con gli stessi pin: l'unica differenza
+    è il parametro d'istituto. E il primo ramo non è decorativo — senza,
+    `INFEASIBLE` sarebbe soddisfatto anche da pin impossibili di loro."""
+    env = alighieri.build()
+    zanetti = env["teachers"]["P01"]
+    ore = list(Activity.objects.filter(teachers=zanetti).order_by("pk"))
+
+    base = solve(env["schedule"], workers=8, time_limit=120,
+                 allow_unplaced=False)
+    assert base.status == "OPTIMAL", base.stats
+    pin = {a.pk: base.placements[a.pk] for a in ore}
+    lavorati = {giorno for giorno, _slot in pin.values()}
+    liberi = set(range(5)) - lavorati
+    assert len(liberi) >= 2, sorted(lavorati)   # la riga chiede due giornate
+
+    libero = solve(env["schedule"], workers=8, time_limit=120, pinned=pin,
+                   allow_unplaced=False)
+    assert libero.status == "OPTIMAL", libero.stats
+
+    settings = InstituteSettings.load()
+    settings.free_day_exempt_mask = sum(1 << g for g in liberi)
+    settings.save()
+    stretto = solve(env["schedule"], workers=8, time_limit=120, pinned=pin,
+                    allow_unplaced=False)
+    assert stretto.status == "INFEASIBLE", stretto.stats

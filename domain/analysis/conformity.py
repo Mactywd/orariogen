@@ -7,7 +7,8 @@ from domain import weeks
 from domain.analysis.findings import Severity
 from domain.analysis.registry import all_checkers
 from domain.analysis.state import ScheduleState, resource_sort_key
-from domain.models import Activity, Holiday, ResourceUnavailability
+from domain.models import (Activity, Holiday, ResourceUnavailability,
+                           effective_week_masks)
 
 _RANK = {Severity.HARD: 0, Severity.OPTIONAL: 1, Severity.PREFERENCE: 2}
 
@@ -23,9 +24,13 @@ def week_signatures(schedule):
     La firma include attività attive, indisponibilità datate e festivi."""
     year = schedule.period.school_year
     n_weeks = ((year.end_date - year.first_week_monday).days // 7) + 1
-    masks = list(Activity.objects
-                 .exclude(immobility=Activity.Immobility.SUSPENDED)
-                 .values_list("id", "week_mask"))
+    # ⚠ Maschera **effettiva**: l'originale non si tiene nelle settimane in cui
+    # un sostituto lo rimpiazza (ADR-014), e la firma deve dirlo — o due
+    # settimane che differiscono per una sostituzione risulterebbero uguali.
+    masks = list(effective_week_masks(
+        Activity.objects
+        .exclude(immobility=Activity.Immobility.SUSPENDED)
+        .values_list("id", "week_mask")).items())
     dated = list(ResourceUnavailability.objects
                  .exclude(date=None).values_list("id", "date"))
     holidays = list(Holiday.objects.filter(school_year=year)

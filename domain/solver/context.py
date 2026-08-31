@@ -41,6 +41,9 @@ class SolverContext:
                              # com'era prima del solve: L4 minimizza gli spostamenti
     arbitraggi: list = field(default_factory=list)   # il rendiconto dei tetti di
                              # non-regressione posti sulla popolazione sacrificata
+    arbitraggi_var: dict = field(default_factory=dict)  # nome del criterio
+                             # sacrificato → la sua IntVar, per leggere **dove
+                             # è atterrato** invece della sola coppia base/tetto
     pin_fuori_dominio: list = field(default_factory=list)  # i pin di `Piazza e
                              # sistema` su una cella che i pre-filtri hanno
                              # tolto: il modello è infattibile *per quello*, e

@@ -428,16 +428,33 @@ class FreeGuaranteedBuilder(ResourceBuilder):
     pretesa. Nella pratica quel caso si presenta di rado con la baseline
     gia' violata: con le libere non piazzate l'occupazione e' minima e i
     giorni liberi sono **tanti**, quindi la baseline e' quasi sempre pulita
-    e si posta la soglia grezza."""
+    e si posta la soglia grezza.
+
+    🔑 **I giorni esenti non generano letterali**, come i termini gia' persi:
+    `InstituteSettings.free_day_exempt_mask` porta la casella per giorno di
+    EDT — *«i giorni spuntati saranno ignorati durante il calcolo delle
+    giornate libere»* — e un giorno esente non e' ne' una giornata libera
+    quando e' vuoto ne' una mezza quando e' lavorato. ⚠ Ne discendono **due**
+    clamp con ragioni diverse: quello delle mezze e' L8 (il tetto lo alza
+    solo un giorno lavorato *e contabile*, quindi e' una variabile), quello
+    dei giorni e' nuovo ed e' una **costante** — con k giorni contabili non se
+    ne possono avere piu' di k liberi, e senza il clamp esentare quattro
+    giorni su cinque renderebbe `INFEASIBLE` una riga da due giorni liberi per
+    colpa di un parametro d'istituto invece che dell'orario."""
     TYPE = T.FREE_GUARANTEED
 
     def post(self, ctx, model, row, rep):
         v, key = ctx.vocab, row.resource_id
         grid = ctx.grid
-        giorni_liberi, mezze_libere = [], []
+        giorni_liberi, mezze_libere, contabili = [], [], []
         halves = v.halves()
         for day in range(grid.days_per_cycle):
+            # I giorni esenti non contano come giornata (ne' mezza) libera: non
+            # generano letterali, esattamente come i termini gia' persi.
+            if not ctx.settings.counts_as_free(day):
+                continue
             attivo = v.day_active(key, day, signature=rep)
+            contabili.append(attivo)
             if not frozen_occupies(ctx, key, day, range(grid.slots_per_day), rep):
                 libero = model.NewBoolVar(f"freeday_{key}_{rep}_{day}")
                 model.Add(libero + attivo == 1)
@@ -454,6 +471,10 @@ class FreeGuaranteedBuilder(ResourceBuilder):
 
         minimo_giorni = row.params.get("free_days", 0)
         minimo_mezze = row.params.get("free_half_days", 0)
+        # ⚠ Il clamp sui **giorni** non e' L8 ed e' per un'altra ragione: non
+        # il piazzamento, la maschera. Con k giorni contabili non se ne possono
+        # avere piu' di k liberi, ed e' un numero noto qui, non una variabile.
+        minimo_giorni = min(minimo_giorni, len(contabili))
         # L8: la soglia e' quella **raggiungibile** — `min(richieste, giorni
         # lavorati)`. Una mezza libera conta solo su un giorno lavorato, e un
         # giorno lavorato ne offre al piu' una: pretendere di piu' rende la
@@ -463,11 +484,12 @@ class FreeGuaranteedBuilder(ResourceBuilder):
         # dove i giorni bastano il minimo e' la costante di prima.
         soglia_mezze = minimo_mezze
         if minimo_mezze:
-            lavorati = sum(v.day_active(key, day, signature=rep)
-                           for day in range(grid.days_per_cycle))
+            # ⚠ I giorni **contabili** lavorati, non tutti quelli lavorati: un
+            # giorno esente non offre mezze giornate libere, quindi lavorarci
+            # non alza il tetto raggiungibile di L8.
             soglia_mezze = model.NewIntVar(0, minimo_mezze,
                                            f"freehalf_soglia_{key}_{rep}")
-            model.AddMinEquality(soglia_mezze, [minimo_mezze, lavorati])
+            model.AddMinEquality(soglia_mezze, [minimo_mezze, sum(contabili)])
         stato = ctx.states[rep]
         quantita = _quantita_baseline(FreeGuaranteedChecker(), stato, row,
                                       stato.resource_days(key))

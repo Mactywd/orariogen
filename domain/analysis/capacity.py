@@ -12,6 +12,7 @@ from domain import weeks
 from domain.models import (
     Activity, ClassPart, Group, ResourceTimeConstraint, ResourceUnavailability,
     SchoolClass, SchoolYear, SubjectConstraint, TimeGrid,
+    effective_week_masks,
 )
 from domain.analysis.state import activity_tokens, AtomMap
 
@@ -61,9 +62,11 @@ def _week_groups(acts):
     if year is None:
         return [acts]
     n_weeks = ((year.end_date - year.first_week_monday).days // 7) + 1
+    maschere = effective_week_masks((a.id, a.week_mask) for a in acts)
     groups = {}
     for w in range(n_weeks):
-        sig = frozenset(a.id for a in acts if weeks.week_in_mask(a.week_mask, w))
+        sig = frozenset(a.id for a in acts
+                        if weeks.week_in_mask(maschere[a.id], w))
         if sig and sig not in groups:
             groups[sig] = [a for a in acts if a.id in sig]
     return list(groups.values()) or [acts]

@@ -11,7 +11,7 @@ from domain import weeks
 from domain.models import (
     Activity, ClassPart, ClassPartition, Holiday, InstituteSettings, Resource,
     ResourceTimeConstraint, ResourceUnavailability, SchoolClass, Service,
-    Subject, SubjectConstraint, TimeGrid,
+    Subject, SubjectConstraint, TimeGrid, effective_week_masks,
 )
 
 _SEVERITY_ORDER = {"hard": 0, "optional": 1, "preference": 2}
@@ -191,6 +191,7 @@ class ScheduleState:
         self.class_caps = {}          # SchoolClass pk → max_weekly_weight_per_student
         self.services_by_plan = {}    # StudyPlan pk → {subject_id: class_minutes}
         self.election_groups = {}     # StudyPlan pk → {etichetta: (subject_id, …)} (ADR-020)
+        self.elective_services = {}   # StudyPlan pk → {subject_id} opzioni fuori gruppo (ADR-026)
         self.student_units = []       # [(chiave, StudyPlan pk, nome)] — coverage._student_units
         self.unit_plan_conflict = {}  # chiave → quanti piani diversi la dichiarano (ADR-020)
         self.break_boundaries = []    # boundary_slot degli intervalli della griglia
@@ -216,8 +217,13 @@ class ScheduleState:
                 .select_related("subject", "site")
                 .prefetch_related("teachers", "classes", "parts", "groups",
                                   "rooms", "staff", "material_requirements"))
+        maschere = effective_week_masks(
+            (a.id, a.week_mask) for a in acts)
         for a in acts:
-            if not weeks.week_in_mask(a.week_mask, week):
+            # ⚠ La maschera **effettiva**: nella settimana in cui un sostituto
+            # rimpiazza questa attività, l'attività non si tiene. Senza,
+            # l'occupazione conterebbe due ore dove la classe ne ha una.
+            if not weeks.week_in_mask(maschere[a.id], week):
                 continue
             state.activities[a.id] = a
             pl = placements.get(a.id)
@@ -267,11 +273,24 @@ class ScheduleState:
         state.subject_names = dict(Subject.objects.values_list("id", "name"))
         services = defaultdict(dict)
         elezioni = defaultdict(lambda: defaultdict(list))
+        opzioni = defaultdict(set)
         for s in Service.objects.all():
             services[s.study_plan_id][s.subject_id] = s.class_minutes
             if s.election_group:
                 elezioni[s.study_plan_id][s.election_group].append(s.subject_id)
+            elif s.elective:
+                # ADR-026: opzione **fuori** da ogni gruppo. Il gruppo ha la
+                # precedenza perché dice di più — «esattamente una» invece di
+                # «non a tutti» — e le due marcature sulla stessa riga non
+                # sono un conflitto: la seconda è implicata dalla prima.
+                # ⚠ L'`elif` è ridondante *per costruzione* e non per caso:
+                # una riga in gruppo o è la seguita (e allora ha ore, quindi
+                # il salto non scatterebbe) o è già esclusa dal conteggio.
+                # Resta perché dice quale dei due assi vince, che è ciò che
+                # un lettore verrà qui a cercare.
+                opzioni[s.study_plan_id].add(s.subject_id)
         state.services_by_plan = dict(services)
+        state.elective_services = dict(opzioni)
         state.election_groups = {plan: {label: tuple(sorted(subs))
                                         for label, subs in gruppi.items()}
                                  for plan, gruppi in elezioni.items()}

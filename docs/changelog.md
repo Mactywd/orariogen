@@ -15,6 +15,98 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-31 (notte) — Tutto ciò che non aspetta una persona: O6, O3 e tre
+  debiti su sette** — la sessione che svuota l'elenco fino a lasciarci solo ciò
+  che aspetta EDT o la decisione su **Aurora**. Cinque voci, e ognuna ha
+  portato una decisione più larga della riparazione.
+
+  🔑 **O6 ([ADR-026](decisioni.md)) — `Service.elective`, e non l'enumerazione.**
+  `MS` ha otto codici, ma di nessuno è mai stato osservato il *comportamento*:
+  la colonna è vuota su ogni riga di entrambe le basi, `RELIGIONE` compresa
+  nella base del produttore, dove è dovuta da tutti i 390 alunni del piano.
+  **EDT ha il campo, non il dato.** Si copia quindi la **partizione** che
+  l'enumerazione descrive — `S` (`Tronc commun`) contro gli altri sette, che
+  sono tutti forme di opzione — perché è tutto ciò di cui il predicato di
+  copertura ha bisogno e tutto ciò che si può copiare onestamente. La regola
+  che ne esce: *zero o tutta*. ⚠ E la terza alternativa scartata è quella che
+  sembrava gratis — un `election_group` di un solo elemento — che riuscirebbe
+  dicendo il falso: `election_mismatch` pretende **esattamente una** seguita,
+  quindi il gruppo unitario non è l'opzione, è l'obbligo travestito.
+  ⚠ **Nessun dataset lo esercita, e il banco non è stato piegato per averne
+  uno**: inventare una riga opzionale fuori gruppo vorrebbe dire rifare la
+  quadratura di 345 ore-alunno, 362 erogate e 343 attività per un campo che non
+  tocca il piazzamento. Lo esercitano tre test unitari col loro ramo di
+  controllo.
+
+  **O3 — i due campi restano, dichiarati.** `Ridotto` e `Sdop.` sono nello
+  schema dal primo giorno e letti da nessuno; la domanda era tenerli o
+  toglierli. Implementarli sarebbe scrivere codice su un dato che non esiste
+  (nessuna delle due basi li compila), toglierli sarebbe perdere un campo che
+  EDT ha davvero. Lo schema dichiara quindi ciò che sa **e** dichiara di non
+  leggerlo.
+
+  🔑 **I giorni esenti dal conteggio delle giornate libere** — la casella per
+  giorno di `Parametri → Istituto → Orari`, che **non** è la maschera dei
+  giorni lavorativi: il giorno resta in griglia e ci si lavora, semplicemente
+  non vale come giornata libera. La riparazione ha portato un **secondo clamp**
+  accanto a quello di L8, e le due ragioni sono diverse: quello nasce dal
+  piazzamento (una mezza libera la offre solo un giorno lavorato), questo dalla
+  **maschera** (con k giorni contabili non se ne possono avere più di k
+  liberi). Senza, esentare quattro giorni su cinque renderebbe `INFEASIBLE` una
+  riga da due giorni liberi per colpa di un parametro d'istituto invece che
+  dell'orario — la forma di errore che ADR-018 esiste per evitare, qui su un
+  dato anagrafico. ⚠ **E il criterio di qualità non li filtra, dichiarato**: la
+  casella parla di una *garanzia*, il criterio `free_half_days` minimizza mezze
+  giornate **occupate**, e filtrarlo trasformerebbe «occupa meno» in «occupa
+  altrove» — cioè spingerebbe il lavoro *sul* giorno esente, un'istruzione che
+  la casella non dà.
+  ⚠ Sul banco la voce si prova col **testimone puntato** e non con la tacca, e
+  la scelta è misurata: con otto fasce al giorno le dodici ore di ZANET stanno
+  comodamente nei giorni esenti, e stringere la maschera a tre giorni su cinque
+  restituisce `OPTIMAL` con zero scarti. Il testimone si costruisce invece
+  dall'orario che il banco trova da sé — si congela ZANET dov'è atterrato e si
+  esentano **esattamente i giorni che gli erano rimasti liberi**.
+
+  🔑 **L'arbitrato dice dove è atterrato**, e il primo numero letto ha smentito
+  ciò che il rendiconto lasciava supporre. Base e tetto non distinguono
+  «sfiorato» da «rimasto largo»; il valore raggiunto sì, e non costa un secondo
+  `Solve` — si legge dallo stesso solver che chiude l'ultimo livello, dentro la
+  stessa fotografia da cui escono i piazzamenti. Su
+  `test_la_tolleranza_e_dichiarata_nel_rendiconto` (base 1, tetto 4) il
+  criterio **peggiora davvero** di un punto e due dei tre concessi restano
+  inutilizzati: due fatti che i primi due numeri non portavano.
+
+  🔑 **La sostituzione oscura l'originale** — emendamento ad
+  [ADR-014](decisioni.md), che di quattro conseguenze ne aveva scritte due mai
+  implementate: *«serve una relazione sostituisce»* e *«serve una soppressione
+  dell'occorrenza annuale»*. `Activity.substitutes` è la relazione **e** il
+  campo `natura` che l'ADR chiedeva — un'attività è un sostituto se lo dichiara,
+  e non serve un enum accanto che possa contraddirlo — e la soppressione **si
+  deriva** invece di essere una seconda tabella: due scritture per lo stesso
+  fatto sono due modi di scriverlo diverso.
+  ⚠ **E la derivazione è una semplificazione dichiarata, non una lettura di
+  EDT.** Lì `ANNULATIONCOURS` è una tabella a sé e sopprime **112 dei 122**
+  originali: dieci hanno un sostituto e nessuna soppressione, e non sappiamo
+  cosa siano. Derivare li rende irrappresentabili — prezzo pagato volentieri
+  finché nessun dato li esercita, contro una seconda tabella che una scuola può
+  riempire in contraddizione con la prima.
+  ⚠ **E il filtro non vive nell'export**, che è la parte che vale. Il debito
+  era scritto come «l'iCal mostra due eventi», ma l'orario di quella settimana
+  *è* uno solo: senza la relazione, sostituto e originale sulla stessa cella
+  della stessa classe erano anche un `resource_occupied` — misurato, ed è il
+  test che tiene ferma la scelta. `effective_week_masks` sta quindi sul modello
+  e la leggono tutti e quattro i lettori di maschere (le firme di settimana,
+  `ScheduleState`, l'analisi di capienza, l'iCal); il solver ne eredita per
+  costruzione, perché legge lo stato e non le maschere. ⚠ Resta fuori la
+  cancellazione **senza** sostituto (`ANNULATIONCOURS`): è un fatto diverso, e
+  nessun dato la esercita.
+
+  **Cosa resta**: due decisioni (D2 e D4, che sono la stessa — il confine con
+  Aurora), tre osservazioni che richiedono la UI di EDT (il `Ciclo
+  personalizzato`, le due minuzie di O7) e quattro debiti dichiarati. 🔧 **La
+  sezione `Lavoro` del todo è vuota, e adesso lo è davvero.**
+  **972 test verdi**, 17 skip (erano 960).
+
 - **2026-08-31 (sera) — O5: due criteri di piazzamento su dieci, e il costo che
   hanno reso visibile** —
   [ADR-025](decisioni.md). O5 era l'ultima decisione di prodotto che avesse

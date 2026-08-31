@@ -39,12 +39,18 @@ scuola sono le 08:00 dell'orologio alla parete, non un istante UTC. È anche
 l'unica forma che attraversa il cambio d'ora senza spostare le lezioni di
 un'ora per metà anno.
 
-⚠ **Fuori, dichiarato: la sostituzione non oscura l'originale.** Per ADR-014 il
-sostituto è una riga di `Activity` con un bit solo, quindi compare nel
-calendario da sé — ma l'originale è annuale e continua a comparire nella
-stessa settimana, perché il modello non ha la relazione fra i due
-(`RELATIONCOURSSUBSTITUT` di EDT). Finché quella relazione non esiste, il
-calendario di una settimana con sostituzione porta due eventi invece di uno.
+🔑 **E la sostituzione oscura l'originale** (2026-08-31). Per ADR-014 il
+sostituto è una riga di `Activity` con un bit solo, quindi compare da sé; ma
+l'originale è annuale — 161 su 161 nella base di EDT — e senza la relazione fra
+i due continuava a comparire nella stessa settimana, cioè il calendario di una
+settimana con sostituzione portava **due** eventi invece di uno.
+`Activity.substitutes` è quella relazione (`RELATIONCOURSSUBSTITUT`), e la
+*soppressione dell'occorrenza* che ADR-014 chiedeva ne discende invece di
+essere una seconda tabella. ⚠ Il filtro non vive qui: `effective_week_masks`
+sta sul modello e lo leggono tutti e quattro i lettori di maschere — le firme
+di settimana, lo stato, la capienza e questo export — perché l'orario di quella
+settimana è uno solo, e un calendario che mostrasse una cosa e i checker
+un'altra sarebbe il difetto con un passo in più.
 """
 
 import datetime as dt
@@ -52,7 +58,7 @@ from dataclasses import dataclass
 
 from domain import weeks
 from domain.models import (
-    Activity, Holiday, Placement, SlotLabel, TimeGrid,
+    Activity, Holiday, Placement, SlotLabel, TimeGrid, effective_week_masks,
 )
 
 PRODID = "-//orariogen//Orario scolastico//IT"
@@ -144,6 +150,8 @@ def occorrenze(schedule, selected=None):
                                      "activity__rooms")
                    .order_by("day", "start_slot", "activity_id"))
 
+    maschere = effective_week_masks(
+        (pl.activity_id, pl.activity.week_mask) for pl in piazzamenti)
     out, saltate = [], 0
     for pl in piazzamenti:
         act = pl.activity
@@ -151,7 +159,9 @@ def occorrenze(schedule, selected=None):
             continue
         corse = _corse(labels, pl.start_slot, act.duration_slots)
         for w in range(n_weeks):
-            if not weeks.week_in_mask(act.week_mask, w):
+            # La maschera **effettiva**: nella settimana in cui un sostituto
+            # rimpiazza questa lezione, l'originale non compare.
+            if not weeks.week_in_mask(maschere[act.pk], w):
                 continue
             data = year.first_week_monday + dt.timedelta(weeks=w, days=pl.day)
             if not (period.start_date <= data <= period.end_date):

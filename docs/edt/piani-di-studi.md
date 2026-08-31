@@ -142,6 +142,15 @@ distinguere «dovuta da tutti» da «opzione», non «di queste tre se ne segue 
 Il nostro `Service.election_group` risponde alla seconda domanda e tace sulla
 prima: i due meccanismi sono **complementari**, non uno la traduzione dell'altro.
 
+✅ **E dal 2026-08-31 abbiamo anche il primo asse** ([ADR-026](../decisioni.md)):
+`Service.elective`, un booleano — `S` da una parte, gli altri sette codici
+dall'altra. Non è l'enumerazione: è la **partizione** che l'enumerazione
+descrive, che è tutto ciò di cui il predicato di copertura ha bisogno e tutto
+ciò che si può copiare onestamente da un campo di cui nessun comportamento è
+mai stato osservato. Con esso un'opzione **fuori** da ogni gruppo — un corso
+che si sceglie o no — smette di far risultare debitore chi non l'ha scelta:
+*zero o tutta*.
+
 ⚠ Due correzioni a quanto era scritto qui: `L` è **`Locale`** e non
 «Accademica» — il francese `académique` è l'aggettivo di *académie*, la
 circoscrizione scolastica, quindi `Ajout académique au programme` è
@@ -163,14 +172,15 @@ sé. Coerente con lo schema di scambio, che ne esporta tre.
 
 - Semantica fine di **Coeff.**: quando si usa un valore ≠ `60/60`? (è la
   `Pondération` del formato di scambio).
-- I sette codici di **MS** (`N/O/F/L/D/R/X`): i nomi si conoscono (📦, vedi la
-  tabella qui sopra), il **comportamento** no — cosa cambia per il piazzamento,
-  e se EDT ne derivi qualcosa o sia solo un'etichetta. 🔑 È la colonna che dice
-  *«questa riga non è dovuta da ogni alunno»*, ed è il meccanismo di cui
-  [ADR-020](../decisioni.md) ha preso la forma minima (`Service.election_group`)
-  per smettere di leggere il piano — che è un **catalogo** — come se fosse il
-  curriculum di un alunno. L'enumerazione si copia quando `MS` sarà osservata,
-  non prima (O6 di [todo.md](../todo.md)).
+- ~~I sette codici di **MS**~~ — **chiuso il 2026-08-31**, e la risposta è che
+  l'enumerazione **non si copia**. I nomi si conoscono (📦, vedi la tabella qui
+  sopra), il comportamento no, e non è osservabile: la colonna è vuota su ogni
+  riga di entrambe le basi. Ciò che si copia è la **partizione** — tronco
+  comune contro opzione — e sta in `Service.elective`
+  ([ADR-026](../decisioni.md)). L'esperimento residuo (compilare `MS = R` e
+  guardare se il piazzamento cambia) resta possibile ma è sceso di priorità: un
+  campo che il produttore non compila nemmeno nella propria base difficilmente
+  muove il motore.
 - Cosa comporta un servizio **inattivo**.
 - Compilare **Ridotto/Sdop.** su un servizio (es. ING) per osservare come nascono i
   gruppi → [gruppi.md](gruppi.md).
