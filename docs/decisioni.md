@@ -1463,3 +1463,61 @@ Design completo:
 [docs/superpowers/specs/2026-08-31-confine-aurora-design.md](superpowers/specs/2026-08-31-confine-aurora-design.md).
 
 **Data.** 2026-08-31
+
+---
+
+## ADR-029 — Il silenzio non è una risposta: una domanda si chiude perché qualcuno la chiude
+
+**Decisione.** Il questionario d'ingresso (gradino 3 di ADR-028) tiene lo stato
+delle domande in una tabella propria, `SetupQuestion`, con una riga per domanda
+**chiusa**. Una domanda è aperta finché nessuno la chiude, indipendentemente da
+quante righe abbia la famiglia che riguarda. La tabella porta *che* la domanda è
+stata posta — quando, e con che nota — **non la risposta**, che sta nelle
+tabelle vere.
+
+**Alternative considerate.**
+
+1. **«Aperta» = «la tabella è vuota».** È la formulazione che viene per prima, e
+   non regge per una ragione che si vede solo provando a *finire* il
+   questionario: una scuola che davvero non ha vincoli di materia e una scuola a
+   cui nessuno li ha chiesti hanno **le stesse zero righe**. Con questa regola
+   il dialogo **non può terminare** — ogni famiglia legittimamente vuota resta
+   aperta per sempre — e un questionario che non finisce nessuno lo compila.
+2. **Tenere anche la risposta nella tabella** (il testo di cosa ha detto la
+   scuola, o una copia dei valori). Scartata: sarebbe una **seconda verità sullo
+   stesso dato**, che è esattamente l'obiezione con cui ADR-028 scarta un
+   secondo lettore di file d'orario. La nota è libera e serve a dire *chi* ha
+   risposto, non *cosa*.
+3. **Nessuno stato, e il questionario come documento statico.** È ciò che il
+   gradino 3 era prima di essere codice: un elenco in un ADR. Un elenco non sa
+   che le aule sono già state inserite, quindi le richiede a ogni lettura, e
+   dopo la seconda volta nessuno lo legge più.
+
+**Motivo.** L'unica proprietà che rende un questionario diverso da una checklist
+è che **finisce**. Farlo finire richiede di distinguere due stati che i dati non
+distinguono, e l'unico modo di distinguerli è registrare l'atto di chi risponde.
+È la stessa forma di `CECITA` in `domain/bootstrap.py`: ciò che non si può
+dedurre si **dichiara**, invece di lasciarlo indovinare a chi legge.
+
+⚠ **Conseguenza dichiarata: si può chiudere una domanda troppo presto.** Il
+perimetro di ogni domanda si calcola sullo stato di adesso, quindi chiudere
+`indisponibilita` prima di aver inserito le aule chiude una domanda che allora
+riguardava soltanto docenti e classi. Da qui `riapri()`: una chiusura senza
+ritorno sarebbe una trappola.
+
+⚠ **E la misura che accompagna la decisione ha corretto ADR-028 in un punto.**
+L'elenco del gradino 3 metteva *«discipline e classi di concorso»* accanto ad
+aule e indisponibilità. L'ablazione sull'Alighieri — si tolgono le righe della
+famiglia e si ripassa la sonda dei builder — dice **zero builder, zero celle,
+zero constraint**: il calcolo è identico riga per riga. La domanda si fa lo
+stesso, perché le sostituzioni ragionano per classe di concorso
+([ADR-001](#adr-001--discipline-è-una-tabella-non-un-enum),
+[ADR-002](#adr-002--mappare-le-discipline-alle-classi-di-concorso)), ma per il
+**gestionale** e non per l'orario. È l'unica
+del catalogo così, ed è per questo che il modulo ha tre effetti e non due.
+
+Design completo:
+[docs/superpowers/specs/2026-08-31-confine-aurora-design.md](superpowers/specs/2026-08-31-confine-aurora-design.md)
+(§4).
+
+**Data.** 2026-08-31

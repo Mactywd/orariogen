@@ -170,3 +170,26 @@ class QualityCriterion(models.Model):
 
     def __str__(self):
         return f"{self.rank}. {self.kind} ({self.population})"
+
+
+class SetupQuestion(models.Model):
+    """Una domanda del **questionario d'ingresso**, e il fatto che le sia stata
+    data risposta.
+
+    🔑 Esiste per una ragione sola, ed è la ragione per cui un questionario non
+    è una lista di tabelle vuote: **il silenzio non è una risposta**. Una
+    scuola che non ha nessun vincolo di materia e una scuola a cui nessuno l'ha
+    ancora chiesto hanno le stesse zero righe, e sono due situazioni opposte —
+    la prima è finita, la seconda è ferma. Senza questa tabella il dialogo di
+    ADR-028 **non può terminare**: ogni famiglia legittimamente vuota resterebbe
+    aperta per sempre.
+
+    ⚠ Non porta la risposta, che sta nelle tabelle vere. Porta solo che la
+    domanda è stata **posta e chiusa**, da chi e quando — ed è deliberato:
+    duplicare qui il contenuto sarebbe una seconda verità sullo stesso dato,
+    che è esattamente l'obiezione con cui ADR-028 scarta un secondo lettore di
+    file d'orario."""
+
+    key = models.CharField(max_length=40, unique=True)
+    closed_at = models.DateTimeField(auto_now_add=True)
+    note = models.TextField(blank=True)

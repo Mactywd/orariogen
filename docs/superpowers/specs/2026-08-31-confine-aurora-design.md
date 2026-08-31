@@ -244,6 +244,54 @@ per costruzione non collide — stesso docente, mai simultanee. Resta da chieder
 **chi** sta in quale metà, che è anagrafica di alunni e non sta in nessun
 orario.
 
+✅ **Anche il gradino 3 è implementato lo stesso giorno**
+(`domain/questionario.py`, `manage.py questionario`), e implementandolo l'elenco
+di §4.3 si è corretto in tre punti.
+
+**Il primo: una delle quattro voci non tocca il calcolo.** Discipline e classi
+di concorso stavano nell'elenco accanto ad aule e indisponibilità. L'ablazione
+sull'Alighieri — si tolgono le righe della famiglia e si ripassa la sonda —
+dice **zero builder, zero celle, zero constraint**: il solve è identico riga
+per riga. La domanda si fa lo stesso, ma per il gestionale (ADR-001, ADR-002:
+le sostituzioni ragionano per classe di concorso), non per l'orario. È l'unica
+del catalogo così, e senza la misura sarebbe rimasta indistinguibile dalle
+altre.
+
+**Il secondo: l'elenco non era ordinabile per gravità.** I tre effetti che il
+modulo dichiara — `MUTO` (senza risposta il calcolo sbaglia e nessuno lo dice),
+`ASSENTE` (un pezzo non si fa, e si vede), `FUORI_CALCOLO` — suggerirebbero di
+chiedere prima le mute. Ma `indisponibilita` è muta e `aule` è solo assente, e
+le aule vengono comunque prima: *quando* un'aula è occupata non si sa nemmeno
+formulare finché non si sa *quali* aule ci sono. 🔑 **La possibilità viene
+prima della gravità**, e la gravità ordina ciò che è ugualmente possibile.
+
+**Il terzo, ed è quello che ha aggiunto una tabella.** Un questionario che
+chiama «aperta» una famiglia vuota **non può terminare**: una scuola che
+davvero non ha vincoli di materia ha le stesse zero righe di una a cui nessuno
+li ha chiesti. Da qui `SetupQuestion`: una domanda si chiude perché qualcuno la
+chiude, e la tabella porta *che* è stata posta, non la risposta — che sta nelle
+tabelle vere. **Il silenzio non è una risposta**, ed è la stessa obiezione con
+cui §4.1 scarta un secondo lettore di file: due verità sullo stesso dato.
+
+⚠ **La sonda ha un punto cieco, e le due voci che ci cadono lo dichiarano.**
+Misura `build_model`, cioè il modello **duro**; le quote di alleggerimento e i
+criteri di qualità sono livelli della catena lessicografica, costruiti uno alla
+volta sopra di esso. L'ablazione li misura a zero, e zero lì non vuol dire
+inerte.
+
+⚠ **E togliere le indisponibilità fa *crescere* il modello** — 13 645 → 13 861
+constraint. Una cella potata non genera letterali, quindi nemmeno i constraint
+che li nominerebbero: **potare costa meno che vincolare**. Il criterio
+dell'ablazione conta quindi i builder che *calano*, non quelli che *cambiano*.
+
+🔑 **La misura che dice quanto è grande il gradino 3 viene dal Fermi**, che è
+l'unico dataset osservato invece che costruito: delle dodici famiglie del
+catalogo ne porta **quattro** (aule, indisponibilità, discipline, calendario),
+e delle sei mute ne lascia **quattro** senza una riga. L'Alighieri, che è
+costruito apposta, ne porta undici su dodici. È la stessa forma della misura
+che aprì L4 — tre builder su ventotto — vista dalla parte di chi deve chiedere
+invece che da quella di chi calcola.
+
 ### 4.1 Alternative scartate
 
 - **Un formato nostro, o CSV** — la formulazione originale di D2. Non è

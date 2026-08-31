@@ -32,7 +32,10 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > - **tre voci di lavoro**, tutte nate da quella lettura: **L9** (la
 >   `ScheduleEntry` non tiene l'ora quindicinale), **L10** (nessun dato
 >   dichiara una cattedra su una parte o un raggruppamento) e **L11** (il
->   dominio interroga l'ORM in 77 punti, senza un chokepoint);
+>   dominio interroga l'ORM in 77 punti, senza un chokepoint). ⚠ **Solo L9
+>   non si può fare da qui**: vive nel repository di Aurora. L10 e L11 sono
+>   lavoro di questo repository — un dato da dichiarare e un chokepoint da
+>   costruire;
 > - **tre osservazioni** che richiedono la UI e che nessuno può fare al posto
 >   di chi ha il prodotto: l'ultimo residuo di O2 (il `Ciclo personalizzato`) e
 >   le due minuzie da tooltip di **O7**;
@@ -97,6 +100,9 @@ ricava ciò che l'orario dice (le **cattedre**: 139 chiavi su 142 sull'Alighieri
 si dichiara ciò che l'orario non distingue (**dove una classe si sdoppia**: 17
 partizioni), si chiede il resto (aule, indisponibilità, vincoli, discipline —
 ~170 righe su 536).
+
+✅ **Tutti e tre i gradini sono implementati il 2026-08-31** — L12 il primo (e
+il secondo, ridotto a un sospetto misurabile), L13 il terzo.
 
 🔑 Il gradino 2 non è un dettaglio: la griglia piatta **raddoppia ogni
 sdoppiamento**, quindi i quadri orari ricavati tornano per **6 classi su 12** e
@@ -278,8 +284,52 @@ il dataset, non la ricerca.
 calendario (sono date). E **non legge file**: ADR-028 esclude un secondo
 lettore per gli stessi file, quindi entra la griglia già letta.
 
-Resta il **gradino 3** — chiedere aule, indisponibilità e vincoli, che in
-nessun orario stanno.
+### L13 ✅ Il gradino 3 di D2 — **fatto il 2026-08-31**
+
+`domain/questionario.py` + `manage.py questionario`: **cosa resta da chiedere,
+e in che ordine**. Dodici domande, ognuna con il suo perimetro contato sullo
+stato di adesso, ciò che succede se resta senza risposta, e i builder che la
+risposta fa lavorare.
+
+🔑 **Un questionario non è l'elenco delle tabelle vuote**, ed è la ragione per
+cui il pezzo ha aggiunto una tabella ([ADR-029](decisioni.md), `SetupQuestion`): una scuola senza
+vincoli di materia e una scuola a cui nessuno li ha chiesti hanno le stesse
+zero righe. Se «aperta» volesse dire «vuota» il dialogo **non potrebbe
+terminare**. Una domanda si chiude perché qualcuno la chiude — anche, e
+soprattutto, quando la risposta è *«niente»*.
+
+🔑 **La possibilità viene prima della gravità.** I tre effetti (`MUTO`, il
+calcolo sbaglia e nessuno lo dice; `ASSENTE`, un pezzo non si fa e si vede;
+`FUORI_CALCOLO`) suggerirebbero di chiedere prima le mute, ma `aule` —
+soltanto assente — precede `indisponibilita`, che è muta: *quando* un'aula è
+occupata non si sa nemmeno formulare finché non si sa *quali* aule ci sono.
+
+⚠ **`tocca` è misurato per ablazione, non dichiarato**
+(`tests/test_questionario_ablazione.py`): si tolgono le righe della famiglia e
+si ripassa la sonda. Ha corretto l'elenco del gradino 3 in un punto che valeva:
+**discipline e classi di concorso non toccano il calcolo** — zero builder, zero
+celle, zero constraint — e la domanda si fa per il gestionale, non per
+l'orario. Il criterio conta i builder che **calano**, perché togliere le
+indisponibilità fa *crescere* il modello (13 645 → 13 861 constraint): potare
+costa meno che vincolare.
+
+⚠ **La sonda ha un punto cieco, e le due voci che ci cadono lo dichiarano**:
+misura il modello **duro**, mentre quote e criteri di qualità sono livelli
+della catena. Zero, lì, non vuol dire inerte.
+
+🔑 **E la misura che dice quanto è grande il gradino 3 viene dal Fermi**:
+l'unico dataset osservato invece che costruito porta **quattro** famiglie su
+dodici, e lascia senza righe **quattro** delle sei mute. L'Alighieri, costruito
+apposta, ne porta undici su dodici. È la misura che aprì L4 vista dalla parte
+di chi deve chiedere.
+
+⚠ **Due prezzi dichiarati.** Il perimetro si legge sullo stato di adesso,
+quindi chiudere `indisponibilita` prima di aver inserito le aule chiude una
+domanda che allora riguardava soltanto docenti e classi. E il perimetro di
+`partizioni` sono le **classi**, non i **sospetti** — che sarebbero la risposta
+utile: `ricava` li trova e `manage.py bootstrap` li stampa, ma `applica` non li
+scrive, perché una partizione senza gli alunni dentro non è una riga che si
+possa mettere. Chi vuole l'elenco rilegge la griglia.
 
 ### L9 🔧 La `ScheduleEntry` di Aurora non tiene l'ora quindicinale
 
@@ -816,6 +866,24 @@ perché nessuno debba ricostruire *perché*.
 
 Il racconto è in [changelog.md](changelog.md), alla data.
 
+- [x] **2026-08-31 (notte)** — **L13, il gradino 3 di D2**: il **questionario
+      d'ingresso** (`domain/questionario.py`, `manage.py questionario`). Dodici
+      domande, ognuna col perimetro contato sullo stato di adesso, con ciò che
+      succede se resta senza risposta e con i builder che la risposta fa
+      lavorare — **misurati per ablazione**, non dichiarati. 🔑 Ha aggiunto una
+      tabella (`SetupQuestion`) per una ragione sola: **il silenzio non è una
+      risposta**, e un questionario in cui «aperta» vuol dire «vuota» non può
+      terminare. ⚠ E la misura ha corretto l'elenco del gradino 3: **discipline
+      e classi di concorso non toccano il calcolo** — zero builder, zero celle,
+      zero constraint — quindi la domanda si fa per il gestionale e non per
+      l'orario.
+- [x] **2026-08-31 (notte)** — **L12, il gradino 1 di D2**: `Ricava`
+      (`domain/bootstrap.py`, `manage.py bootstrap`). Le cattedre si leggono
+      (139 chiavi su 142), i quadri orari si indovinano contando le **celle**
+      (esatti da 6 a **8 su 12**), lo sdoppiamento è un **sospetto da nominare**
+      e non una domanda da fare — sicuro ma non completo, zero falsi allarmi su
+      due dataset e 28 coppie su 30 — e ciò che non si vede si **dichiara**
+      (`CECITA`).
 - [x] **2026-08-31** — ⛔ **D2 e D4, il confine con Aurora**, sciolte con
       [ADR-027](decisioni.md) e [ADR-028](decisioni.md) dopo aver **letto
       Aurora** (`Mactywd/aurora` a `ff0a750`) invece di ragionarci sopra.

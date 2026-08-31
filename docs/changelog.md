@@ -15,6 +15,91 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-31 (notte) — Il questionario d'ingresso: il terzo gradino** —
+  `domain/questionario.py` e `manage.py questionario`. Il gradino 1 legge
+  l'orario dell'anno scorso; questo prende **ciò che in nessun orario sta** —
+  aule, indisponibilità, vincoli, sedi, calendario — e lo rende una
+  conversazione **finita**: dodici domande, ognuna col perimetro contato sullo
+  stato di adesso, con cosa succede se resta senza risposta, e con i builder
+  che la risposta fa lavorare.
+
+  🔑 **La scoperta che ha aggiunto una tabella: il silenzio non è una
+  risposta.** Il primo abbozzo chiamava «aperta» una famiglia con zero righe, e
+  la cosa non regge per una ragione che si vede solo provando a finire il
+  questionario: una scuola che davvero non ha vincoli di materia e una scuola a
+  cui nessuno li ha chiesti hanno **le stesse zero righe**. Con quella regola il
+  dialogo non può terminare — ogni famiglia legittimamente vuota resta aperta
+  per sempre, e un questionario che non finisce nessuno lo compila. Da qui
+  `SetupQuestion` e [ADR-029](decisioni.md): una domanda si chiude perché qualcuno la chiude. ⚠ E porta
+  **che** è stata posta, non la risposta, che sta nelle tabelle vere:
+  duplicarla qui sarebbe una seconda verità sullo stesso dato, cioè l'obiezione
+  con cui ADR-028 scarta un secondo lettore di file d'orario.
+
+  🔑 **La seconda: la possibilità viene prima della gravità.** I tre effetti
+  sono la stessa disciplina di `CECITA` — si dichiara *in che modo* si è
+  ciechi. `MUTO` è la categoria che conta: senza risposta il calcolo produce un
+  orario sbagliato **e nessuno lo dice** (piazza un docente quando non c'è, lo
+  manda fra due sedi in fasce consecutive, occupa un giorno di vacanza).
+  `ASSENTE` è il caso onesto: un pezzo dichiarato non si fa, e si vede — senza
+  aule la fase 2 rinuncia, e lo scrive. Sembrerebbe quindi che si debbano
+  chiedere prima le mute; e invece `aule`, che è solo assente, precede
+  `indisponibilita`, che è muta. *Quando* un'aula è occupata non si sa nemmeno
+  **formulare** finché non si sa *quali* aule ci sono. L'ordine è topologico
+  sulle dipendenze, e la gravità è lo spareggio fra ciò che è ugualmente
+  possibile.
+
+  ⚠ **`tocca` è misurato, non dichiarato** — `tests/test_questionario_ablazione.py`:
+  si tolgono dall'Alighieri le righe di una famiglia e si ripassa la sonda. È
+  lo stesso mestiere del cricchetto di `tests/sonda.py`, e nasce dallo stesso
+  inciampo: un elenco scritto a mano che nessuno rimisura invecchia senza dirlo,
+  e `CLAUDE.md` ne ha portato uno per settimane.
+
+  🔑 **E la misura ha corretto l'elenco del gradino 3 in un punto che vale.**
+  ADR-028 metteva *«discipline e classi di concorso (22 righe)»* accanto ad aule
+  e indisponibilità. L'ablazione dice **zero builder, zero celle, zero
+  constraint**: il solve è identico riga per riga. La domanda si fa lo stesso —
+  le sostituzioni ragionano per classe di concorso (ADR-001, ADR-002) — ma per
+  il **gestionale**, non per l'orario, ed è l'unica del catalogo così. Senza la
+  misura sarebbe rimasta indistinguibile dalle altre.
+
+  ⚠ **Il criterio conta i builder che *calano*, e il verso non è un
+  dettaglio.** Togliere le indisponibilità fa **crescere** il modello: 13 645 →
+  13 861 constraint. Una cella potata non genera letterali, quindi nemmeno i
+  constraint che li nominerebbero — **potare costa meno che vincolare** — e un
+  criterio che contasse le variazioni in valore assoluto attribuirebbe alle
+  indisponibilità builder che quelle righe non alimentano. Per la stessa
+  ragione il criterio non è «il builder diventa inerte», che perderebbe i due
+  casi in cui una famiglia fa lavorare di più un builder che *resta* attivo: i
+  materiali attraverso le chiavi di occupazione (ADR-017, +128 constraint) e i
+  pesi attraverso i tetti (+540).
+
+  ⚠ **La sonda ha un punto cieco, e le due voci che ci cadono lo dichiarano.**
+  Misura `build_model`, cioè il modello **duro**; le quote di alleggerimento e i
+  criteri di qualità sono livelli della catena lessicografica, costruiti uno
+  alla volta sopra di esso. L'ablazione li misura a zero, e zero lì non vuol
+  dire inerte: `oltre_il_modello_duro` lo dice, e un test asserisce lo zero
+  **insieme al motivo**.
+
+  🔑 **Quanto è grande il gradino 3, lo dice il Fermi.** È l'unico dataset
+  osservato invece che costruito — una scuola inserita in EDT campo per campo —
+  e delle dodici famiglie del catalogo ne porta **quattro** (aule,
+  indisponibilità, discipline, calendario), lasciando senza righe **quattro**
+  delle sei mute. L'Alighieri, che è costruito apposta per accendere tutto, ne
+  porta **undici su dodici**. È la stessa forma della misura che aprì L4 — tre
+  builder su ventotto — vista dalla parte di chi deve chiedere invece che da
+  quella di chi calcola.
+
+  ⚠ **Prezzo dichiarato**: il perimetro si legge sullo stato di adesso, quindi
+  chiudere `indisponibilita` prima di aver inserito le aule chiude una domanda
+  che allora riguardava soltanto docenti e classi. È il rovescio dell'ordine per
+  dipendenza, ed è scritto perché sia una scelta e non una sorpresa.
+
+  Sul giro completo — `bootstrap --applica` sulla griglia dell'Alighieri, poi
+  `questionario` — le dodici domande sono tutte aperte, con i perimetri veri:
+  23 docenti e 12 classi per le indisponibilità, 140 righe di quadro orario per
+  i vincoli di materia, e **16 materie ancora su una disciplina segnaposto**,
+  che è la traccia che il gradino 1 lascia apposta.
+
 - **2026-08-31 (sera) — `Ricava`: il primo gradino della via d'ingresso** —
   `domain/bootstrap.py` e `manage.py bootstrap`, il pezzo che rende reale la
   decisione presa la mattina. Da una griglia piatta — le righe di

@@ -123,11 +123,19 @@ domain/                l'app Django del modello di dominio v1
                         (ADR-028, gradino 1) — le cattedre si leggono, i quadri
                         orari si indovinano, e ciò che non si vede si dichiara
                         (`CECITA`). ⚠ Non importa Django fuori da `applica()`
+  questionario.py       Il **questionario d'ingresso** (ADR-028, gradino 3):
+                        cosa resta da chiedere, e in che ordine — dodici
+                        domande, il perimetro contato sullo stato di adesso, i
+                        tre effetti (`MUTO` sbaglia in silenzio / `ASSENTE` non
+                        fa un pezzo / `FUORI_CALCOLO`) e i builder che ogni
+                        risposta accende, **misurati per ablazione**.
+                        🔑 La possibilità viene prima della gravità, e il
+                        silenzio non è una risposta (`SetupQuestion`)
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture,
                        tests/alighieri.py il **banco** (L4, ondate 1–5) e
                        tests/sonda.py il **cricchetto della copertura** —
                        quali builder fanno davvero qualcosa su un dataset,
-                       asserito come insieme e non come numero, e i test degli assi — tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla, tests/test_alighieri_relazione.py, dove si prova **puntandola**: la configurazione vietata imposta con `pinned`, INFEASIBLE con la riga e OPTIMAL senza, e tests/test_alighieri_risorse.py, dove il contratto è **misto** (indisponibilità nei tre livelli, tetti di peso, tecnico e carrelli) e dove stavano i due difetti L6 e L6bis, ora capovolti col loro ramo di controllo; e per l'ondata 6 tests/test_alighieri_quote.py, dove una riga si prova **mettendo il dataset in tensione** e chiedendo alla quota di rimetterlo in piedi (e la taglia della quota conta), tests/test_alighieri_settimane.py, l'ora quindicinale — l'occupazione che distingue le firme, e **L7** col suo ramo di controllo — e tests/test_alighieri_qualita.py, la gerarchia completa dei criteri, l'arbitrato e il verde che *conta* dopo che l'ondata 5 aveva provato che non vieta; e per l'ondata 7 tests/test_alighieri_comandi.py, i cinque comandi di §7 — la classifica che ordina quindici famiglie contro l'unica del Fermi, il deficit di Hall sul laboratorio unico, i sei rilevatori, la cella a **due sfratti**, il tetto di non-regressione che morde solo in tensione, e il gruppo di aule provato col testimone puntato; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventotto builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms)
+                       asserito come insieme e non come numero, e i test degli assi — tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla, tests/test_alighieri_relazione.py, dove si prova **puntandola**: la configurazione vietata imposta con `pinned`, INFEASIBLE con la riga e OPTIMAL senza, e tests/test_alighieri_risorse.py, dove il contratto è **misto** (indisponibilità nei tre livelli, tetti di peso, tecnico e carrelli) e dove stavano i due difetti L6 e L6bis, ora capovolti col loro ramo di controllo; e per l'ondata 6 tests/test_alighieri_quote.py, dove una riga si prova **mettendo il dataset in tensione** e chiedendo alla quota di rimetterlo in piedi (e la taglia della quota conta), tests/test_alighieri_settimane.py, l'ora quindicinale — l'occupazione che distingue le firme, e **L7** col suo ramo di controllo — e tests/test_alighieri_qualita.py, la gerarchia completa dei criteri, l'arbitrato e il verde che *conta* dopo che l'ondata 5 aveva provato che non vieta; e per l'ondata 7 tests/test_alighieri_comandi.py, i cinque comandi di §7 — la classifica che ordina quindici famiglie contro l'unica del Fermi, il deficit di Hall sul laboratorio unico, i sei rilevatori, la cella a **due sfratti**, il tetto di non-regressione che morde solo in tensione, e il gruppo di aule provato col testimone puntato; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventotto builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms); e i test del **questionario** (tests/test_questionario.py, dove ogni regola ha il suo ramo di controllo — il caso che conta è la domanda **vuota e chiusa**, che è il solo modo di far finire il dialogo — e tests/test_questionario_ablazione.py, che tiene onesto `tocca` togliendo una famiglia per volta dall'Alighieri e ripassando la sonda)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -216,8 +224,13 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **seconda fase**). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **972 test verdi**, 17 skip tutti misurati e attribuiti
-> (`venv/bin/pytest`).
+> minimo. **1035 test**, 17 skip tutti misurati e attribuiti
+> (`venv/bin/pytest`). ⚠ **Il costo sta quasi tutto in sette file**: 932 test
+> girano in **4 min 26 s**, gli altri 86 — i `test_alighieri_*` che provano una
+> famiglia **stringendola**, e chiedono quindi una prova di `INFEASIBLE` per
+> riga — costano da soli **oltre un'ora**. Per il giro rapido si escludono
+> quelli: è il taglio che separa «ho rotto qualcosa» da «il banco regge
+> ancora».
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
 > righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
@@ -547,10 +560,17 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
       + rango`.
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
-**Nessuna decisione è aperta**, e il **gradino 1 di D2 è fatto** (L12,
-`domain/bootstrap.py`: le cattedre si leggono, i quadri si indovinano, la
-cecità si dichiara). Restano **tre voci di lavoro** (L9, L10, L11 — tutte nate
-leggendo Aurora), **tre osservazioni** che richiedono la UI di EDT
+**Nessuna decisione è aperta**, e **i tre gradini di D2 sono fatti**: il primo
+e il secondo con L12 (`domain/bootstrap.py` — le cattedre si leggono, i quadri
+si indovinano, la cecità si dichiara), il terzo con L13
+(`domain/questionario.py` — dodici domande, il perimetro contato, e la
+scoperta che **il silenzio non è una risposta**, [ADR-029](docs/decisioni.md):
+senza `SetupQuestion` il dialogo non può terminare, perché una famiglia vuota e
+una mai chiesta hanno le stesse zero righe). ⚠ E l'ablazione ha corretto l'elenco del gradino 3:
+**discipline e classi di concorso non toccano il calcolo** — zero builder, zero
+celle, zero constraint — quindi quella domanda si fa per il gestionale, non per
+l'orario. Restano **tre voci di lavoro** (L9, L10, L11 — tutte nate leggendo
+Aurora, e solo L9 vive nel repository di Aurora), **tre osservazioni** che richiedono la UI di EDT
 (il `Ciclo personalizzato`, le due minuzie di O7) e **quattro** debiti
 dichiarati. ⛔ **D2 e D4** sono sciolte il 2026-08-31 con
 [ADR-028](docs/decisioni.md) e [ADR-027](docs/decisioni.md)

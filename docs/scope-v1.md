@@ -218,10 +218,17 @@ Tre decisioni non sono autosufficienti: reggono solo se qualcosa viene previsto 
 
 Non sono decisioni di scope, ma condizionano il lavoro che segue, e stanno
 tutte in **[todo.md](todo.md)** — l'unico elenco, per non averne due che
-divergono. In sintesi: **D2**, la via d'ingresso dei dati anagrafici; **D4**, il
-confine con l'interfaccia. Più **una sola** osservazione ancora aperta in EDT —
-il `Ciclo personalizzato` — e due esperimenti che nessun dato esistente può
-sostituire.
+divergono. In sintesi: **tre voci di lavoro** nate leggendo Aurora (L9, L10,
+L11), **una sola** osservazione ancora aperta in EDT — il `Ciclo
+personalizzato` — e due esperimenti che nessun dato esistente può sostituire.
+
+⛔ **D2 e D4 — la via d'ingresso dei dati e il confine con l'interfaccia — sono
+sciolte** il 2026-08-31 con [ADR-027](decisioni.md) e
+[ADR-028](decisioni.md), dopo aver **letto Aurora** invece di ragionarci sopra:
+il generatore è un suo modulo, il calcolo è un **lavoro** e non una richiesta, e
+la via d'ingresso è **l'orario dell'anno scorso** più un dialogo sul terzo che
+manca. Tutti e tre i gradini sono implementati lo stesso giorno
+(`domain/bootstrap.py`, `domain/questionario.py`).
 
 ⛔ **D3 — se la fase 1 debba smettere di essere cieca alle aule — è sciolta** il
 2026-08-29 con [ADR-021](decisioni.md), e non era una decisione: era
