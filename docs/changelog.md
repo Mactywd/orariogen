@@ -77,8 +77,8 @@ quelle già fatte.
   cattedre del banco si derivano ora da `EROGAZIONI`, la stessa tabella che
   genera le attività — è così che le due dichiarazioni non tornano a divergere,
   e vuol dire che là il banco è il **controllo su scala** e non la prova. La
-  prova sta sul testimone puntato di `tests/test_workload.py`: sedici test,
-  ognuno col proprio ramo di controllo.
+  prova sta sul testimone puntato di `tests/test_workload.py`: diciassette
+  test, ognuno col proprio ramo di controllo.
 
   **Dati:** l'Alighieri passa da **140 a 144 cattedre** — 112 su classe, **30
   su parte**, **2 su raggruppamento** — e i due rami morti di `unit` sono vivi,
@@ -92,6 +92,9 @@ quelle già fatte.
   scritto che i sette `test_alighieri_*` sono «86 test» che costano «oltre
   un'ora»: sono **85**, e su macchina libera costano **21 min 22 s**. La misura
   originale era stata presa mentre tre pytest morti si contendevano la CPU.
+
+  Suite: **1036 verdi**, 17 skip, **25 min 47 s** su macchina libera — da
+  1035 test raccolti a **1053**, cioè i diciotto nuovi e nessuna regressione.
 
 - **2026-08-31 (notte) — Il questionario d'ingresso: il terzo gradino** —
   `domain/questionario.py` e `manage.py questionario`. Il gradino 1 legge
