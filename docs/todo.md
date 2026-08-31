@@ -23,16 +23,28 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > ([ADR-020](decisioni.md)): la copertura misura l'atomo e l'alternativa è un
 > dato dichiarato, quindi **l'import non è più bloccato**.
 >
-> **Niente blocca il calcolo, e non resta lavoro da fare.** Ciò che è ancora
-> aperto aspetta **una persona davanti a EDT** o **la decisione su Aurora**, e
-> nient'altro:
+> **Niente blocca il calcolo, e nessuna decisione è aperta.** D2 e D4 — le due
+> che dal 2026-08-28 erano la stessa domanda, il confine con **Aurora** — si
+> chiudono il 2026-08-31 con [ADR-027](decisioni.md) e
+> [ADR-028](decisioni.md), dopo aver **letto Aurora** invece di ragionarci
+> sopra. Restano:
 >
-> - **due decisioni** di prodotto (D2 e D4, che dal 2026-08-28 sono la stessa
->   domanda: il confine con **Aurora**);
+> - **tre voci di lavoro**, tutte nate da quella lettura: **L9** (la
+>   `ScheduleEntry` non tiene l'ora quindicinale), **L10** (nessun dato
+>   dichiara una cattedra su una parte o un raggruppamento) e **L11** (il
+>   dominio interroga l'ORM in 77 punti, senza un chokepoint);
 > - **tre osservazioni** che richiedono la UI e che nessuno può fare al posto
 >   di chi ha il prodotto: l'ultimo residuo di O2 (il `Ciclo personalizzato`) e
 >   le due minuzie da tooltip di **O7**;
 > - **quattro debiti** dichiarati, tutti con la ragione scritta accanto.
+>
+> ⚠ **Guardare Aurora ha cambiato tutt'e due le domande, non solo le
+> risposte.** D2 chiedeva *«un formato o un dialogo?»*, e la risposta è
+> nessuno dei due: **l'orario dell'anno scorso**, perché un `ScheduleEntry`
+> aggregato *è* una cattedra (139 su 142). D4 chiedeva *«quali comandi
+> diventano API»*, e la prima cosa da decidere era un'altra: **due tenancy
+> incompatibili** — 33 tabelle senza chiave di scuola contro un prodotto con
+> un chokepoint e un test che lo difende.
 >
 > O1 è chiusa il 2026-08-30; il 2026-08-31 si chiudono **O5**
 > ([ADR-025](decisioni.md): due criteri di piazzamento tradotti su dieci),
@@ -75,39 +87,46 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 
 ---
 
-## 1. Decisioni — aspettano una persona
+## 1. Decisioni — ✅ **nessuna aperta dal 2026-08-31**
 
-### D2 🧭 La via d'ingresso dei dati anagrafici
+### D2 🧭 La via d'ingresso dei dati — ✅ **chiusa il 2026-08-31**
 
-Da scegliere da quando `Partenaire_Index` è escluso
-([ADR-012](decisioni.md)): formato nostro, CSV, o aggancio al SaaS di
-sostituzioni già in produzione. Aspettava **D1**, che decideva cosa c'è da
-inserire: ora si sa, ed è un'etichetta in più sulle righe in alternativa
-([ADR-020](decisioni.md)), non un piano per combinazione.
+Decisa con [ADR-028](decisioni.md): **l'orario dell'anno scorso è la via
+d'ingresso**, e il dialogo chiede il terzo che non c'è dentro. Tre gradini — si
+ricava ciò che l'orario dice (le **cattedre**: 139 chiavi su 142 sull'Alighieri),
+si dichiara ciò che l'orario non distingue (**dove una classe si sdoppia**: 17
+partizioni), si chiede il resto (aule, indisponibilità, vincoli, discipline —
+~170 righe su 536).
 
-⚠ **Il contesto è cambiato**: il modulo andrà dentro **Aurora**, il gestionale
-scolastico in sviluppo, dove l'ingresso dei dati passa da un agente — l'utente
-scrive a parole o carica un file (PDF, testo, markdown), l'agente popola la
-tabella e **chiede ciò che manca**, l'utente verifica la griglia. La via
-d'ingresso non è quindi un formato ma un **dialogo**, e ciò che il modello deve
-saper dire è *quale dato manca*: la stessa cosa che i checker con causali
-nominate già dicono. ⚠ Da implementare **dopo** che il generatore è
-consolidato, non prima.
+🔑 Il gradino 2 non è un dettaglio: la griglia piatta **raddoppia ogni
+sdoppiamento**, quindi i quadri orari ricavati tornano per **6 classi su 12** e
+i profili distinti sono **9 contro 11 piani**. Appiattire e ricavare non sono
+l'inverso l'uno dell'altro — scendere perde, risalire *inventa*, e sempre per
+eccesso. Senza il gradino 2 il piano ricavato è un piano che nessun orario può
+soddisfare, e il generatore risponde `INFEASIBLE` senza che nessuno sappia
+perché.
 
-### D4 🧭 Serve un'interfaccia? — **una direzione c'è**
+⚠ Il formato nostro e il dialogo-come-via-principale sono **scartati con il
+motivo scritto**: il primo perché Aurora ha già un motore d'import a grammatica
+chiusa attorno a cui ha costruito una proprietà che non si butta (ogni scuola
+che importa un formato nuovo lascia dietro di sé un test); il secondo perché
+chiede ciò che si sa già.
 
-Oggi il prodotto è un insieme di **management command** (`analyze`, `solve`,
-`assign_rooms`, `place_and_fix`, `extract`, `export_ical`) e `config/` è un
-progetto Django senza view. Non è una mancanza rispetto a `scope-v1.md` — quel
-documento decide funzionalità, non consegna.
+### D4 🧭 Il confine con Aurora — ✅ **chiusa il 2026-08-31**
 
-**La direzione, dichiarata il 2026-08-28**: non una UI nostra, ma un **modulo
-di Aurora** — griglie come quelle di EDT, semplificate e spiegate, più una
-bolla AI che segue l'utente passo passo e carica i dati per lui (vedi D2). Ciò
-che resta da decidere è il **confine**: quali comandi diventano API e quale
-stato vive dove.
+Decisa con [ADR-027](decisioni.md): il generatore è un **modulo di Aurora**, le
+33 tabelle prendono la `School`, l'uscita è la `ScheduleEntry` che il motore
+delle sostituzioni già legge, e **il calcolo è un lavoro** — coda, stato,
+polling — perché un solve per richiesta non ci sta (misurato: 82 s
+sull'Alighieri con i criteri di qualità, contro un `--timeout` di gunicorn).
 
----
+Lo stato sta su tre livelli e il criterio è **chi lo scrive**: l'ingresso è di
+Aurora perché lo scrive la scuola, il calcolo è del modulo perché è lo stato di
+un lavoro, l'uscita è di Aurora perché è il record permanente.
+
+E i sei comandi **non** diventano sei rotte: tre sono lavori, `analyze` è una
+lettura sincrona, `extract` è un **parametro** degli altri e non una rotta,
+`export_ical` è la sola già finita.
 
 ## 2. Da osservare in EDT
 
@@ -227,6 +246,56 @@ mouse le promuove o le smentisce.
 ---
 
 ## 3. Lavoro — si può fare adesso
+
+### L9 🔧 La `ScheduleEntry` di Aurora non tiene l'ora quindicinale
+
+La crescita minima che ADR-027 nomina: **un campo di validità** sulla riga
+della griglia piatta, non un modello nuovo. È la maschera di ADR-014 che
+attraversa il confine.
+
+⚠ Serve al caso **falso**, non a quello incompleto. Delle tre chiavi che la
+pubblicazione perde, due sono il raggruppamento trasversale — Aurora sente
+«Orlandi insegna a 1A», che è vero e incompleto, ed è la stessa
+approssimazione con cui già convive dandosi classi dal nome composto
+(`3B/5O`). La terza è l'ora quindicinale, che fa credere ad Aurora una lezione
+che **una settimana su due non si tiene**: lì il motore cerca un supplente per
+un'ora che non esiste.
+
+🔑 Ed è il punto in cui i due prodotti si scoprono uguali: la sostituzione che
+Aurora genera ogni mattina *è* la sostituzione di ADR-014 — una riga con la
+maschera di una settimana che oscura l'originale. Aurora la produce, noi la
+modelliamo, e oggi non si parlano.
+
+### L10 🔧 Nessun dato dichiara una cattedra su una parte o su un raggruppamento
+
+Misurato il 2026-08-31 mentre si misurava il confine: sull'Alighieri le
+cattedre sono **140 su 140 su classe intera**, zero su `class_part`, zero su
+`group` — e nessun test ne crea una (`test_teachers.py` prova il ramo a **zero**
+unità, non gli altri due). Il `unit` di `TeachingAssignment` ha quindi due rami
+su tre che nessun dato esercita, mentre le **attività** scendono eccome alle
+parti (34) e ai gruppi (6).
+
+⚠ È la stessa famiglia di L4 — *«il Fermi esercita tre builder su ventotto»* —
+e va trattata come quella: prima si misura cosa cambierebbe, poi si decide se
+è un buco del dataset o una forma che il dominio non usa davvero.
+
+🔑 E ha già lasciato un'impronta: due delle tre chiavi che si perdono
+appiattendo sono esattamente le ore di gruppo **senza cattedra corrispondente**,
+perché la quadratura `+/- = 0` del banco è fatta sulle classi.
+
+### L11 🔧 Il dominio interroga l'ORM in 77 punti, senza un chokepoint
+
+Classi Prime tiene `api/intake/` **senza Django**, con un test specchio sul
+confine, ed è la disciplina giusta anche qui. Ma la misura dice quanto costa:
+**77 siti di query** fuori da `domain/models/` — 21 nei comandi (che diventano
+rotte comunque), **36 in tre file** (`analysis/state.py` 16,
+`extraction.py` 10, `analysis/capacity.py` 10), il resto sparso.
+
+⚠ ADR-027 lo dichiara **non deciso**, apposta: è un pezzo a sé e va deciso col
+suo costo davanti, non come corollario del confine. Ma è anche il prerequisito
+pratico della `School` FK — senza un punto solo da cui passano le letture,
+scoparle per scuola vuol dire toccarle a una a una.
+
 
 Nessuno le sblocca: hanno una risposta tecnica e non aspettano né EDT né una
 decisione. **Le tre di apertura sono chiuse il 2026-08-30**; il racconto è in
@@ -713,6 +782,17 @@ perché nessuno debba ricostruire *perché*.
 
 Il racconto è in [changelog.md](changelog.md), alla data.
 
+- [x] **2026-08-31** — ⛔ **D2 e D4, il confine con Aurora**, sciolte con
+      [ADR-027](decisioni.md) e [ADR-028](decisioni.md) dopo aver **letto
+      Aurora** (`Mactywd/aurora` a `ff0a750`) invece di ragionarci sopra.
+      Il generatore è un **modulo di Aurora**, il calcolo è un **lavoro** e non
+      una richiesta (82 s con i criteri di qualità, contro il `--timeout` di
+      gunicorn), l'uscita è la `ScheduleEntry` che le sostituzioni già leggono;
+      e la via d'ingresso è **l'orario dell'anno scorso**, con il dialogo sul
+      terzo che manca. ⚠ Guardare ha cambiato **le domande**: la prima cosa da
+      decidere non erano le rotte ma **due tenancy incompatibili**, e la
+      risposta a D2 non era «un formato o un dialogo» ma un dato che Aurora ha
+      già. Ha aperto **L9**, **L10** e **L11**.
 - [x] **2026-08-31 (sera)** — **Tre debiti su sette pagati**, e ognuno ha
       portato una decisione più grande della riparazione. I **giorni esenti dal
       conteggio delle giornate libere** (`InstituteSettings.free_day_exempt_mask`)

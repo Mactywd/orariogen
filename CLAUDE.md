@@ -2,9 +2,10 @@
 
 ## Cos'è questo repository
 
-Fase di **analisi** di un generatore di orari scolastici open source, pensato come
-modulo affiancato a un SaaS di gestione sostituzioni già in produzione (React +
-Django).
+Un generatore di orari scolastici open source. Dal 2026-08-31 ha una
+destinazione decisa e non più ipotetica: è un **modulo di Aurora**
+(`Mactywd/aurora`), il gestionale di sostituzioni in produzione — React 19 +
+Django 5.2, multi-tenant. Vedi [ADR-027](docs/decisioni.md).
 
 Il metodo di lavoro è **reverse engineering di EDT** (Index Education), il software
 usato da quasi tutte le scuole italiane per l'orario. Inseriamo i dati di una
@@ -542,10 +543,13 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
       + rango`.
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
-**Nulla che si possa fare da qui.** Restano **due** decisioni — D2 e D4, che
-sono la stessa domanda: il confine con **Aurora** — **tre osservazioni** che
-richiedono la UI di EDT (il `Ciclo personalizzato`, le due minuzie di O7) e
-**quattro** debiti dichiarati. ⛔ D1 è sciolta il 2026-08-28 con
+**Nessuna decisione è aperta.** Restano **tre voci di lavoro** (L9, L10, L11 —
+tutte nate leggendo Aurora), **tre osservazioni** che richiedono la UI di EDT
+(il `Ciclo personalizzato`, le due minuzie di O7) e **quattro** debiti
+dichiarati. ⛔ **D2 e D4** sono sciolte il 2026-08-31 con
+[ADR-028](docs/decisioni.md) e [ADR-027](docs/decisioni.md)
+([design](docs/superpowers/specs/2026-08-31-confine-aurora-design.md)), ⛔ D1
+il 2026-08-28 con
 [ADR-020](docs/decisioni.md), ⛔ D3 il 2026-08-29 con
 [ADR-021](docs/decisioni.md), O1 il 2026-08-30, e il 2026-08-31 **O5**
 ([ADR-025](docs/decisioni.md)), **O6** ([ADR-026](docs/decisioni.md):

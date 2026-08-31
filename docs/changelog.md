@@ -15,6 +15,96 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-31 — Il confine con Aurora: D2 e D4, sciolte guardando invece che
+  ragionando** — le ultime due decisioni aperte, e le uniche che il progetto
+  aveva sempre rimandato perché *«aspettano Aurora»*. Aurora è
+  `Mactywd/aurora`, letta a `ff0a750`: React 19 + Django 5.2, multi-tenant, il
+  gestionale di sostituzioni in produzione. Il design sta in
+  [`docs/superpowers/specs/2026-08-31-confine-aurora-design.md`](superpowers/specs/2026-08-31-confine-aurora-design.md),
+  le decisioni in [ADR-027](decisioni.md) e [ADR-028](decisioni.md).
+
+  🔑 **Guardare ha cambiato le domande, non solo le risposte**, ed è la cosa
+  che vale oltre queste due voci. D4 chiedeva *«quali comandi diventano API e
+  quale stato vive dove»*: la prima cosa da decidere era un'altra, e sta un
+  livello sotto — **le due tenancy sono incompatibili per costruzione**.
+  orariogen è a scuola singola non per scelta dichiarata ma per forma dello
+  schema: `InstituteSettings` è un singleton (`id = 1`) e sono globalmente
+  uniche `Site.name`, `Subject.code`, `Discipline.code`,
+  `CompetitionClass.code`, `StudyPlan.code`, `Group.name`, `Extraction.name`.
+  Aurora ha una FK `school` ovunque, **un chokepoint solo**
+  (`tenancy.get_request_school`) e un test che verifica che nessun file legga
+  `user.school_profile` da sé. D2 chiedeva *«un formato nostro, CSV, o
+  l'aggancio al SaaS»*: la risposta è **nessuno dei tre**, e si vede solo
+  misurando.
+
+  **La misura che decide D2.** Un `ScheduleEntry` di Aurora aggregato per
+  `(docente, classe, materia)` **è** una cattedra. Appiattendo l'Alighieri su
+  quella chiave: **139 su 142** identiche. Ma i **quadri orari tornano per 6
+  classi su 12**, e i sei scarti sono sistematici — la griglia piatta
+  **raddoppia ogni sdoppiamento** (1A e 1B ricevono 6 ore di inglese dove
+  l'alunno ne segue 3, perché due gruppi le fanno insieme), conta l'ora
+  quindicinale come intera, e su 2C trova tre ore di una materia che nel piano
+  non c'è. E i **profili distinti sono 9 contro 11 piani**: raggrupparle per
+  quadro non ricostruisce i piani, ne fonde due coppie.
+  🔑 **Appiattire e ricavare non sono l'inverso l'uno dell'altro**: scendere
+  perde, risalire *inventa*, e sempre **per eccesso**. Un import che risalisse
+  in silenzio darebbe alla scuola un piano che nessun orario può soddisfare, e
+  il generatore risponderebbe `INFEASIBLE` senza che nessuno sappia perché. Da
+  qui i tre gradini: si ricava, **si dichiara dove la classe si sdoppia**, si
+  chiede il resto (~170 righe su 536, un terzo).
+  ⚠ E il gradino 2 è in parte **già scritto nei nomi**: Aurora esporta e
+  rilegge celle come `3B/5O - Fisica`, e il suo `celltemplate` le taglia già.
+
+  **La misura che decide D4.** La stessa, letta al contrario: pubblicando
+  nella griglia piatta si perdono **3 chiavi su 142**, e sono *esattamente* le
+  due strutture che quella griglia non tiene — due il raggruppamento
+  trasversale, una l'ora quindicinale.
+  🔑 **E delle due, una sola è un errore di sostituzione.** Il gruppo fa dire
+  ad Aurora una cosa **vera e incompleta** (Orlandi insegna a metà di 1A,
+  Aurora crede a tutta), ed è la stessa approssimazione con cui già convive
+  dandosi classi dal nome composto. L'ora quindicinale fa dire una cosa
+  **falsa una settimana su due**, e in quella sbagliata il motore cerca un
+  supplente per un'ora che non si tiene. Quindi la crescita minima di Aurora è
+  **un campo**, non un modello: la maschera di ADR-014 che attraversa il
+  confine (voce **L9**).
+  🔑 **E lì i due prodotti si scoprono uguali**: la sostituzione che Aurora
+  genera ogni mattina *è* la sostituzione di ADR-014 — una riga con la maschera
+  di una settimana che oscura l'originale. Aurora la produce, noi la
+  modelliamo, e oggi non si parlano.
+
+  **Il precedente sta dentro Aurora, e due sue regole non sopravvivono.**
+  Classi Prime genera con CP-SAT, pubblica, congela e a una rigenerazione dice
+  **esattamente chi si muove** — alla lettera il criterio di stabilità che
+  ADR-010 ci obbliga ad avere. Si segue quel modulo ovunque, e si diverge in
+  due punti, per misura e non per gusto. **(1) Un solve per richiesta**: là il
+  caso peggiore deve stare dentro il `--timeout` di gunicorn, con un test che
+  legge `entrypoint.sh` per tenerlo vero; qui l'Alighieri è **9 s senza i
+  criteri di qualità e 82 s con**, e `solve --popolazione` sul Fermi è 49 s —
+  dopo la correzione del budget, prima veniva ucciso a dodici minuti. E non è
+  una costante da alzare: la catena è un `Solve` **per livello**, quindi il
+  tempo cresce con un **dato**. **(2) `num_search_workers = 1` e seme fisso**,
+  con un'ottima ragione (*«una commissione che rilancia e vede classi diverse
+  smette di fidarsi»*): qui costa un **fattore 60** — i tetti di peso didattico
+  misurano 439 s con un lavoratore contro 7 s con otto. La riproducibilità si
+  compra congelando la **soluzione pubblicata**, non la ricerca, che è ciò che
+  Aurora già fa con `IntakeGeneration.assignment`.
+
+  **Due cose trovate per strada, ed entrambe aperte come voci.** **L10**: sul
+  banco le cattedre sono **140 su 140 su classe intera**, zero su `class_part`
+  e zero su `group`, e nessun test ne crea una — mentre le attività scendono
+  eccome alle parti (34) e ai gruppi (6). È la stessa famiglia di L4, e ha già
+  lasciato un'impronta: due delle tre chiavi perse appiattendo sono proprio le
+  ore di gruppo **senza cattedra corrispondente**, perché la quadratura
+  `+/- = 0` del banco è fatta sulle classi. **L11**: il dominio interroga l'ORM
+  in **77 punti** fuori da `domain/models/` — 21 nei comandi, 36 in tre file —
+  cioè senza il chokepoint che è esattamente la disciplina di Aurora.
+
+  ⚠ **Cosa il design non decide, dichiarato**: il calendario, il prezzo (sarà
+  un `module_` come `module_classi_prime`, la cui politica commerciale Aurora
+  dichiara **non scritta**), la UI, e la purezza del dominio — che sarebbe la
+  cosa giusta, ma L11 la misura, e va decisa col suo costo davanti invece che
+  come corollario.
+
 - **2026-08-31 (notte) — Tutto ciò che non aspetta una persona: O6, O3 e tre
   debiti su sette** — la sessione che svuota l'elenco fino a lasciarci solo ciò
   che aspetta EDT o la decisione su **Aurora**. Cinque voci, e ognuna ha

@@ -1304,3 +1304,162 @@ dire, e non è deducibile da nessuna proprietà dell'orario — come
 deve chiedere* (D2), accanto alle alternative.
 
 **Data.** 2026-08-31
+
+---
+
+## ADR-027 — Il generatore è un modulo di Aurora, e il calcolo è un lavoro
+
+**Decisione.** Scioglie **D4**. Quattro parti, e la quarta è quella che il
+titolo non dice.
+
+1. **Le 33 tabelle prendono la `School`.** Le sette unicità globali
+   (`Site.name`, `Subject.code`, `Discipline.code`, `CompetitionClass.code`,
+   `StudyPlan.code`, `Group.name`, `Extraction.name`) diventano per scuola, e
+   `InstituteSettings` da singleton diventa una riga per scuola.
+2. **L'uscita è la `ScheduleEntry` di Aurora**, la griglia piatta che il motore
+   delle sostituzioni già legge — non un secondo orario accanto.
+3. **Il calcolo è un lavoro**: coda, stato, polling. Non una richiesta.
+4. **Lo stato sta su tre livelli, e il criterio è chi lo scrive**: l'ingresso è
+   di Aurora perché lo scrive la scuola; il calcolo è del modulo perché è lo
+   stato di un lavoro; l'uscita è di Aurora perché è il record permanente. Il
+   passaggio al terzo è una **pubblicazione esplicita**, fotografata con
+   `ScheduleSnapshot`.
+
+E i sei comandi **non** diventano sei rotte: `solve`, `assign_rooms` e
+`place_and_fix` sono lavori; `analyze` è una lettura sincrona (non ha un solver
+dentro — Hall è flusso massimo, la classifica è dominio residuo); `extract`
+non è una rotta ma un **parametro** degli altri tre; `export_ical` è una rotta
+ed è la sola già finita.
+
+**Alternative considerate.**
+
+1. **Tenere il generatore a scuola singola, e fare multi-tenancy per
+   istanze** — un database per cliente. Scartata: vorrebbe dire una migrazione
+   per cliente e un **secondo modello di tenancy** in un prodotto che ne ha uno
+   solo, con un chokepoint (`tenancy.get_request_school`) e un test che
+   verifica che nessuno lo aggiri.
+2. **Un solve per richiesta**, come fa Classi Prime. Scartata **per misura, non
+   per gusto**: là il caso peggiore deve stare dentro il `--timeout` di
+   gunicorn, e un test legge `entrypoint.sh` per tenerlo vero. Qui l'Alighieri
+   è 9 s senza i criteri di qualità e **82 s** con, e `solve --popolazione` sul
+   Fermi è 49 s — dopo la correzione del budget; prima veniva ucciso a dodici
+   minuti. E non è una costante da alzare: la catena lessicografica è un
+   `Solve` **per livello**, quindi il tempo cresce con quanti criteri la scuola
+   dichiara, cioè con un **dato**.
+3. **Pubblicare un orario a sé**, accanto alla `ScheduleEntry`, per non perdere
+   nulla. Scartata: sarebbero due risposte alla domanda per cui il prodotto
+   esiste — *chi insegna, quando, a chi*. La perdita si **nomina** invece di
+   evitarla; vedi sotto.
+4. **`num_search_workers = 1` e seme fisso**, l'invariante di Classi Prime
+   (*«una commissione che rilancia e vede classi diverse smette di fidarsi»*).
+   Non sopravvive: sull'Alighieri i tetti di peso didattico misurano **439 s
+   con un lavoratore contro 7 s con otto**, un fattore 60. La riproducibilità
+   si compra congelando la **soluzione pubblicata**, non la ricerca — che è ciò
+   che Aurora già fa con `IntakeGeneration.assignment`, che non si riscrive
+   mai.
+
+**Motivo.** Le due tenancy non sono un dettaglio d'integrazione: sono la prima
+cosa da decidere e decidono le altre. E il precedente sta dentro Aurora —
+Classi Prime genera con CP-SAT, pubblica, congela e a una rigenerazione dice
+**esattamente chi si muove**, che è alla lettera il criterio di stabilità che
+ADR-010 ci obbliga ad avere. Si segue quel modulo ovunque, e si diverge nei due
+punti in cui una misura lo impone.
+
+**⚠ La perdita della pubblicazione è misurata, e va nominata.** Appiattendo
+l'Alighieri su `(docente, classe, materia)`: **139 chiavi su 142** tornano
+identiche, e le tre che non tornano sono **esattamente** le due strutture che
+una griglia piatta non tiene — due il raggruppamento trasversale, una l'ora
+quindicinale.
+
+🔑 **E delle due, una sola è un errore di sostituzione.** Il gruppo trasversale
+fa dire ad Aurora una cosa **vera e incompleta** (Orlandi insegna a metà di 1A,
+Aurora crede a tutta): il supplente serve comunque, ed è la stessa
+approssimazione con cui Aurora già convive dandosi classi dal nome composto
+(`3B/5O`). L'ora quindicinale fa dire una cosa **falsa una settimana su due**,
+e in quella sbagliata il motore cerca un supplente per un'ora che non si tiene.
+Quindi la crescita minima di Aurora è **un campo di validità sulla
+`ScheduleEntry`** — un campo, non un modello nuovo — e serve al caso falso, non
+a quello incompleto.
+
+🔑 **E lì i due prodotti si scoprono uguali.** La sostituzione che Aurora
+genera ogni mattina e la sostituzione di ADR-014 sono la **stessa cosa**: una
+riga con la maschera di una settimana che oscura l'originale. Aurora la
+produce, orariogen la modella, e oggi non si parlano.
+
+**⚠ Ciò che questo ADR non decide.** Non il calendario, non il prezzo (sarà un
+`module_` come `module_classi_prime`, la cui politica commerciale Aurora
+dichiara **non scritta**), non la UI, e non la purezza del dominio: Classi
+Prime tiene `api/intake/` senza Django con un test specchio sul confine, e
+sarebbe giusto anche qui, ma il dominio interroga l'ORM in **77 punti** — 21
+nei comandi, 36 in tre file. È un pezzo a sé, da decidere col suo costo
+davanti.
+
+Design completo:
+[docs/superpowers/specs/2026-08-31-confine-aurora-design.md](superpowers/specs/2026-08-31-confine-aurora-design.md).
+
+**Data.** 2026-08-31
+
+---
+
+## ADR-028 — La via d'ingresso è l'orario dell'anno scorso, e il dialogo chiede il terzo che manca
+
+**Decisione.** Scioglie **D2**. Tre gradini:
+
+1. **Si ricava ciò che l'orario dice** — docenti, classi, materie, fasce, e le
+   **cattedre** — con il motore d'import adattivo che Aurora ha già.
+2. **Si dichiara ciò che l'orario non distingue: dove una classe si sdoppia.**
+   È la domanda sola che sblocca i quadri orari, ed è piccola: 17 partizioni
+   sull'Alighieri.
+3. **Si chiede il resto**, che è finito e nominabile: aule, indisponibilità,
+   vincoli di materia e orari, discipline e classi di concorso. **~170 righe su
+   536 — un terzo.**
+
+**Alternative considerate.**
+
+1. **Un formato nostro, o CSV** — la formulazione originale della voce, di
+   quando `Partenaire_Index` fu escluso. Non è sbagliata: è **già fatta, e da
+   qualcun altro**. Aurora ha un motore d'import a grammatica chiusa, con
+   descrittori, giudice e verdetto, e attorno ci ha costruito una proprietà che
+   non si butta — ogni scuola che importa un formato nuovo **lascia dietro di
+   sé un test**. Un secondo lettore per gli stessi file sarebbe una seconda
+   verità sullo stesso dato.
+2. **Il dialogo come via principale** — la formulazione aggiornata il
+   2026-08-28, quando il contesto Aurora è entrato nella voce. Scartata perché
+   **chiede ciò che si sa già**: due terzi dell'ingresso sta nell'orario che la
+   scuola ha già mandato. Il dialogo resta e resta necessario, ma sul terzo che
+   manca — dove è l'**unica** via, perché indisponibilità e aule non stanno in
+   nessun file d'orario.
+3. **`Partenaire_Index`** resta escluso (ADR-012), ora con un motivo in più:
+   importerebbe da EDT una scuola che in Aurora c'è già.
+
+**Motivo, ed è una misura.** Un `ScheduleEntry` aggregato per `(docente,
+classe, materia)` **è** una cattedra. Sull'Alighieri tornano **139 chiavi su
+142**. Ma i **quadri orari tornano solo per 6 classi su 12**, e i sei scarti
+sono sistematici: la griglia piatta **raddoppia ogni sdoppiamento** — 1A e 1B
+ricevono 6 ore di inglese dove l'alunno ne segue 3, perché due gruppi le fanno
+insieme — conta l'ora quindicinale come intera, e su 2C trova tre ore di una
+materia che nel piano non c'è. E i **profili distinti sono 9 contro 11 piani**:
+raggruppare le classi per quadro non li ricostruisce, ne fonde due coppie.
+
+🔑 **Appiattire e ricavare non sono l'inverso l'uno dell'altro.** Scendere
+perde; risalire **inventa**, e sempre per eccesso. È per questo che il gradino
+2 esiste e non è un dettaglio: senza, il piano ricavato è un piano che
+**nessun orario può soddisfare**, e il generatore risponde `INFEASIBLE` senza
+che nessuno sappia perché.
+
+⚠ **E in parte il gradino 2 è già scritto nei nomi**: Aurora esporta e rilegge
+celle come `3B/5O - Fisica`, e il `celltemplate` le taglia già sui separatori.
+Un nome composto **è** una suddivisione dichiarata, e la scuola che la scrive
+non deve dirla due volte.
+
+**⚠ Il rischio, dichiarato.** La derivazione dalla griglia è una **proposta da
+verificare, mai un dato salvato in silenzio** — la disciplina del giudice
+dell'import, dove `analyze` propone, l'utente vede e `import` scrive. Va estesa
+qui perché **qui l'errore è peggio**: un descrittore sbagliato produce un
+orario visibilmente storto, un quadro orario gonfiato produce un `INFEASIBLE`
+muto.
+
+Design completo:
+[docs/superpowers/specs/2026-08-31-confine-aurora-design.md](superpowers/specs/2026-08-31-confine-aurora-design.md).
+
+**Data.** 2026-08-31
