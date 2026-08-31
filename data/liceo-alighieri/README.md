@@ -142,6 +142,7 @@ vincolano) e il vincolo di sede ne toglie (i letterali `site_occupied` di
 a zero scarti in ~8 s, fase 2 ancora 73 su 73, e la sonda sale a **28 su 28**
 col ventottesimo builder.
 | Con i sei criteri di qualità | `solve` da 9 a **82 s** |
+| Il primo livello della catena, prima e dopo la costruzione pigra dei criteri (O5) | **9,2 s → 2,6 s** |
 
 🔑 **Una seconda firma di settimana non raddoppia il modello.** L'attesa
 diceva «circa il doppio, il vocabolario è per firma», ed era sbagliata: le

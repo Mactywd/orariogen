@@ -156,8 +156,10 @@ solo.**
 
 ## 3. La qualità — e il debito che l'ondata rende misurabile
 
-`CRITERI_QUALITA` porta **cinque generi, sei righe** e le due popolazioni:
-la tabella intera di `QualityCriterion`, che nessun dataset aveva.
+`CRITERI_QUALITA` porta **sette generi, otto righe** e le due popolazioni:
+la tabella intera di `QualityCriterion`, che nessun dataset aveva. (Erano
+cinque e sei fino a O5, che ha tradotto due criteri di *piazzamento* —
+[ADR-025](../../docs/decisioni.md).)
 
 | Rango | Genere | Popolazione |
 |---:|---|---|
@@ -166,10 +168,13 @@ la tabella intera di `QualityCriterion`, che nessun dataset aveva.
 | 3 | `isolated` | tutte |
 | 4 | `free_half_days` | docenti |
 | 5 | `regularity` | **classi** — l'asimmetria è del prodotto |
-| 6 | `preferences` | tutte |
+| 6 | `weekly_spread` | classi — la distribuzione è un bene degli studenti |
+| 7 | `slot_spread` | **docenti** — ed è `regularity` col segno opposto |
+| 8 | `preferences` | tutte |
 
-⚠ **`build()` non la installa.** Non è pigrizia: sei livelli portano un `solve`
-da 9 a **82 secondi**, e ogni test del banco li pagherebbe. È anche la forma
+⚠ **`build()` non la installa.** Non è pigrizia: i livelli di qualità portano
+un `solve` da 9 a **82 secondi** (misura a sei), e ogni test del banco li
+pagherebbe. È anche la forma
 giusta, perché in EDT l'ottimizzazione è un comando a sé che si lancia su un
 orario che già c'è — `Ottimizza gli orari dei docenti` non è una fase del
 calcolo. Chi la vuole la chiede: `build(qualita=True)`.
@@ -178,12 +183,33 @@ calcolo. Chi la vuole la chiede: `build(qualita=True)`.
 
 | Livello | Valore | Ottimo dimostrato |
 |---|---:|---|
+| `minuti_scartati` | 0 | ✔ (2,6 s) |
 | `gaps_teachers` | 0 | ✔ |
 | `gaps_classes` | 0 | ✔ |
-| `isolated_all` | 71 | ✗ (divario 71) |
-| `free_half_days_teachers` | 143 | ✗ (limite inferiore 19) |
-| `regularity_classes` | 936 | ✗ (limite inferiore 101) |
-| `preferences_all` | 0 | ✔ |
+| `isolated_all` | 55 | ✗ |
+| `free_half_days_teachers` | 141 | ✗ |
+| `regularity_classes` | 925 | ✗ |
+| `weekly_spread_classes` | — | **non conclude** |
+
+🔑 **La catena non arriva più in fondo, e l'ultima riga è la scoperta di O5.**
+Con otto criteri il nono livello non produce alcuna soluzione nei suoi 15 s, e
+i due dopo di lui non compaiono. **Non è la quantità dei due criteri nuovi a
+essere dura**: presi da soli chiudono senza fatica — `weekly_spread` 220,
+`slot_spread` 120 (limite inferiore 51). È la loro **posizione**: ogni livello
+è più duro del precedente, perché quelli sopra di lui sono fissati al valore
+che la ricerca *ha trovato* e non a un ottimo dimostrato, e la regione si
+stringe. Il test asserisce quindi un **prefisso**, e che i sei storici
+arrivino tutti in fondo.
+
+⚠ **E prima di O5 la catena costava molto di più di quanto questo file
+dicesse.** Aggiungere un criterio al **sesto** livello portava il **primo** —
+`minuti_scartati`, che di quel criterio non sa nulla — da 9,2 s a 33,6 s, e con
+due criteri nuovi a **71 s**: il modello si costruiva intero prima che la
+catena partisse, quindi ogni livello pagava anche i criteri sotto di lui. Da
+allora ogni criterio si costruisce **immediatamente prima del proprio livello**
+(vedi `Level.costruisci`), e il primo livello del banco è sceso a **2,6 s**
+anche con i sei di prima. È un difetto che i due criteri nuovi hanno reso
+visibile, non un difetto loro.
 
 ⚠ **L'ultima riga non è stabile, e il perché è la cosa da portarsi via.** In una
 seconda misura `preferences_all` vale **1**, e non perché il verde sia
@@ -212,6 +238,16 @@ conta si somigliano molto, e sono cose diverse.
 `solve --popolazione teachers --tolleranza 5`, su un orario che **già c'è**:
 i due criteri delle classi smettono di essere livelli e diventano tetti di
 non-regressione, e la stabilità scivola in coda a fare da spareggio.
+
+⚠ **La misura è sui sei criteri storici, e con otto non regge.** Un tetto
+**restringe**, quindi va costruito prima del primo `Solve`: la costruzione
+pigra dei livelli non può aiutarlo. Con `weekly_spread` fra le classi
+sacrificate i tetti diventano tre, il modello cresce di ~5000 variabili prima
+del primo livello, e `gaps_teachers` non produce alcuna soluzione nei suoi
+15 s — misurato a tolleranza **5, 60 e 180**, cioè non è la strettezza del
+tetto: è il peso. 🔑 **L'arbitrato è quindi il posto in cui il costo di un
+criterio non si può rimandare**, ed è il rovescio esatto della correzione qui
+sopra.
 
 | Criterio sacrificato | Base | Tetto |
 |---|---:|---:|

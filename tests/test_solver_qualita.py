@@ -309,6 +309,165 @@ def test_la_regolarita_non_scende_mai_sotto_una_fascia_per_materia():
     assert _livelli(solve(env["schedule"], workers=1))["regularity_classes"] == 1
 
 
+# --- i due arrivati con O5 (ADR-025) ----------------------------------------
+
+def test_la_distribuzione_settimanale_sparpaglia_la_materia_sui_giorni():
+    """Quattro ore della stessa materia in una griglia 4×1: una per giorno, e
+    il criterio vale **zero**. È il minimo dichiarato — ogni occorrenza in un
+    giorno suo — e qui è raggiungibile perché la griglia lo permette."""
+    env = mini_school(days=4, slots=1)
+    _n(env, 4)
+    _criterio(K.WEEKLY_SPREAD, P.CLASSES)
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.stats["scartate"] == 0, soluzione.stats
+    assert _livelli(soluzione)["weekly_spread_classes"] == 0, soluzione.stats
+
+
+def test_e_conta_le_occorrenze_di_troppo_non_le_coppie():
+    """⚠ La quantità è `occorrenze − giorni distinti`, e questo test la
+    **distingue** dalla lettura letterale di EDT.
+
+    Quattro ore in due giorni da due fasce: due per giorno, per forza. Le
+    *coppie* nello stesso giorno sarebbero 2 (una per giorno); le occorrenze di
+    troppo sono anch'esse 2. Il caso che separa le due letture è il terzo
+    ammucchiamento — tre ore in un giorno valgono 3 coppie e **2** occorrenze
+    di troppo — e sta nel test seguente. Qui si fissa il numero facile, perché
+    è quello che una regressione romperebbe per primo."""
+    env = mini_school(days=2, slots=2)
+    _n(env, 4)
+    _criterio(K.WEEKLY_SPREAD, P.CLASSES)
+    soluzione = solve(env["schedule"], workers=1)
+    assert _livelli(soluzione)["weekly_spread_classes"] == 2, soluzione.stats
+
+
+def test_tre_ore_in_un_giorno_costano_due_e_non_tre():
+    """🔑 La differenza fra la nostra quantità e le «coppie» di EDT, misurata.
+
+    Un giorno solo, tre fasce, tre ore della stessa materia: non c'è scelta.
+    Le coppie nello stesso giorno sarebbero **3**, le occorrenze di troppo
+    **2**. Il numero che il livello riporta è 2, e la scelta è dichiarata in
+    `_sparpaglia`: la lettura letterale è quadratica, questa è lineare, e
+    nessun orario le scambia di posto — perché fra due orari il verso della
+    disuguaglianza è lo stesso."""
+    env = mini_school(days=1, slots=3)
+    _n(env, 3)
+    _criterio(K.WEEKLY_SPREAD, P.CLASSES)
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.stats["scartate"] == 0, soluzione.stats
+    assert _livelli(soluzione)["weekly_spread_classes"] == 2, soluzione.stats
+
+
+def test_le_fasce_sparse_sono_la_regolarita_al_contrario():
+    """🔑 Lo stesso testimone di `test_la_regolarita_mette_ogni_materia_sempre_
+    alla_stessa_ora`, con l'altro criterio: due materie da due ore in una
+    griglia 2×2.
+
+    `regularity` sceglie la risposta **regolare** — ogni materia sempre alla
+    stessa ora, due fasce distinte in tutto — e vale 2. `slot_spread` sceglie
+    la risposta **incrociata**, quattro fasce distinte, e vale 0: nessuna
+    occorrenza di troppo. I due orari riempiono la griglia allo stesso modo, e
+    la differenza è tutta in quale dei due un criterio preferisce.
+
+    ⚠ È la stessa griglia e sono i due versi opposti: è per questo che il
+    testimone è deliberatamente lo stesso, e non uno costruito su misura."""
+    from domain.models import Subject
+
+    env = mini_school(days=2, slots=2)
+    matematica = Subject.objects.create(code="MAT", name="Matematica",
+                                        discipline=env["discipline"])
+    _n(env, 2)
+    for _ in range(2):
+        make_activity(matematica, teachers=[env["teacher"]],
+                      classes=[env["klass"]])
+    _criterio(K.SLOT_SPREAD, P.TEACHERS)
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.stats["scartate"] == 0, soluzione.stats
+    assert _livelli(soluzione)["slot_spread_teachers"] == 0, soluzione.stats
+
+
+def test_i_due_versi_convivono_su_popolazioni_diverse():
+    """🔑 L'asimmetria di EDT, detta nel nostro modello: la classe vuole il
+    ritmo, il docente vuole variare.
+
+    Qui le due popolazioni **non competono** — il docente insegna alla sola
+    classe — quindi i due criteri chiedono cose incompatibili sullo stesso
+    orario e vince il primo della catena. Che è il punto: entrambi hanno un
+    valore, e l'ordine dichiarato dai dati decide. `regularity` è il rango 1,
+    quindi scende a 2 e `slot_spread` paga."""
+    from domain.models import Subject
+
+    env = mini_school(days=2, slots=2)
+    matematica = Subject.objects.create(code="MAT", name="Matematica",
+                                        discipline=env["discipline"])
+    _n(env, 2)
+    for _ in range(2):
+        make_activity(matematica, teachers=[env["teacher"]],
+                      classes=[env["klass"]])
+    _criterio(K.REGULARITY, P.CLASSES, rank=1)
+    _criterio(K.SLOT_SPREAD, P.TEACHERS, rank=2)
+    livelli_ = _livelli(solve(env["schedule"], workers=1))
+    assert livelli_["regularity_classes"] == 2
+    assert livelli_["slot_spread_teachers"] == 2
+
+
+def test_sulla_stessa_popolazione_il_secondo_dei_due_versi_e_inerte():
+    """⚠ **La forma «argomento»**: il verdetto è vero per costruzione, non per
+    come è andata la ricerca.
+
+    `regularity` minimizza *secchi distinti*; `slot_spread` minimizza
+    *occorrenze − secchi distinti*. Sulla stessa popolazione e con le
+    occorrenze già fissate dai livelli 1 e 2 della catena, il secondo è una
+    funzione affine decrescente del primo: appena il livello di testa fissa il
+    proprio ottimo, il secondo **non ha più niente da scegliere** e assume il
+    valore complementare.
+
+    Qui: quattro occorrenze, `regularity` scende a 2 (due materie, una fascia
+    ciascuna) e `slot_spread` vale per forza `4 − 2 = 2`, cioè il suo
+    **peggio** su questa istanza — dove da solo varrebbe 0
+    (test precedente). Non c'è un vincolo che vieti la coppia: c'è questo
+    numero, che la rende inutile e lo dice."""
+    from domain.models import Subject
+
+    env = mini_school(days=2, slots=2)
+    matematica = Subject.objects.create(code="MAT", name="Matematica",
+                                        discipline=env["discipline"])
+    _n(env, 2)
+    for _ in range(2):
+        make_activity(matematica, teachers=[env["teacher"]],
+                      classes=[env["klass"]])
+    _criterio(K.REGULARITY, P.CLASSES, rank=1)
+    _criterio(K.SLOT_SPREAD, P.CLASSES, rank=2)
+    livelli_ = _livelli(solve(env["schedule"], workers=1))
+    assert livelli_["regularity_classes"] == 2
+    assert livelli_["slot_spread_classes"] == 2
+
+
+def test_il_criterio_4_non_rende_infattibile_dove_il_divieto_lo_farebbe():
+    """🔑 **Il valore di O5 in un test.** Tre ore della stessa materia e due
+    soli giorni: due finiranno lo stesso giorno, non c'è alternativa.
+
+    Come **divieto** — `SAME_DAY_INCOMPATIBLE` — l'istanza è infattibile e la
+    scuola resta senza orario. Come **criterio** l'orario esiste, il livello
+    dichiara `1` e la scuola sa quanto ha pagato. È la differenza fra
+    impedire e preferire, ed è la ragione per cui questo criterio è il primo
+    dei tre approvati."""
+    from domain.models import SubjectConstraint
+
+    env = mini_school(days=2, slots=2)
+    _n(env, 3)
+    _criterio(K.WEEKLY_SPREAD, P.CLASSES)
+    soluzione = solve(env["schedule"], workers=1)
+    assert soluzione.stats["scartate"] == 0, soluzione.stats
+    assert _livelli(soluzione)["weekly_spread_classes"] == 1, soluzione.stats
+
+    # Lo stesso desiderio come divieto: l'ora di troppo non si piazza più.
+    SubjectConstraint.objects.create(
+        school_class=env["klass"], subject_a=env["subject"],
+        subject_b=env["subject"],
+        type=SubjectConstraint.Type.SAME_DAY_INCOMPATIBLE)
+    assert solve(env["schedule"], workers=1).stats["scartate"] == 1
+
+
 # --- l'ordine ---------------------------------------------------------------
 
 def test_l_ordine_dei_criteri_decide_chi_cede():

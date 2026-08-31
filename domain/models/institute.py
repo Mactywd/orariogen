@@ -109,6 +109,22 @@ class QualityCriterion(models.Model):
                                              # fascia, non l'equilibrio del
                                              # carico.
         PREFERENCES = "preferences"          # Rispetta le preferenze (verde)
+        # 🔑 **I due arrivati da O5, e vengono dall'altra lista.** Non sono
+        # valori di `Ottimizzazione degli orari`: sono il 4° e l'8° degli
+        # **undici criteri di piazzamento**, tradotti qui perché è l'unico
+        # posto in cui sappiamo dirli. Il cambio di meccanismo è dichiarato in
+        # ADR-025 e non è neutro — in EDT governano un'euristica di ricerca,
+        # da noi diventano un costo — ma la direzione è quella prudente: un
+        # costo non può rendere infattibile ciò che l'euristica al più
+        # rallentava. Non hanno un'enum `tco*` accanto perché EDT non gliene
+        # dà una: l'altro riquadro non ha enum osservate.
+        WEEKLY_SPREAD = "weekly_spread"      # 4. Distribuisci nella settimana
+                                             # le attività della stessa materia
+        SLOT_SPREAD = "slot_spread"          # 8. Evita le attività della
+                                             # stessa materia nella stessa ora
+                                             # — ⚠ è `REGULARITY` col segno
+                                             # opposto, e per l'altra
+                                             # popolazione: vedi ADR-025.
 
     class Population(models.TextChoices):
         """Su quali risorse il criterio conta. Non è speculativa in vista della

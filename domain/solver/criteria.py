@@ -199,6 +199,105 @@ def buchi(ctx, model, chiavi):
     return peggiore(model, "gaps", per_firma)
 
 
+def _secchi(ctx, model, chiavi, rep, nome, secchio, minimo=1):
+    """I **secchi distinti** che ogni coppia (unità, materia) occupa.
+
+    🔑 **Tre criteri, una funzione.** `regularity` (l'`Equilibrio didattico`
+    dell'ottimizzazione) e i due arrivati con O5 — il 4° e l'8° dei criteri di
+    piazzamento — contano tutti quanti *secchi distinti* usa la stessa materia
+    per la stessa unità. Cambiano solo il **secchio** e il **segno**:
+
+    | Criterio | Secchio | Vuole |
+    |---|---|---|
+    | `regularity` | la fascia | **pochi** — la materia sempre alla stessa ora |
+    | `slot_spread` | la fascia | **molti** — la materia mai alla stessa ora |
+    | `weekly_spread` | il giorno | **molti** — la materia sparsa nella settimana |
+
+    Che il 4 e l'8 di EDT si riducano a `regularity` con un parametro e un
+    segno non era ovvio prima di scriverli, ed è il motivo per cui `_secchi`
+    esiste invece di tre corpi quasi uguali: una divergenza di uno fra due di
+    loro sarebbe un difetto invisibile.
+
+    Restituisce, per coppia, `(usati, piazzate, quante)`: i booleani di secchio
+    occupato, i letterali di cella (la cui somma è il numero di occorrenze
+    **piazzate**) e il numero di attività della coppia, che serve a dichiarare
+    l'estremo superiore.
+
+    ⚠ `minimo` scarta le coppie con meno di così tante attività, e per
+    `_sparpaglia` vale **2**: una coppia con un'occorrenza sola sta per forza
+    in un secchio solo, quindi contribuisce zero e i suoi booleani sono peso
+    morto. Non è un'approssimazione — è la stessa quantità senza i termini
+    identicamente nulli — e sul banco toglie **700** variabili sulle 5108 che i
+    due criteri costavano (13,7 %). ⚠ `regularity` **non** può usarla: là
+    una coppia sola contribuisce 1, non 0, e toglierla cambierebbe il numero.
+
+    ⚠ `usati` è un `AddMaxEquality`, cioè un'**uguaglianza**: vale in entrambi
+    i versi, quindi la stessa costruzione serve chi vuole pochi secchi e chi ne
+    vuole molti. Con una sola implicazione uno dei due verrebbe misurato su una
+    costante."""
+    ammesse = set(chiavi)
+    stato = ctx.states[rep]
+    per_coppia = defaultdict(lambda: defaultdict(list))
+    quante = defaultdict(set)
+    for aid in sorted(ctx.activities):
+        if aid not in stato.activities:
+            continue
+        materia = ctx.activities[aid].subject_id
+        for key in ctx.tokens[aid]:
+            if key not in ammesse:
+                continue
+            quante[(str(key), materia)].add(aid)
+            for (day, slot) in ctx.cells[aid]:
+                per_coppia[(str(key), materia)][secchio(day, slot)].append(
+                    ctx.x[(aid, day, slot)])
+
+    fuori = []
+    for coppia, per_secchio in sorted(per_coppia.items()):
+        if len(quante[coppia]) < minimo:
+            continue
+        key, materia = coppia
+        usati = []
+        for valore, lits in sorted(per_secchio.items()):
+            usa = model.NewBoolVar(f"{nome}_{key}_{materia}_{rep}_{valore}")
+            model.AddMaxEquality(usa, lits)
+            usati.append(usa)
+        piazzate = [lit for lits in per_secchio.values() for lit in lits]
+        fuori.append((usati, piazzate, len(quante[coppia])))
+    return fuori
+
+
+def _sparpaglia(ctx, model, chiavi, nome, etichetta, secchio):
+    """`occorrenze piazzate − secchi distinti`, sommato sulle coppie.
+
+    La forma in cui si minimizza il *volere molti secchi*. Il minimo per coppia
+    è **zero** — ogni occorrenza in un secchio suo — e il massimo è
+    `occorrenze − 1`, tutte nello stesso. Fra i due c'è esattamente il numero
+    di occorrenze **di troppo**, che è la quantità che EDT descrive a parole:
+    *«non due ore di matematica lo stesso giorno»*.
+
+    🔑 **Perché la differenza e non le coppie.** «Coppie di occorrenze nello
+    stesso secchio» è la lettura letterale, ed è quadratica: chiederebbe una
+    moltiplicazione fra variabili per ogni secchio. La differenza è lineare,
+    ha lo stesso minimo e lo stesso ordine — tre ore in un giorno costano 2
+    invece di 3, ma nessun orario le scambia di posto.
+
+    ⚠ **Dipende dal numero di occorrenze piazzate, che uno scarto abbassa.**
+    In linea di principio il criterio preferirebbe quindi scartare; in pratica
+    non può, perché `minuti_scartati` e `attivita_scartate` sono i livelli 1 e
+    2 della catena e vengono **fissati** prima che un criterio di qualità
+    esista. La riga resta perché è la ragione per cui il termine è scritto come
+    somma di letterali e non come costante."""
+    per_firma = []
+    for rep in firme(ctx, chiavi):
+        espressione, massimo = 0, 0
+        for usati, piazzate, quante in _secchi(ctx, model, chiavi, rep, nome,
+                                               secchio, minimo=2):
+            espressione += sum(piazzate) - sum(usati)
+            massimo += max(0, quante - 1)
+        per_firma.append((espressione, massimo))
+    return peggiore(model, etichetta, per_firma)
+
+
 @register(QualityCriterion.Kind.REGULARITY)
 def regolarita(ctx, model, chiavi):
     """`Equilibrio didattico` (`tcoMemesHoraires`).
@@ -219,27 +318,58 @@ def regolarita(ctx, model, chiavi):
     docenti: nella base di esempio l'orario delle classi ha questo come primo e
     unico criterio, e quello dei docenti non lo ha affatto. L'asimmetria è
     voluta — gli studenti hanno bisogno di un ritmo prevedibile e restano a
-    scuola comunque, i docenti vanno e vengono."""
-    ammesse = set(chiavi)
+    scuola comunque, i docenti vanno e vengono. E dal 2026-08-31 il verso
+    opposto ha un nome: `SLOT_SPREAD`, che è questo criterio per i docenti."""
     per_firma = []
     for rep in firme(ctx, chiavi):
-        stato = ctx.states[rep]
-        per_coppia = defaultdict(lambda: defaultdict(list))
-        for aid in sorted(ctx.activities):
-            if aid not in stato.activities:
-                continue
-            materia = ctx.activities[aid].subject_id
-            for key in ctx.tokens[aid]:
-                if key not in ammesse:
-                    continue
-                for (day, slot) in ctx.cells[aid]:
-                    per_coppia[(str(key), materia)][slot].append(
-                        ctx.x[(aid, day, slot)])
-        termini = []
-        for (key, materia), per_fascia in sorted(per_coppia.items()):
-            for slot, lits in sorted(per_fascia.items()):
-                usa = model.NewBoolVar(f"regolare_{key}_{materia}_{rep}_{slot}")
-                model.AddMaxEquality(usa, lits)
-                termini.append(usa)
+        termini = [usa for usati, _piazzate, _quante
+                   in _secchi(ctx, model, chiavi, rep, "regolare",
+                              lambda _day, slot: slot)
+                   for usa in usati]
         per_firma.append((sum(termini), len(termini)))
     return peggiore(model, "regularity", per_firma)
+
+
+@register(QualityCriterion.Kind.WEEKLY_SPREAD)
+def distribuzione_settimanale(ctx, model, chiavi):
+    """4. `Distribuisci nella settimana le attività della stessa materia`.
+
+    Le tre ore di matematica su tre giorni diversi, non due il lunedì.
+
+    🔑 **Questo lo sapevamo già dire, ma solo come divieto**, ed è la ragione
+    per cui è il primo dei tre approvati da O5 (ADR-025): `MIN_DISTRIBUTION`,
+    `SAME_DAY_INCOMPATIBLE` e `TWO_DAYS_INCOMPATIBLE` dicono la stessa cosa
+    **impedendo**. Una scuola che preferisce la distribuzione senza pretenderla
+    doveva scegliere fra dichiarare un divieto — e rendere l'istanza
+    infattibile dove un criterio l'avrebbe solo peggiorata — o rinunciare.
+
+    ⚠ Il divieto **resta**, e non è un doppione: un vincolo e un criterio sulla
+    stessa quantità sono la coppia «obbligo» / «preferenza», che è esattamente
+    la scelta che la scuola ora ha. Dichiarare entrambi non è un errore: il
+    criterio ordina ciò che il divieto lascia passare."""
+    return _sparpaglia(ctx, model, chiavi, "distribuito", "weekly_spread",
+                       lambda day, _slot: day)
+
+
+@register(QualityCriterion.Kind.SLOT_SPREAD)
+def fasce_sparse(ctx, model, chiavi):
+    """8. `Evita le attività della stessa materia nella stessa ora`.
+
+    Non «giorni diversi» — è il 4 — ma **ore diverse**: la matematica non
+    sempre alla prima ora.
+
+    🔑 **È `regularity` col segno opposto, e non è una contraddizione di EDT.**
+    Sono due meccanismi e due popolazioni. Il *piazzamento* evita la stessa ora
+    per tutti; l'*ottimizzazione* la ripristina per le sole **classi** —
+    `tcoMemesHoraires` è il primo e unico criterio dell'orario delle classi
+    nella base di esempio, e non compare affatto in quello dei docenti. Per la
+    classe la ripetizione è una routine, per il docente è una condanna.
+
+    ⚠ **Dichiararlo insieme a `REGULARITY` sulla stessa popolazione lo rende
+    inerte**, e non per un difetto: la catena è lessicografica, quindi il primo
+    dei due fissa `secchi distinti` al proprio ottimo e il secondo, che è
+    `occorrenze − secchi distinti` con le occorrenze già fissate, non ha più
+    niente da scegliere. Non c'è un vincolo che lo vieti — è una proprietà
+    misurabile, e un test la misura invece di dichiararla."""
+    return _sparpaglia(ctx, model, chiavi, "sparso", "slot_spread",
+                       lambda _day, slot: slot)

@@ -396,6 +396,14 @@ priorità**. L'elenco completo osservato, nell'ordine:
 
 Sono **undici**, e in questa base **tutti considerati** (`Criteri ignorati` vuota).
 
+> 🧭 **Cosa ne abbiamo fatto** (decisione nostra, non osservazione):
+> [ADR-025](../decisioni.md) ne traduce **due** — il 4 e l'8 — come criteri di
+> qualità, oltre all'11 che lo era già. Gli altri otto restano fuori, ognuno
+> col proprio motivo. Il ragionamento, criterio per criterio, sta in
+> [criteri-di-piazzamento.md](../criteri-di-piazzamento.md). ⚠ Tradurne uno
+> **cambia meccanismo**: qui governano un'euristica di ricerca, da noi
+> diventano livelli di un'ottimizzazione lessicografica.
+
 Quattro cose che l'ordine rivela e che nessuna stringa diceva:
 
 - 🔑 **`Rispetta le preferenze` è ultimo.** È il pennello verde

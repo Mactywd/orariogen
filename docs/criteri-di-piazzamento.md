@@ -11,6 +11,18 @@
 > ⚠ **Non è documentazione di EDT.** L'osservazione sta in
 > [edt/motore-risoluzione.md](edt/motore-risoluzione.md); qui c'è solo il
 > giudizio su cosa farne, che è nostro e va marcato come tale.
+>
+> ✅ **La risposta è arrivata il 2026-08-31**, ed è
+> [ADR-025](decisioni.md): **due sì e otto no**. Il 4 e l'8 sono tradotti come
+> criteri di qualità (`WEEKLY_SPREAD` sulle classi, `SLOT_SPREAD` sui
+> docenti); il 6 è rifiutato pur costando quasi nulla; gli altri sette erano
+> già decisi da qualcos'altro. ⚠ **Una raccomandazione qui sotto è cambiata
+> dopo essere stata scritta**: il 5 diceva «fuori *per ora*, ma nasconde un
+> difetto», e il difetto — i criteri di qualità ciechi alle firme di
+> settimana — è stato pagato da L7 il 2026-08-31. Il 5 è quindi passato da
+> «fuori con un debito» a **già dentro**, senza che nessuno lo traducesse.
+> Questo file resta com'è scritto, con la correzione accanto alla riga: è il
+> materiale con cui la decisione è stata presa, non il suo verbale.
 
 ## Prima: i due meccanismi, e perché la domanda ha senso
 
@@ -183,11 +195,11 @@ Se il 4 si fa e si dimostra utile, se ne riparla con una misura in mano.
 | 1 | `Ottimizza le fasce orarie libere` | ❌ già dentro | è `gaps` + `free_half_days` |
 | 2 | `Riduci i buchi di mezza fascia` | ❌ dipendenza mancante | serve la suddivisione sub-oraria |
 | 3 | `Comincia dall'inizio delle fasce intere` | ❌ dipendenza mancante | idem |
-| 4 | `Distribuisci nella settimana la stessa materia` | 🟡 **il candidato** | oggi è solo un divieto; come criterio non rende infattibile |
-| 5 | `Riduci i buchi quindicinali` | ❌ … ma apre un debito | i criteri di qualità ignorano le firme di settimana |
-| 6 | `Riduci il numero di buchi` | 🟡 a costo quasi nullo | `gaps` con l'unità cambiata; solo se richiesto |
+| 4 | `Distribuisci nella settimana la stessa materia` | 🟡 **il candidato** → ✅ **tradotto** | oggi è solo un divieto; come criterio non rende infattibile |
+| 5 | `Riduci i buchi quindicinali` | ❌ … ma apre un debito → ❌ **già dentro** | il debito è stato pagato da L7: `gaps` è per firma, e il livello è la settimana peggiore |
+| 6 | `Riduci il numero di buchi` | 🟡 a costo quasi nullo → ❌ **no** | nessuno l'ha chiesto, e due criteri quasi identici sono una UI peggiore |
 | 7 | `Equilibra i turni di mensa` | ❌ già deciso | cade con la mensa, fuori scope |
-| 8 | `Evita la stessa materia nella stessa ora` | 🟡 il verso che manca | `regularity` al contrario, per i **docenti** |
+| 8 | `Evita la stessa materia nella stessa ora` | 🟡 il verso che manca → ✅ **tradotto** | `regularity` al contrario, per i **docenti** |
 | 9 | `Distanzia la stessa materia` | ❌ | terzo numero sulla stessa famiglia |
 | 10 | `Favorisci le mezze giornate libere` | ❌ già dentro | è `free_half_days` |
 
@@ -202,6 +214,12 @@ una settimana sola, mentre i vincoli le distinguono già. Su una scuola con
 attività quindicinali il numero che il rendiconto stampa non è il numero di
 nessuna settimana reale. È un debito, e va aperto anche se O5 si chiude con
 dieci «no».
+
+✅ **Esito: due sì e otto no** ([ADR-025](decisioni.md), 2026-08-31). Il 4 e
+l'8 sono `QualityCriterion.Kind.WEEKLY_SPREAD` e `SLOT_SPREAD`; il 6 è
+rifiutato; il 5 è rientrato dalla porta di L7. E scrivendoli si è scoperto che
+il 4, l'8 e `regularity` sono **la stessa funzione** con il secchio e il segno
+cambiati — vedi `_secchi` in `domain/solver/criteria.py`.
 
 **Le tre cose da fare, se la decisione le approva**, in ordine di valore:
 

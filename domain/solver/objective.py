@@ -60,9 +60,38 @@ BUDGET_QUALITA = 15.0
 
 @dataclass(frozen=True)
 class Level:
+    """Un livello della catena.
+
+    ⚠ **`var` può essere `None` e `costruisci` prenderne il posto**, e non è
+    un dettaglio di implementazione: è la correzione di un difetto misurato il
+    2026-08-31 con O5. Un criterio di qualità costruisce migliaia di variabili
+    derivate, e finché le costruiva **tutte prima che la catena partisse** le
+    pagavano anche i livelli sopra di lui, che non ne fanno alcun uso.
+
+    La misura, sul banco Alighieri: aggiungendo `weekly_spread` come **sesto**
+    livello, il **primo** — `minuti_scartati`, che non sa nemmeno che esista —
+    passava da 9,2 s a 33,6 s, e con due criteri nuovi a 71 s; la catena, che
+    in sei arrivava in fondo in 98 s, moriva al quarto livello. Costruendo il
+    criterio **immediatamente prima** del proprio livello, ognuno paga solo i
+    criteri che lo precedono.
+
+    🔑 È lecito perché la catena non è un `Solve` solo: è un `Solve` per
+    livello sullo **stesso modello**, che già muta fra l'uno e l'altro (il
+    fissaggio `var <= valore`). Aggiungere variabili è la stessa mutazione.
+    E non cambia nessun risultato — un criterio non posta vincoli di
+    ammissibilità, quindi la sua assenza non allarga l'insieme delle soluzioni
+    dei livelli sopra, ne accorcia solo la ricerca.
+
+    ⚠ I **tetti** dell'arbitrato non sono pigri e non possono esserlo: quelli
+    restringono, quindi devono esistere dal primo `Solve`."""
+
     nome: str
-    var: object     # IntVar: il valore da minimizzare
+    var: object     # IntVar: il valore da minimizzare, o None se pigro
     limite: float | None = None   # budget proprio, se il livello ne ha uno
+    #: `(model) -> IntVar | None`, chiamata appena prima del proprio `Solve`.
+    #: `None` di ritorno significa «niente da misurare»: il livello sparisce
+    #: dal rendiconto, che è ciò che faceva il filtro `massimo <= 0`.
+    costruisci: object = None
 
 
 @dataclass(frozen=True)
@@ -161,8 +190,8 @@ def livelli(ctx, model, arbitrato=None):
     # è la catena di prima di quel pezzo, byte per byte. Con un `Arbitrato`, i
     # criteri della popolazione sacrificata non arrivano fin qui: restano nel
     # modello come tetti di non-regressione.
-    qualita = [Level(nome, var, BUDGET_QUALITA)
-               for nome, var in livelli_di_qualita(ctx, model, arbitrato)]
+    qualita = [Level(nome, None, BUDGET_QUALITA, costruisci=fabbrica)
+               for nome, fabbrica in livelli_di_qualita(ctx, model, arbitrato)]
 
     # 🔑 **L'ordine fra stabilità e qualità dipende da che corsa è questa, e la
     # ragione è una misura, non un'opinione.** Con un orario di partenza
@@ -296,6 +325,13 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
 
     esiti, soluzione, stato_buono = [], None, None
     for level in levels:
+        var = level.var
+        if level.costruisci is not None:
+            # la costruzione pigra: vedi il docstring di `Level`
+            var = level.costruisci(model)
+            if var is None:
+                continue      # niente da misurare su queste chiavi
+            level = replace(level, var=var, costruisci=None)
         limite = budget(level)
         solver.parameters.max_time_in_seconds = (
             float(limite) if limite is not None else 1e9)

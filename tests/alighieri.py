@@ -637,9 +637,10 @@ QUOTE = [
 ]
 
 
-#: 🔑 **L'ondata 6: la gerarchia dei criteri di qualità.** Cinque generi, sei
+#: 🔑 **L'ondata 6: la gerarchia dei criteri di qualità.** Sette generi, otto
 #: righe, e le due popolazioni: è la tabella intera di `QualityCriterion`, che
-#: nessun dataset aveva. L'ordine è un **dato** e non codice, perché è il punto
+#: nessun dataset aveva. (Erano cinque e sei fino a O5, che ha aggiunto i due
+#: criteri di *piazzamento* tradotti — ADR-025.) L'ordine è un **dato** e non codice, perché è il punto
 #: dichiarato del meccanismo — un criterio che non compare è un criterio
 #: *ignorato*, e la tabella vuota dà la catena senza qualità.
 #:
@@ -663,10 +664,18 @@ CRITERI_QUALITA = [
     # EDT l'orario delle classi ha questo come primo e unico criterio, e quello
     # dei docenti non lo ha affatto. L'asimmetria è del prodotto, non nostra.
     ("regularity", "classes", 5),
+    # 🔑 I due di O5, e sulle popolazioni che EDT dichiara: la
+    # **distribuzione** nella settimana è un bene degli studenti, la
+    # **varietà** di fascia è un bene dei docenti. ⚠ `regularity` e
+    # `slot_spread` sono i due versi opposti dello stesso conto, e stanno qui
+    # su popolazioni **diverse**: sulla stessa il secondo sarebbe inerte, e un
+    # test lo misura invece di dichiararlo.
+    ("weekly_spread", "classes", 6),
+    ("slot_spread", "teachers", 7),
     # Il pennello **verde**, undicesimo e ultimo: cede a tutto il resto. È il
     # criterio che dà un posto alla riga `preferenza` dell'ondata 5, la sola
     # indisponibilità che non vieta niente.
-    ("preferences", "all", 6),
+    ("preferences", "all", 8),
 ]
 
 
@@ -674,7 +683,7 @@ def criteri_di_qualita():
     """Installa `CRITERI_QUALITA`. Sta fuori da `build()` perché in EDT
     l'ottimizzazione è un comando **separato**, che si lancia su un orario che
     già c'è: `Ottimizza gli orari dei docenti` non è una fase del calcolo. E
-    perché quei sei livelli costano, misurati, 82 secondi a `solve`."""
+    perché quei livelli costano: erano 82 secondi a `solve` in sei."""
     for genere, popolazione, rango in CRITERI_QUALITA:
         QualityCriterion.objects.create(
             kind=QualityCriterion.Kind(genere),

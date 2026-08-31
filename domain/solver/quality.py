@@ -199,27 +199,44 @@ def livelli_di_qualita(ctx, model, arbitrato=None):
     Con un `Arbitrato`, le righe della popolazione **sacrificata** non
     diventano livelli: la loro quantità si costruisce lo stesso — serve a
     essere confrontata — ma finisce sotto un tetto di non-regressione invece
-    che dentro un `Minimize`."""
+    che dentro un `Minimize`.
+
+    🔑 **Restituisce fabbriche, non variabili** (2026-08-31, con O5). Un
+    criterio costruisce migliaia di variabili derivate, e costruirle tutte
+    prima che la catena parta le faceva pagare anche ai livelli **sopra** di
+    lui, che non ne fanno alcun uso: sul banco, un criterio al sesto livello
+    portava il primo da 9,2 s a 33,6 s. Ogni fabbrica si chiama immediatamente
+    prima del proprio `Solve` — vedi il docstring di `Level`.
+
+    ⚠ I **tetti** della popolazione sacrificata restano invece costruiti
+    subito, e devono: quelli restringono."""
     from domain.solver import criteria  # noqa: F401 — forza la registrazione
+
+    def fabbrica(riga):
+        def costruisci(model):
+            espressione, massimo = _CRITERI[riga.kind](
+                ctx, model, chiavi_di(ctx, riga.population))
+            if massimo <= 0:
+                return None   # niente da misurare su queste chiavi
+            var = model.NewIntVar(0, massimo, f"qualita_{_nome(riga)}")
+            model.Add(var == espressione)
+            return var
+        return costruisci
 
     livelli, sacrificati = [], []
     for riga in QualityCriterion.objects.all():   # Meta.ordering: rank, kind
-        costruisci = _CRITERI.get(riga.kind)
-        if costruisci is None:
+        if riga.kind not in _CRITERI:
             # Un criterio dichiarato nell'enum ma non ancora tradotto. Si
             # salta invece di fallire: l'enum è il vocabolario del prodotto,
             # e una riga che nessun builder legge è un criterio *ignorato* —
             # esattamente ciò che la lista «Criteri ignorati» di EDT esprime.
             continue
-        espressione, massimo = costruisci(ctx, model, chiavi_di(ctx, riga.population))
-        if massimo <= 0:
-            continue   # niente da misurare su queste chiavi: nessun livello
-        var = model.NewIntVar(0, massimo, f"qualita_{_nome(riga)}")
-        model.Add(var == espressione)
         if arbitrato is not None and arbitrato.sacrifica(riga):
-            sacrificati.append((riga, var))
+            var = fabbrica(riga)(model)
+            if var is not None:
+                sacrificati.append((riga, var))
         else:
-            livelli.append((_nome(riga), var))
+            livelli.append((_nome(riga), fabbrica(riga)))
 
     if sacrificati:
         _posta_i_tetti(ctx, model, arbitrato, sacrificati)

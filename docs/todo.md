@@ -23,13 +23,14 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > ([ADR-020](decisioni.md)): la copertura misura l'atomo e l'alternativa è un
 > dato dichiarato, quindi **l'import non è più bloccato**.
 >
-> **Niente blocca il calcolo.** Restano **tre decisioni** di prodotto
-> (D2, D4, e O5 che è una decisione travestita), **una sola osservazione
-> sostanziale** in EDT — l'ultimo residuo di O2, il `Ciclo personalizzato` —
-> più le due minuzie da tooltip di **O7**, **due esperimenti** che nessun dato
-> esistente può sostituire (O3, O6), e **sette debiti** già decisi (erano nove:
-> L6bis e L7 ne hanno pagati due). O1 è chiusa
-> il 2026-08-30.
+> **Niente blocca il calcolo.** Restano **due decisioni** di prodotto
+> (D2 e D4, che dal 2026-08-28 sono la stessa domanda: il confine con
+> **Aurora**), **una sola osservazione sostanziale** in EDT — l'ultimo residuo
+> di O2, il `Ciclo personalizzato` — più le due minuzie da tooltip di **O7**,
+> **due esperimenti** che nessun dato esistente può sostituire (O3, O6), e
+> **sette debiti** già decisi (erano nove: L6bis e L7 ne hanno pagati due).
+> O1 è chiusa il 2026-08-30, **O5 il 2026-08-31** ([ADR-025](decisioni.md):
+> due criteri di piazzamento tradotti su dieci).
 >
 > 🔧 **La sezione 3, `Lavoro`, ha aperto e chiuso quattro voci lo stesso
 > giorno** — L1 (il perimetro del buco), L2 (la capienza come criterio e il
@@ -169,30 +170,6 @@ Le aule **non esistono nella base del Fermi** (`NBSALLES = 0`), quindi
 *nostro* dataset le ha (`tests/fermi.py`, `SPECIAL_ROOMS`) perché senza la
 seconda fase avrebbe un problema vuoto — ma *quali* aule chieda ogni materia
 resta nostra scelta di dimensionamento. → `docs/edt/aule.md`
-
-### O5 🧭 I dieci criteri di piazzamento non tradotti — **non è un'osservazione**
-
-⚠ Riclassificata il 2026-08-29: era marcata 👁, ma **la lista è già osservata e
-scritta** — gli undici nomi stanno in
-[motore-risoluzione.md](edt/motore-risoluzione.md), rilevati il 2026-07-26 e
-**riconfermati** da una seconda schermata della stessa base, valore per valore.
-Non manca uno screenshot: manca una **decisione**, una per criterio.
-
-🔧 **Il materiale per rispondere c'è, da L3**:
-[criteri-di-piazzamento.md](criteri-di-piazzamento.md) prende i dieci uno per
-uno — cosa fa in EDT, cosa già abbiamo che lo tocca, il costo, e la
-raccomandazione. La proposta è **sette no e tre forse**; resta da dire sì o no,
-che è l'unica cosa che il file non poteva fare.
-
-In EDT i meccanismi sono due e confonderli era l'errore di partenza:
-`Ordinamento dei criteri` è la lista degli **undici** criteri di *piazzamento*;
-`Ottimizzazione degli orari` è una fase separata con **cinque** valori. Sono
-implementati i quattro dell'ottimizzazione più `Rispetta le preferenze`, che è
-l'undicesimo criterio di piazzamento. Restano **dieci** nomi su cui dire
-dentro/fuori, e tre sono già quasi decisi dalla struttura: `Equilibra i turni di
-mensa` cade con la mensa (fuori scope), `Riduci i buchi di mezza fascia oraria`
-e `Comincia dall'inizio delle fasce orarie intere` valgono solo con la
-suddivisione sub-oraria attiva, che è a `Nessuno` ovunque l'abbiamo vista.
 
 ---
 
@@ -750,6 +727,23 @@ perché nessuno debba ricostruire *perché*.
 ## Chiuse
 
 Il racconto è in [changelog.md](changelog.md), alla data.
+
+- [x] **2026-08-31** — **O5, i dieci criteri di piazzamento**, decisa con
+      [ADR-025](decisioni.md): **due sì e otto no**. Entrano il 4
+      (`Distribuisci nella settimana le attività della stessa materia`, sulle
+      classi) e l'8 (`Evita le attività della stessa materia nella stessa ora`,
+      sui **docenti**), come righe di `QualityCriterion`. 🔑 La decisione non
+      è *quali due*: è che **cambiano meccanismo**. In EDT quegli undici
+      governano un'euristica di ricerca, che in CP-SAT non esiste; tradurne uno
+      vuol dire spostarlo nell'altro riquadro, dove diventa un livello. La
+      direzione è quella prudente — un criterio non posta vincoli di
+      ammissibilità, quindi non può rendere infattibile ciò che un'euristica al
+      più rallentava. ⚠ **Una delle otto righe rosse ha cambiato motivo**: il 5
+      (`Riduci i buchi quindicinali`) era «fuori per ora, ma nasconde un
+      difetto», e L7 il difetto l'ha pagato — è **già dentro**, senza che
+      nessuno lo traducesse. 🔑 E scrivere i due ha scoperto che con
+      `regularity` sono **la stessa funzione**, con il secchio e il segno
+      cambiati.
 
 - [x] **2026-08-30** — **O1, i criteri dell'ottimizzatore aule**: i quattro
       default sono `Limita gli spostamenti tra attività consecutive`,

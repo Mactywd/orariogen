@@ -1114,3 +1114,85 @@ sostituzioni — non nasce nemmeno una variabile in più e non cambia nessun
 numero.
 
 **Data.** 2026-08-31
+
+---
+
+## ADR-025 — O5: due criteri di piazzamento su dieci, e il cambio di meccanismo è la decisione
+
+**Decisione.** Dei **dieci** criteri di `Ordinamento dei criteri` non ancora
+tradotti (l'undicesimo, `Rispetta le preferenze`, lo era già), ne entrano
+**due**, come righe di `QualityCriterion`:
+
+| # | Criterio EDT | Da noi | Popolazione |
+|---|---|---|---|
+| 4 | `Distribuisci nella settimana le attività della stessa materia` | `WEEKLY_SPREAD` | classi |
+| 8 | `Evita le attività della stessa materia nella stessa ora` | `SLOT_SPREAD` | docenti |
+
+Gli altri otto restano fuori, ognuno con il proprio motivo:
+
+| # | Criterio | Motivo del no |
+|---|---|---|
+| 1 | `Ottimizza le fasce orarie libere` | **già dentro**: è `gaps` più `free_half_days` |
+| 2 | `Riduci i buchi di mezza fascia oraria` | dipendenza mancante: serve la **suddivisione sub-oraria**, a `Nessuno` ovunque l'abbiamo vista |
+| 3 | `Comincia dall'inizio delle fasce orarie intere` | idem |
+| 5 | `Riduci i buchi quindicinali` | **già dentro da L7**: `gaps` si calcola per firma di settimana e il livello è la peggiore ([ADR-024](#adr-024--un-criterio-di-qualità-vale-quanto-la-settimana-peggiore)) |
+| 6 | `Riduci il numero di buchi` | è `gaps` con l'unità cambiata — **buchi** invece di minuti. Costa quasi nulla e non lo si fa: due criteri quasi identici nella stessa lista sono una UI peggiore |
+| 7 | `Equilibra i turni di mensa` | cade con la **mensa**, fuori scope |
+| 9 | `Distanzia le attività della stessa materia` | terzo numero sulla stessa famiglia del 4 e dell'8, per un guadagno che nessuno ha chiesto |
+| 10 | `Favorisci le mezze giornate libere` | **già dentro**: è `free_half_days` |
+
+**🔑 Il punto della decisione non è quali due, è che cambiano meccanismo.** In
+EDT questi undici governano un'**euristica di ricerca**: sono l'ordine in cui
+il motore prova le collocazioni, e la lista è riordinabile fra «considerati» e
+«ignorati». In CP-SAT quell'oggetto non esiste — la ricerca è del risolutore, e
+un ordine dichiarato dall'utente non ha dove attaccarsi. Tradurne uno significa
+quindi **spostarlo nell'altro riquadro**, `Ottimizzazione degli orari`, dove
+diventa un livello lessicografico. Non è la stessa cosa, ed è dichiarato:
+
+- un'euristica al più **rallenta**, un livello **ordina gli ottimi**;
+- ma la direzione è quella prudente. Un criterio non posta vincoli di
+  ammissibilità — l'invariante in testa a `quality.py` — quindi **non può
+  rendere infattibile** ciò che l'euristica non rendeva infattibile.
+
+**Alternative scartate.**
+
+1. **Tradurli tutti e dieci.** Sette non dicono niente che non sia già detto o
+   già deciso altrove: sarebbero dieci righe nella UI della scuola per quattro
+   quantità distinte.
+2. **Non tradurne nessuno**, dichiarando che i due riquadri sono meccanismi
+   diversi e che noi abbiamo solo il secondo. È la risposta pulita, ed è
+   sbagliata sui due: il 4 dice una cosa che oggi sappiamo esprimere **solo
+   come divieto**, e il divieto rende infattibile dove un criterio peggiora e
+   basta; l'8 dice per i **docenti** una cosa che per le classi già diciamo, e
+   la sua assenza era un'asimmetria involontaria dove EDT ne ha una voluta.
+3. **Il 6 insieme agli altri due.** Costa mezz'ora e la funzione è già scritta.
+   Fuori perché nessuna scuola l'ha chiesto e perché il valore di una lista di
+   criteri sta nel fatto che ogni voce dica una cosa diversa.
+
+**🔑 Un dividendo non previsto: tre criteri, una funzione.** Scrivendoli si è
+visto che il 4, l'8 e `regularity` contano tutti *quanti secchi distinti* usa
+la stessa materia per la stessa unità. Cambiano il **secchio** e il **segno**:
+
+| Criterio | Secchio | Vuole |
+|---|---|---|
+| `regularity` | la fascia | **pochi** — la materia sempre alla stessa ora |
+| `slot_spread` | la fascia | **molti** — la materia mai alla stessa ora |
+| `weekly_spread` | il giorno | **molti** — la materia sparsa nella settimana |
+
+`_secchi` in `criteria.py` è quindi una funzione sola, e `regularity` è stato
+riscritto su di essa senza che nessuno dei suoi numeri si muovesse.
+
+**⚠ La quantità è lineare, e non è la lettura letterale.** «Coppie di
+occorrenze nello stesso secchio» è quadratica; noi minimizziamo
+`occorrenze piazzate − secchi distinti`, cioè le occorrenze **di troppo**. Tre
+ore in un giorno costano 2 invece di 3 — ma fra due orari il verso della
+disuguaglianza è lo stesso, e un test fissa il numero che li separa.
+
+**⚠ `REGULARITY` e `SLOT_SPREAD` sulla stessa popolazione: il secondo è
+inerte.** Sono i due versi dello stesso conto, e la catena è lessicografica: il
+primo fissa i secchi distinti al proprio ottimo, il secondo assume il valore
+complementare e non sceglie più niente. **Non c'è un vincolo che lo vieti** —
+sarebbe una proibizione su una configurazione che non fa danno, solo nulla — e
+un test la misura invece di dichiararla.
+
+**Data.** 2026-08-31

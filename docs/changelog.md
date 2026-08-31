@@ -15,6 +15,91 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-31 (sera) — O5: due criteri di piazzamento su dieci, e il costo che
+  hanno reso visibile** —
+  [ADR-025](decisioni.md). O5 era l'ultima decisione di prodotto che avesse
+  materiale pronto: [criteri-di-piazzamento.md](criteri-di-piazzamento.md)
+  prendeva i dieci criteri di `Ordinamento dei criteri` uno per uno con una
+  raccomandazione, e mancava solo la firma. È **due sì e otto no**.
+
+  🔑 **La decisione non è quali due: è che cambiano meccanismo.** In EDT quegli
+  undici governano un'**euristica di ricerca** — l'ordine in cui il motore
+  prova le collocazioni — e in CP-SAT quell'oggetto non esiste. Tradurne uno
+  significa spostarlo nell'**altro riquadro**, `Ottimizzazione degli orari`,
+  dove diventa un livello lessicografico. Non è la stessa cosa, e la direzione
+  è quella prudente: un criterio non posta vincoli di ammissibilità, quindi non
+  può rendere infattibile ciò che un'euristica al più rallentava.
+
+  **I due che entrano.** Il **4**, `Distribuisci nella settimana le attività
+  della stessa materia` → `WEEKLY_SPREAD` sulle classi: è l'unico che dice una
+  cosa che oggi sapevamo esprimere **solo come divieto**, e un divieto rende
+  infattibile dove un criterio peggiora e basta — un test lo misura, stessa
+  istanza, `1` col criterio contro **un'attività scartata** col divieto.
+  L'**8**, `Evita le attività della stessa materia nella stessa ora` →
+  `SLOT_SPREAD` sui **docenti**: è `regularity` col segno opposto, e la sua
+  assenza era un'asimmetria involontaria dove EDT ne ha una voluta — per la
+  classe la ripetizione è una routine, per il docente è una condanna.
+
+  ⚠ **Una delle otto righe rosse ha cambiato motivo mentre la si leggeva.** Il
+  **5**, `Riduci i buchi quindicinali`, era «fuori *per ora*, ma è l'unico no
+  che nasconde un difetto»: i criteri di qualità ignoravano le firme di
+  settimana. **L7 quel difetto l'ha pagato** la mattina stessa, quindi il 5 è
+  passato a **già dentro** senza che nessuno lo traducesse. Il **6** è
+  l'unico no che costa qualcosa: `gaps` con l'unità cambiata — buchi invece di
+  minuti — costa mezz'ora e resta fuori perché due criteri quasi identici nella
+  stessa lista sono una UI peggiore, non migliore.
+
+  🔑 **Un dividendo non previsto: tre criteri, una funzione.** Scrivendoli si è
+  visto che il 4, l'8 e `regularity` contano tutti *quanti secchi distinti* usa
+  la stessa materia per la stessa unità, e cambiano solo il **secchio** (la
+  fascia o il giorno) e il **segno** (pochi o molti). `_secchi` è quindi una
+  funzione sola e `regularity` è stato riscritto su di essa **senza che nessuno
+  dei suoi numeri si muovesse**. ⚠ La quantità è `occorrenze − secchi
+  distinti`, non «coppie nello stesso secchio»: lineare invece che quadratica,
+  tre ore in un giorno costano 2 invece di 3, e un test fissa proprio quel
+  numero perché è dove le due letture divergono.
+
+  ⚠ **E `REGULARITY` con `SLOT_SPREAD` sulla stessa popolazione è inerte.** Non
+  c'è un vincolo che lo vieti — sarebbe una proibizione su una configurazione
+  che non fa danno, solo nulla — e un test lo **misura**: il primo fissa i
+  secchi distinti al proprio ottimo, il secondo assume il valore complementare
+  e non sceglie più niente.
+
+  🔑 **Il difetto che i due criteri hanno trovato, ed è il pezzo che vale più
+  della decisione.** Aggiungendo `weekly_spread` come **sesto** livello, il
+  **primo** — `minuti_scartati`, che di quel criterio non sa nulla — passava da
+  9,2 s a **33,6 s**; con due criteri nuovi a **71 s**, e la catena che in sei
+  arrivava in fondo in 98 s moriva al quarto livello. La causa: il modello si
+  costruiva **intero** prima che la catena partisse, quindi ogni livello pagava
+  le migliaia di variabili derivate dei criteri **sotto** di lui. Ora ogni
+  criterio si costruisce **immediatamente prima del proprio livello**
+  (`Level.costruisci`), il che è lecito perché la catena è un `Solve` per
+  livello sullo stesso modello e quel modello già muta fra l'uno e l'altro. Il
+  primo livello del banco è sceso a **2,6 s** — cioè meno di prima di O5, coi
+  soli sei criteri storici.
+
+  ⚠ **Il rovescio: l'arbitrato non può rimandare niente.** I tetti di
+  non-regressione **restringono**, quindi vanno costruiti prima del primo
+  `Solve`. Con tre criteri sacrificati invece di due il modello cresce di ~5000
+  variabili in testa e `gaps_teachers` non produce alcuna soluzione nei suoi
+  15 s — misurato a tolleranza **5, 60 e 180**, cioè non è la strettezza del
+  tetto, è il peso. Il test dell'arbitrato misura quindi il **meccanismo** sui
+  sei storici, e la misura degli otto sta scritta accanto invece che nascosta.
+
+  ⚠ **E con otto criteri la catena del banco non arriva più in fondo**: il nono
+  livello non conclude e i due dopo di lui non compaiono. Non è la quantità dei
+  due criteri nuovi a essere dura — da soli chiudono senza fatica,
+  `weekly_spread` 220 e `slot_spread` 120 con limite inferiore 51 — è la loro
+  **posizione**: ogni livello è più duro del precedente perché quelli sopra
+  sono fissati al valore che la ricerca *ha trovato*, non a un ottimo
+  dimostrato. Il test asserisce ora un **prefisso**, e che i sei storici
+  arrivino tutti in fondo.
+
+  Il banco porta le due righe nuove (`weekly_spread` classi, `slot_spread`
+  docenti): il cricchetto della qualità è `{r.kind} == set(Kind.values)`, cioè
+  la tabella intera, e ha morso appena l'enum è cresciuta — che è il suo
+  mestiere. **960 test verdi**, 17 skip.
+
 - **2026-08-31 — I cinque difetti del banco, chiusi: e tre di essi erano del dato** —
   Il banco L4 ha prodotto cinque difetti e non ne ha riparato nessuno: la spec
   (§8) vietava di modificare il motore mentre lo si misurava, e ognuno è

@@ -97,8 +97,10 @@ domain/                l'app Django del modello di dominio v1
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
                         residuo di ADR-018, ventotto builder su trentuno checker,
                         la catena lessicografica (objective.py), le quote
-                        di alleggerimento (relaxation.py), i criteri di
-                        qualità (quality.py + criteria.py), la separazione
+                        di alleggerimento (relaxation.py), i sette criteri di
+                        qualità (quality.py + criteria.py — costruiti **pigri**,
+                        ognuno appena prima del proprio livello; e i tre della
+                        famiglia dei secchi sono una funzione sola), la separazione
                         per popolazione con la perdita tollerata (Arbitrato),
                         `Piazza e sistema` (place_and_fix.py) e la **seconda
                         fase** — l'assegnazione delle aule (rooms.py), modello
@@ -206,7 +208,7 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > **seconda fase**). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **953 test verdi**, 17 skip tutti misurati e attribuiti
+> minimo. **960 test verdi**, 17 skip tutti misurati e attribuiti
 > (`venv/bin/pytest`).
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
@@ -256,7 +258,28 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > quattro valori di `Ottimizzazione degli orari` — buchi, attività isolate,
 > mezze giornate libere, equilibrio didattico — più il pennello **verde**, come
 > livelli in coda alla catena, con l'**ordine dichiarato dai dati**
-> (`QualityCriterion`) e non dal codice.
+> (`QualityCriterion`) e non dal codice. Dal 2026-08-31 sono **sette**: O5
+> ([ADR-025](docs/decisioni.md)) ne aggiunge due presi dall'**altra** lista,
+> quella degli undici criteri di *piazzamento* — `WEEKLY_SPREAD` (il 4, sulle
+> classi) e `SLOT_SPREAD` (l'8, sui docenti). 🔑 Tradurne uno **cambia
+> meccanismo**: in EDT governano un'euristica di ricerca che in CP-SAT non
+> esiste, qui diventano livelli. La direzione è quella prudente — un criterio
+> non posta vincoli di ammissibilità — e gli altri otto restano fuori, ognuno
+> col proprio motivo.
+> 🔑 **E i tre sono la stessa funzione**: `regularity`, `slot_spread` e
+> `weekly_spread` contano quanti *secchi distinti* usa la stessa materia per la
+> stessa unità, e cambiano solo il secchio (la fascia o il giorno) e il segno.
+>
+> 🔑 **Il pezzo ha trovato che un criterio lo pagavano i livelli sopra di lui.**
+> Il modello si costruiva intero prima che la catena partisse, quindi
+> `minuti_scartati` — il primo livello, che di un criterio non sa nulla —
+> passava da 9,2 s a **33,6 s** per un criterio aggiunto al **sesto** posto, e
+> a 71 s con due. Ora ogni criterio si costruisce **immediatamente prima del
+> proprio livello** (`Level.costruisci`), ed è lecito perché la catena è un
+> `Solve` per livello sullo stesso modello. Il primo livello del banco: **2,6
+> s**. ⚠ **L'arbitrato è l'eccezione e non può esserlo diversamente**: un tetto
+> di non-regressione restringe, quindi va costruito subito — con tre criteri
+> sacrificati invece di due, `gaps_teachers` non conclude nei suoi 15 s.
 >
 > ⚠ **E costano — ma non per la ragione che era scritta qui.** Fino al
 > 2026-08-28 questa nota diceva «senza limite di tempo non tornano in nove
@@ -516,12 +539,15 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
       + rango`.
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
-Tre decisioni, **una sola osservazione sostanziale** ancora aperta in EDT (il
+**Due** decisioni — D2 e D4, che sono la stessa domanda: il confine con
+**Aurora** — **una sola osservazione sostanziale** ancora aperta in EDT (il
 `Ciclo personalizzato`) più due minuzie da tooltip, due esperimenti e sette
 debiti dichiarati. **Nessuna blocca il calcolo**: ⛔ D1 è sciolta il 2026-08-28
 con [ADR-020](docs/decisioni.md), ⛔ D3 il 2026-08-29 con
-[ADR-021](docs/decisioni.md), e O1 — i criteri dell'ottimizzatore aule — il
-2026-08-30.
+[ADR-021](docs/decisioni.md), O1 — i criteri dell'ottimizzatore aule — il
+2026-08-30, e **O5 il 2026-08-31** ([ADR-025](docs/decisioni.md)).
+🔧 **La sezione `Lavoro` del todo è vuota**: ciò che resta aspetta una persona
+o EDT, non del codice.
 
 🔧 La sezione **`Lavoro`** del todo ha aperto e chiuso **quattro** voci il
 2026-08-30. **L1**: il perimetro su cui si misura il buco è ora un parametro
@@ -552,7 +578,7 @@ famiglie dell'asse Cardinalità e **tredici** di vincolo di materia per i
 tredici tipi dell'asse Relazione; **55 righe di indisponibilità** nei tre
 livelli, i tetti di peso didattico, un tecnico e quattro carrelli; l'**ora
 quindicinale** del 5B con la sua **seconda firma di settimana**, **due quote**
-di alleggerimento e **sei criteri di qualità**. Due fasi `OPTIMAL` senza scarti
+di alleggerimento e **otto criteri di qualità** (sei fino a O5). Due fasi `OPTIMAL` senza scarti
 né rinunce: **14 785 variabili, 13 996 constraint, 73 aule su 73**.
 🔑 **Accanto al Fermi, non al posto suo**: il Fermi vale perché non è stato
 progettato per superare i nostri test.
@@ -670,7 +696,7 @@ cambiano il *regime di ricerca* (439 s con un lavoratore contro 7 s con otto);
 e una **seconda firma di settimana non raddoppia il modello** — costa quanto
 le attività che la distinguono (+0,6 % di variabili, +12,7 % di constraint),
 perché le derivate nascono dove un builder posta e l'occupazione deduplica i
-constraint identici fra firme. ⚠ I sei criteri di qualità portano un `solve`
+constraint identici fra firme. ⚠ I criteri di qualità portano un `solve`
 da 9 a **82 s**, quindi `alighieri.build()` non li installa: in EDT
 l'ottimizzazione è un comando a sé, su un orario che già c'è. ⚠ E un livello
 sotto un livello **non dimostrato** eredita l'indeterminatezza di quello — lo
