@@ -15,6 +15,93 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-31 (sera) — `Ricava`: il primo gradino della via d'ingresso** —
+  `domain/bootstrap.py` e `manage.py bootstrap`, il pezzo che rende reale la
+  decisione presa la mattina. Da una griglia piatta — le righe di
+  `ScheduleEntry` — a una **proposta**: docenti, classi, materie, griglia,
+  cattedre e quadri orari, con dichiarato accanto ciò che non si ricava.
+
+  🔑 **La scoperta è che lo sdoppiamento non è una domanda da fare ma un
+  sospetto da nominare.** ADR-028 lo aveva scritto come il gradino 2 — *«si
+  dichiara ciò che l'orario non distingue»* — e la griglia invece l'evidenza ce
+  l'ha: **la stessa classe due volte nella stessa fascia**. Da qui la regola
+  che porta il pezzo: si contano le **celle**, non le lezioni, perché le ore che
+  un alunno segue sono le fasce distinte in cui la sua classe ha quella materia,
+  e una cella occupata da due lezioni resta un'ora sola. Misurato: i quadri
+  esatti passano da **6 a 8 su 12**, e la differenza sono esattamente le classi
+  sdoppiate.
+
+  **Il rilevatore è sicuro ma non completo, e tutt'e due le metà sono
+  misurate.** Sicuro: **zero falsi allarmi**, e sul Fermi — che di partizioni
+  non ne ha nessuna — **zero sospetti**. Non completo: **28 coppie su 30**.
+  ⚠ E senza il Fermi non sarebbe misurato affatto: sul banco *ogni* classe è
+  sdoppiata, quindi «12 su 12» lo prenderebbe anche un rilevatore che dice
+  sempre di sì.
+
+  ⚠ **Le due mancate sono un'altra struttura, non un margine d'errore.** Sono
+  3A e 4A sul laboratorio di scienze, dove le due metà le prende **lo stesso
+  docente** — quindi non possono essere simultanee, quindi non collidono, quindi
+  non c'è niente da vedere. È la stessa distinzione che L5 aveva dovuto imparare
+  sul dataset: *sdoppiare non è allineare*. E i quattro quadri che restano
+  storti sono **quattro meccanismi diversi**, tutti fuori dalla portata di una
+  griglia settimanale — turno di laboratorio (3A, 4A), ora quindicinale (5B),
+  classe articolata (2C). Stanno in `CECITA`, e il comando li stampa **sempre**,
+  anche quando non ne ha visto nessuno: una proposta che non li nominasse
+  mentirebbe per omissione.
+
+  🔑 **E i numeri sono stabili per costruzione, non per fortuna.** Misurato su
+  **cinque ottimi distinti** a otto lavoratori: cattedre, sdoppiamenti, quadri e
+  raggruppamenti identici ogni volta. La ragione è L5 — le metà di uno
+  sdoppiamento sono **allineate**, quindi sempre simultanee — e il turno di
+  laboratorio ha un docente solo, quindi non lo è mai. Il rilevatore misura la
+  **struttura del dataset**, non l'esito della ricerca, ed è ciò che rende
+  lecito asserirne il numero.
+
+  🔑 **E il numero è giusto anche dove il nome è sbagliato**, che è la cosa
+  che rende il pezzo più solido di quanto sembri. Due docenti nella stessa
+  cella sulla stessa classe possono essere due mezze classi *oppure* una
+  **compresenza** — due insegnanti sulla classe intera — e la griglia non le
+  distingue. Ma il quadro orario non se ne accorge: in tutt'e due i casi
+  l'alunno fa **un'ora**. L'incertezza è sull'**etichetta**, non sul conto, e
+  cade insieme alla partizione, che va comunque dichiarata a mano.
+
+  **Una cosa vista girando sul banco vero**: dei 28 sdoppiamenti, **24 sono
+  IRC/ALT** — dodici classi per due — cioè la struttura più comune di una
+  scuola italiana, quella di ADR-020. Contarla come **un'ora** è esattamente
+  giusto: un alunno fa l'una o l'altra. Gli altri quattro sono gli sdoppiamenti
+  veri (inglese su 1A e 1B, l'articolata di 2C).
+
+  **Tre scelte, con il motivo scritto.** *Un piano per classe, non per profilo*:
+  raggruppare le classi col medesimo quadro sembra economico ed è una perdita —
+  sul banco i profili distinti sono **9 contro 11 piani** — e fondere è una
+  decisione della scuola, che da un piano per classe si può sempre prendere
+  mentre dal contrario non si torna. *Il comando non legge file*: ADR-028
+  esclude un secondo lettore per gli stessi file, quindi entra la griglia già
+  letta, nella forma in cui Aurora la consegnerebbe. *Di suo non scrive*: serve
+  `--applica`, ed è la disciplina del giudice dell'import.
+
+  ⚠ **Non ricava tre cose, e le dichiara**: le partizioni (sa *che* una classe
+  si sdoppia, non *chi* sta in quale metà — quella è anagrafica di alunni), le
+  attività (nascono dalla ripartizione), il calendario (sono date). E ne
+  **inventa una sola**: `Subject.discipline` è obbligatoria e la griglia non ne
+  parla, quindi nasce una disciplina `ND` — visibile apposta, perché assegnarla
+  è un lavoro umano (ADR-001).
+
+  **Due difetti trovati rivedendo il proprio diff, e il secondo valeva la
+  rilettura.** `replace=True` non cancellava la disciplina, e la **seconda**
+  applicazione falliva sul codice unico (l'ordine di cancellazione è ora quello
+  che `PROTECT` impone). E soprattutto: **una riga ripetuta rompeva la
+  proprietà su cui il rilevatore poggia** — due righe identiche, cosa che i
+  file veri fanno, regalavano un'ora alla cattedra *e* sembravano uno
+  sdoppiamento, cioè un falso allarme proprio dove si era appena scritto
+  «zero». Ora le righe identiche si fondono, e il ramo di controllo tiene ferma
+  la differenza: si fondono le righe **uguali**, non le lezioni simultanee.
+
+  21 test nuovi, ognuno col ramo di controllo — lo sdoppiamento *e* le stesse
+  due lezioni in celle diverse, il raggruppamento *e* lo stesso docente in
+  fasce diverse, la riga ripetuta *e* i due docenti diversi, il Fermi *e* il
+  banco.
+
 - **2026-08-31 — Il confine con Aurora: D2 e D4, sciolte guardando invece che
   ragionando** — le ultime due decisioni aperte, e le uniche che il progetto
   aveva sempre rimandato perché *«aspettano Aurora»*. Aurora è

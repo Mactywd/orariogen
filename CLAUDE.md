@@ -119,6 +119,10 @@ domain/                l'app Django del modello di dominio v1
                         criteri, i sei rilevatori di problemi, le quattro
                         operazioni insiemistiche, e il perimetro che restringe
                         l'azione mai il conteggio
+  bootstrap.py          `Ricava`: da una griglia piatta a una **proposta**
+                        (ADR-028, gradino 1) — le cattedre si leggono, i quadri
+                        orari si indovinano, e ciò che non si vede si dichiara
+                        (`CECITA`). ⚠ Non importa Django fuori da `applica()`
 tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture,
                        tests/alighieri.py il **banco** (L4, ondate 1–5) e
                        tests/sonda.py il **cricchetto della copertura** —
@@ -543,8 +547,10 @@ e [docs/changelog.md](docs/changelog.md)). Vedi [ADR-008](docs/decisioni.md) e [
       + rango`.
 
 **Ancora aperto:** → **[docs/todo.md](docs/todo.md)**, che è l'unico elenco.
-**Nessuna decisione è aperta.** Restano **tre voci di lavoro** (L9, L10, L11 —
-tutte nate leggendo Aurora), **tre osservazioni** che richiedono la UI di EDT
+**Nessuna decisione è aperta**, e il **gradino 1 di D2 è fatto** (L12,
+`domain/bootstrap.py`: le cattedre si leggono, i quadri si indovinano, la
+cecità si dichiara). Restano **tre voci di lavoro** (L9, L10, L11 — tutte nate
+leggendo Aurora), **tre osservazioni** che richiedono la UI di EDT
 (il `Ciclo personalizzato`, le due minuzie di O7) e **quattro** debiti
 dichiarati. ⛔ **D2 e D4** sono sciolte il 2026-08-31 con
 [ADR-028](docs/decisioni.md) e [ADR-027](docs/decisioni.md)

@@ -247,6 +247,40 @@ mouse le promuove o le smentisce.
 
 ## 3. Lavoro — si può fare adesso
 
+### L12 ✅ Il gradino 1 di D2 — **fatto il 2026-08-31**
+
+`domain/bootstrap.py` + `manage.py bootstrap`: da una griglia piatta a una
+**proposta**. Le cattedre si leggono (**139 chiavi su 142** sull'Alighieri), i
+quadri orari si indovinano, e la proposta dice in che direzione può sbagliare.
+
+🔑 **Lo sdoppiamento non è una domanda da fare, è un sospetto da nominare**: la
+griglia contiene l'evidenza — la stessa classe due volte nella stessa fascia —
+e contare le **celle** invece delle lezioni porta i quadri esatti da **6 a 8 su
+12**. Il rilevatore è **sicuro ma non completo**: zero falsi allarmi su due
+dataset (sul Fermi, che di partizioni non ne ha, zero sospetti), 28 coppie
+trovate su 30.
+
+⚠ E le due mancate sono **un'altra struttura**: il *turno di laboratorio*, dove
+le due metà le prende lo stesso docente e quindi non sono mai simultanee. È la
+stessa distinzione che L5 aveva dovuto imparare — *sdoppiare non è allineare*.
+I quattro quadri che restano storti sono quattro meccanismi diversi (turno di
+laboratorio su 3A e 4A, ora quindicinale su 5B, classe articolata su 2C), tutti
+fuori dalla portata di una griglia settimanale, e tutti **dichiarati** in
+`CECITA` invece che taciuti.
+
+🔑 I numeri sono stabili **per costruzione, non per fortuna** — misurato su
+cinque ottimi distinti: le metà di uno sdoppiamento sono allineate (L5) quindi
+sempre simultanee, e il turno di laboratorio non lo è mai. Il rilevatore misura
+il dataset, non la ricerca.
+
+⚠ **Non ricava tre cose, e le dichiara**: le partizioni (chi sta in quale metà
+è anagrafica di alunni), le attività (nascono dalla ripartizione), il
+calendario (sono date). E **non legge file**: ADR-028 esclude un secondo
+lettore per gli stessi file, quindi entra la griglia già letta.
+
+Resta il **gradino 3** — chiedere aule, indisponibilità e vincoli, che in
+nessun orario stanno.
+
 ### L9 🔧 La `ScheduleEntry` di Aurora non tiene l'ora quindicinale
 
 La crescita minima che ADR-027 nomina: **un campo di validità** sulla riga

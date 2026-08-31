@@ -233,6 +233,17 @@ non c'è dentro.** Tre gradini, e il secondo è il punto.
    indisponibilità (55), vincoli di materia e orari (23), discipline e classi
    di concorso (22). **~170 righe su 536, un terzo.**
 
+✅ **Il gradino 1 è implementato lo stesso giorno** (`domain/bootstrap.py`,
+`manage.py bootstrap`), e implementandolo il **gradino 2 si è ridotto**: lo
+sdoppiamento non è una domanda da fare ma un **sospetto da nominare**, perché
+la griglia l'evidenza ce l'ha — la stessa classe due volte nella stessa fascia.
+Contare le **celle** invece delle lezioni porta i quadri esatti da 6 a **8 su
+12**, e il rilevatore è **sicuro ma non completo**: zero falsi allarmi su due
+dataset, 28 coppie su 30. Le due mancate sono il *turno di laboratorio*, che
+per costruzione non collide — stesso docente, mai simultanee. Resta da chiedere
+**chi** sta in quale metà, che è anagrafica di alunni e non sta in nessun
+orario.
+
 ### 4.1 Alternative scartate
 
 - **Un formato nostro, o CSV** — la formulazione originale di D2. Non è
