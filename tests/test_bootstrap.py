@@ -76,6 +76,20 @@ def test_il_turno_di_laboratorio_non_si_vede_ed_e_dichiarato():
     assert "turno_di_laboratorio" in dict(p.cecita)
 
 
+def test_l_unita_della_cattedra_non_si_legge_ed_e_dichiarata():
+    """La quarta cecità (ADR-030). La griglia dice *chi insegna dove*, non *a
+    quanti*: due docenti nella stessa cella della stessa classe sono un
+    sospetto di sdoppiamento — `groupings` lo raccoglie — ma un sospetto non è
+    una parte, e le cattedre restano a classe intera.
+
+    ⚠ Il ramo di controllo è che la cattedra c'è comunque, e giusta nelle ore:
+    la cecità è sull'**unità**, non sul carico."""
+    p = ricava(_g(("ROSSI", 0, 0, "1A", "ING"), ("ROSSI", 0, 1, "1A", "ING")))
+    assert p.assignments == {("ROSSI", "1A", "ING"): 2}
+    assert "unita_della_cattedra" in dict(p.cecita)
+    assert len(p.cecita) == 4
+
+
 # --- Il raggruppamento trasversale, e il suo ramo di controllo -----------------
 
 def test_un_docente_in_due_classi_nella_stessa_cella_e_un_raggruppamento():
@@ -255,7 +269,15 @@ def test_banco_le_cattedre_si_leggono_i_quadri_no():
     chiavi = set(p.assignments) | set(vere)
     identiche = {k for k in chiavi if p.assignments.get(k, 0) == vere.get(k, 0)}
     assert len(chiavi) == 142
-    assert len(identiche) == 139
+    # 🔑 **141 e non 139 da ADR-030**: le due che tornavano storte erano il
+    # raggruppamento trasversale, dove la cattedra diceva «NOVEL fa l'inglese
+    # della 1A» mentre la griglia mostrava metà 1A e metà 1B. `ricava`, che
+    # legge l'orario vero, aveva **ragione**; era la dichiarazione a sbagliare.
+    # ⚠ E l'unica che resta storta è ora esattamente la cecità dichiarata del
+    # gradino 1: l'ora quindicinale del 5B, tre ore nella griglia piatta dove
+    # la settimana ne porta due. Una griglia settimanale non ha modo di
+    # vederlo.
+    assert len(identiche) == 141
 
     # --- I quadri: si indovinano, e contare le celle è ciò che li porta a 8.
     quadri = _quadri_veri()

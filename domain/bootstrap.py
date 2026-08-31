@@ -125,6 +125,15 @@ CECITA = (
     ("classe_articolata",
      "Una classe segue una materia che il suo piano non porta. Senza il piano "
      "non c'è niente contro cui accorgersene — è il piano che si sta ricavando."),
+    # Quarta dal 2026-08-31 (ADR-030): la cattedra ha un'**unità**, e una
+    # griglia settimanale non la porta. `splits`/`groupings` sospettano la
+    # suddivisione, ma un sospetto non è una parte, e `applica` scrive quindi
+    # cattedre a classe intera. Finché non esistono partizioni la scrittura è
+    # anche vera; appena la scuola le dichiara, `structural:workload` dice
+    # quali righe vanno riportate sull'unità servita.
+    ("unita_della_cattedra",
+     "Una cattedra letta da una griglia nomina la classe, mai la parte o il "
+     "raggruppamento: la griglia dice chi insegna dove, non a quanti."),
 )
 
 

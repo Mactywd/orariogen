@@ -144,6 +144,13 @@ famiglia. Elenco quelle in cui la scelta non è ovvia.
   fra «il calcolo è fallito» e «quale vincolo allento».
 - **La colonna `S.P.`** (dimensione del dominio residuo): il solver la calcola
   comunque durante la propagazione. Diagnostica preventiva **a costo zero**.
+- **La quadratura del carico** — **implementata il 2026-08-31**
+  (`structural:workload`, [ADR-030](decisioni.md)): il `+/- = 0` che EDT mostra
+  nella Preparazione, ma riga per riga invece che per docente. 🔑 La differenza
+  è tutta lì: sull'Alighieri i **totali per docente quadravano tutti e
+  ventitré** mentre 62 chiavi erano storte, perché il raggruppamento
+  trasversale fa quadrare i totali **annullando due errori**. Un bilancio per
+  docente non lo può vedere.
 - **Export iCal** — **implementato il 2026-08-28** (`domain/ical.py`,
   `manage.py export_ical`): i docenti vogliono il proprio orario nel telefono.
   🔑 Ed è il punto in cui la **fascia di calcolo smette di essere l'ora**: un

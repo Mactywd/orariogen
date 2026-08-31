@@ -48,6 +48,9 @@ CAUSALI: dict[str, str] = {
     "weight_afternoon": "Limite dei pesi didattici superato nel pomeriggio",
     "weight_week": "Limite settimanale dei pesi didattici superato",
     "coverage_mismatch": "{unit}, {subject}: monte ore delle attività diverso dal servizio",
+    # la quadratura: il carico dichiarato contro quello erogato (L10)
+    "workload_mismatch": ("{teacher}, {subject} su {unit}: ore dichiarate "
+                          "dalla cattedra diverse da quelle erogate"),
     "ambiguous_study_plan": ("{unit}: due parti della stessa combinazione "
                              "dichiarano piani di studi diversi"),
     "election_mismatch": ("{unit}, {group}: le materie seguite fra quelle in "

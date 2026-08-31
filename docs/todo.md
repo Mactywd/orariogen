@@ -29,13 +29,12 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > [ADR-028](decisioni.md), dopo aver **letto Aurora** invece di ragionarci
 > sopra. Restano:
 >
-> - **tre voci di lavoro**, tutte nate da quella lettura: **L9** (la
->   `ScheduleEntry` non tiene l'ora quindicinale), **L10** (nessun dato
->   dichiara una cattedra su una parte o un raggruppamento) e **L11** (il
->   dominio interroga l'ORM in 77 punti, senza un chokepoint). ⚠ **Solo L9
->   non si può fare da qui**: vive nel repository di Aurora. L10 e L11 sono
->   lavoro di questo repository — un dato da dichiarare e un chokepoint da
->   costruire;
+> - **due voci di lavoro** delle tre nate da quella lettura: **L9** (la
+>   `ScheduleEntry` non tiene l'ora quindicinale) e **L11** (il dominio
+>   interroga l'ORM in 77 punti, senza un chokepoint). ⚠ **L9 non si può fare
+>   da qui**: vive nel repository di Aurora. **L10 è chiusa** il 2026-08-31 con
+>   [ADR-030](decisioni.md) — e la misura ha cambiato la domanda: non era un
+>   ramo inusato di `unit`, era che **nessuno leggeva `TeachingAssignment`**;
 > - **tre osservazioni** che richiedono la UI e che nessuno può fare al posto
 >   di chi ha il prodotto: l'ultimo residuo di O2 (il `Ciclo personalizzato`) e
 >   le due minuzie da tooltip di **O7**;
@@ -350,22 +349,22 @@ Aurora genera ogni mattina *è* la sostituzione di ADR-014 — una riga con la
 maschera di una settimana che oscura l'originale. Aurora la produce, noi la
 modelliamo, e oggi non si parlano.
 
-### L10 🔧 Nessun dato dichiara una cattedra su una parte o su un raggruppamento
+### L10 ✅ La cattedra nomina l'unità che serve — fatto il 2026-08-31
 
-Misurato il 2026-08-31 mentre si misurava il confine: sull'Alighieri le
-cattedre sono **140 su 140 su classe intera**, zero su `class_part`, zero su
-`group` — e nessun test ne crea una (`test_teachers.py` prova il ramo a **zero**
-unità, non gli altri due). Il `unit` di `TeachingAssignment` ha quindi due rami
-su tre che nessun dato esercita, mentre le **attività** scendono eccome alle
-parti (34) e ai gruppi (6).
+Chiusa con [ADR-030](decisioni.md#adr-030--la-cattedra-nomina-lunità-che-serve-e-la-quadratura-è-un-checker):
+`domain/analysis/checkers/workload.py`, `structural:workload`.
 
-⚠ È la stessa famiglia di L4 — *«il Fermi esercita tre builder su ventotto»* —
-e va trattata come quella: prima si misura cosa cambierebbe, poi si decide se
-è un buco del dataset o una forma che il dominio non usa davvero.
+🔑 **La misura ha cambiato la domanda.** Non era «buco del dataset o forma
+inusata»: era che **nessuno legge `TeachingAssignment`** — cancellare tutte e
+140 le cattedre lascia il modello duro identico riga per riga. Una tabella che
+il calcolo non legge può dire il falso senza che niente lo dica, e lo diceva:
+**62 chiavi discordi** su 7 docenti, con i totali per docente che quadravano
+tutti. Il caso che decide è il raggruppamento trasversale, dove i totali
+quadrano perché **due errori si annullano**.
 
-🔑 E ha già lasciato un'impronta: due delle tre chiavi che si perdono
-appiattendo sono esattamente le ore di gruppo **senza cattedra corrispondente**,
-perché la quadratura `+/- = 0` del banco è fatta sulle classi.
+Il banco passa da **140 a 144 cattedre** (112 classe / 30 parte / 2 gruppo): i
+due rami morti di `unit` sono vivi. Il racconto sta in
+[changelog.md](changelog.md).
 
 ### L11 🔧 Il dominio interroga l'ORM in 77 punti, senza un chokepoint
 
@@ -895,6 +894,18 @@ Il racconto è in [changelog.md](changelog.md), alla data.
       decidere non erano le rotte ma **due tenancy incompatibili**, e la
       risposta a D2 non era «un formato o un dialogo» ma un dato che Aurora ha
       già. Ha aperto **L9**, **L10** e **L11**.
+- [x] **2026-08-31 (notte, tardi)** — **L10, la quadratura del carico**:
+      `structural:workload` (`domain/analysis/checkers/workload.py`),
+      trentaduesimo checker e terzo `PLACEMENT_INDEPENDENT`, con
+      [ADR-030](decisioni.md). ⚠ La misura ha cambiato la domanda: cancellare
+      tutte e 140 le cattedre dell'Alighieri lascia il modello duro **identico
+      riga per riga**, cioè nessuno leggeva quella tabella — e intanto diceva
+      il falso in **62 chiavi** su 7 docenti, mentre i totali per docente
+      quadravano tutti e ventitré. Il caso che decide è il **raggruppamento
+      trasversale**, dove i totali quadrano perché due errori si annullano.
+      Il terzo scarto — l'ora quindicinale — si è **sciolto** leggendo per
+      firma di settimana invece di essere riparato. Il banco passa a **144
+      cattedre**: 112 classe / 30 parte / 2 gruppo.
 - [x] **2026-08-31 (sera)** — **Tre debiti su sette pagati**, e ognuno ha
       portato una decisione più grande della riparazione. I **giorni esenti dal
       conteggio delle giornate libere** (`InstituteSettings.free_day_exempt_mask`)

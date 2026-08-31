@@ -93,11 +93,15 @@ domain/                l'app Django del modello di dominio v1
                         un totale — le aule che la fase 1 conta senza assegnarle),
                         il violatore di Hall (fase 5, hall.py), lo scarto come
                         stato nominato (checkers/placement.py), la richiesta
-                        d'aula insoddisfatta (checkers/room_assignment.py) e la
+                        d'aula insoddisfatta (checkers/room_assignment.py), la
+                        **quadratura del carico** (ADR-030,
+                        checkers/workload.py: il `+/- = 0` della Preparazione —
+                        dichiarato contro erogato, sull'unità **servita** e per
+                        firma di settimana) e la
                         **classifica dei vincoli** per fallimenti causati
                         (blame.py)
   solver/               il modello CP-SAT: vocabolario di variabili derivate,
-                        residuo di ADR-018, ventotto builder su trentuno checker,
+                        residuo di ADR-018, ventotto builder su trentadue checker,
                         la catena lessicografica (objective.py), le quote
                         di alleggerimento (relaxation.py), i sette criteri di
                         qualità (quality.py + criteria.py — costruiti **pigri**,
@@ -135,7 +139,7 @@ tests/                 la suite; tests/fermi.py è il dataset Fermi come fixture
                        tests/alighieri.py il **banco** (L4, ondate 1–5) e
                        tests/sonda.py il **cricchetto della copertura** —
                        quali builder fanno davvero qualcosa su un dataset,
-                       asserito come insieme e non come numero, e i test degli assi — tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla, tests/test_alighieri_relazione.py, dove si prova **puntandola**: la configurazione vietata imposta con `pinned`, INFEASIBLE con la riga e OPTIMAL senza, e tests/test_alighieri_risorse.py, dove il contratto è **misto** (indisponibilità nei tre livelli, tetti di peso, tecnico e carrelli) e dove stavano i due difetti L6 e L6bis, ora capovolti col loro ramo di controllo; e per l'ondata 6 tests/test_alighieri_quote.py, dove una riga si prova **mettendo il dataset in tensione** e chiedendo alla quota di rimetterlo in piedi (e la taglia della quota conta), tests/test_alighieri_settimane.py, l'ora quindicinale — l'occupazione che distingue le firme, e **L7** col suo ramo di controllo — e tests/test_alighieri_qualita.py, la gerarchia completa dei criteri, l'arbitrato e il verde che *conta* dopo che l'ondata 5 aveva provato che non vieta; e per l'ondata 7 tests/test_alighieri_comandi.py, i cinque comandi di §7 — la classifica che ordina quindici famiglie contro l'unica del Fermi, il deficit di Hall sul laboratorio unico, i sei rilevatori, la cella a **due sfratti**, il tetto di non-regressione che morde solo in tensione, e il gruppo di aule provato col testimone puntato; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventotto builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms); e i test del **questionario** (tests/test_questionario.py, dove ogni regola ha il suo ramo di controllo — il caso che conta è la domanda **vuota e chiusa**, che è il solo modo di far finire il dialogo — e tests/test_questionario_ablazione.py, che tiene onesto `tocca` togliendo una famiglia per volta dall'Alighieri e ripassando la sonda)
+                       asserito come insieme e non come numero, e i test degli assi — tests/test_alighieri_cardinalita.py, dove ogni famiglia si prova **stringendola** invece di toglierla, tests/test_alighieri_relazione.py, dove si prova **puntandola**: la configurazione vietata imposta con `pinned`, INFEASIBLE con la riga e OPTIMAL senza, e tests/test_alighieri_risorse.py, dove il contratto è **misto** (indisponibilità nei tre livelli, tetti di peso, tecnico e carrelli) e dove stavano i due difetti L6 e L6bis, ora capovolti col loro ramo di controllo; e per l'ondata 6 tests/test_alighieri_quote.py, dove una riga si prova **mettendo il dataset in tensione** e chiedendo alla quota di rimetterlo in piedi (e la taglia della quota conta), tests/test_alighieri_settimane.py, l'ora quindicinale — l'occupazione che distingue le firme, e **L7** col suo ramo di controllo — e tests/test_alighieri_qualita.py, la gerarchia completa dei criteri, l'arbitrato e il verde che *conta* dopo che l'ondata 5 aveva provato che non vieta; e per l'ondata 7 tests/test_alighieri_comandi.py, i cinque comandi di §7 — la classifica che ordina quindici famiglie contro l'unica del Fermi, il deficit di Hall sul laboratorio unico, i sei rilevatori, la cella a **due sfratti**, il tetto di non-regressione che morde solo in tensione, e il gruppo di aule provato col testimone puntato; più i test dell'analisi (registro, ScheduleState, i vincoli orari/di materia, dominio residuo, capienza, il violatore di Hall e le famiglie non monotone che lo rilassano, l'indipendenza dall'ordine d'inserimento, la classifica dei vincoli da allentare, il comando analyze), i test di `Estrai` (appartenenza, rilevatori, composizione, il perimetro su blame/Hall/aule, i comandi extract e analyze --estrazione) i test della **classe articolata** (condizione 3 di ADR-015: il piano proprio della parte, e il parallelismo che compra) e della **copertura per alunno** (ADR-020: l'unità è l'atomo, l'alternativa è un dato, il piano ambiguo si nomina), i test della **quadratura del carico** (tests/test_workload.py, ADR-030: il testimone puntato con il suo ramo di controllo su ognuna delle tre nature — forma, assenza, conteggio — perché sul banco le cattedre si *derivano* e là il checker non può fallire), e i test del solver (registro dei builder e sua completezza, contesto, il modello, i ventotto builder uno per uno, il banco a testimone con il modello completo, l'oracolo differenziale, la catena lessicografica, le quote e lo scarto, i criteri di qualità, la separazione per popolazione, il comando solve, e per la seconda fase il contesto, il modello, la catena, il banco a testimone delle aule con il suo oracolo e il comando assign_rooms); e i test del **questionario** (tests/test_questionario.py, dove ogni regola ha il suo ramo di controllo — il caso che conta è la domanda **vuota e chiusa**, che è il solo modo di far finire il dialogo — e tests/test_questionario_ablazione.py, che tiene onesto `tocca` togliendo una famiglia per volta dall'Alighieri e ripassando la sonda)
 ```
 
 Ogni file in `docs/edt/` descrive **l'entità EDT** (campi visti nella UI, tooltip
@@ -216,21 +220,24 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > schema **è implementato** e il dataset Fermi **è interamente rappresentato**; i
 > predicati e l'analisi di capienza **sono anch'essi implementati**
 > (`domain/analysis/`); e il **modello CP-SAT hard è completo**
-> (`domain/solver/`): **ventotto builder su trentuno checker**, e i tre senza
-> builder non ne hanno uno per costruzione — `structural:coverage`
-> (`PLACEMENT_INDEPENDENT`: il solver non crea né distrugge attività),
+> (`domain/solver/`): **ventotto builder su trentadue checker**, e i quattro
+> senza builder non ne hanno uno per costruzione — `structural:coverage` e
+> `structural:workload` (`PLACEMENT_INDEPENDENT`: il solver non crea né
+> distrugge attività, e non cambia la somma delle loro durate),
 > `structural:placement` (lo scarto *è* il meccanismo del modello, non un
 > vincolo da postare) e `structural:room_assignment` (vive nel modello della
 > **seconda fase**). Il **violatore di Hall** (fase 5 dell'Analisi dei
 > vincoli, `domain/analysis/hall.py`) **è anch'esso implementato**: nessun
 > solver, teorema di Hall in forma deficitaria su flusso massimo e taglio
-> minimo. **1035 test**, 17 skip tutti misurati e attribuiti
-> (`venv/bin/pytest`). ⚠ **Il costo sta quasi tutto in sette file**: 932 test
-> girano in **4 min 26 s**, gli altri 86 — i `test_alighieri_*` che provano una
-> famiglia **stringendola**, e chiedono quindi una prova di `INFEASIBLE` per
-> riga — costano da soli **oltre un'ora**. Per il giro rapido si escludono
-> quelli: è il taglio che separa «ho rotto qualcosa» da «il banco regge
-> ancora».
+> minimo. **1053 test**, 17 skip tutti misurati e attribuiti
+> (`venv/bin/pytest`). ⚠ **Il costo sta quasi tutto in sette file**: i
+> `test_alighieri_*` che provano una famiglia **stringendola** chiedono una
+> prova di `INFEASIBLE` per riga, e quegli **85** costano da soli **21 min
+> 22 s** contro i **4 min 26 s** di tutti gli altri messi insieme. Per il giro
+> rapido si escludono: è il taglio che separa «ho rotto qualcosa» da «il banco
+> regge ancora». ⚠ Fino al 2026-08-31 qui stava scritto «86 … oltre un'ora»:
+> erano due numeri sbagliati, misurati mentre tre pytest morti si contendevano
+> la CPU.
 >
 > ⚠ **Il Fermi non misura il modello completo: misura il dataset.** Ha zero
 > righe `ResourceTimeConstraint`, zero `SubjectConstraint` e i tetti di peso a
@@ -438,7 +445,7 @@ risposta a un problema più facile.
 Questo script **resta parcheggiato ed è superato**: il codice vivo del solver
 è `domain/solver/` (vedi la nota di stato sopra), che ne riprende l'idea sullo
 schema del dominio approvato invece che sui dati grezzi. Il **modello hard è
-ora completo** — ventotto builder su trentuno checker. Ciò che manca non è
+ora completo** — ventotto builder su trentadue checker. Ciò che manca non è
 più la traduzione dei vincoli, ma i due pezzi dichiarati fuori dal piano: gli
 alleggerimenti a quota con l'ottimizzazione lessicografica e l'assegnazione
 delle aule (il violatore di Hall è implementato, vedi la nota di stato sopra

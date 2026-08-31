@@ -31,7 +31,12 @@ def test_conteggi_delle_entita(dataset):
     assert Service.objects.count() == 128
     assert SchoolClass.objects.count() == 12
     assert Teacher.objects.count() == 23
-    assert TeachingAssignment.objects.count() == 140
+    # 144 da ADR-030: una cattedra per **unità servita**, non per classe.
+    # 112 su classe, 30 su parte, 2 su raggruppamento — i due rami di
+    # `unit` che nessun dato esercitava, che è la misura da cui L10 nacque.
+    assert TeachingAssignment.objects.count() == 144
+    assert TeachingAssignment.objects.filter(class_part__isnull=False).count() == 30
+    assert TeachingAssignment.objects.filter(group__isnull=False).count() == 2
     assert Room.objects.count() == 20
     assert SlotLabel.objects.count() == 8
     assert Break.objects.count() == 1

@@ -142,10 +142,16 @@ def test_l_ora_sdoppiata_il_docente_la_fa_due_volte(dataset):
     docente **non si legge dal quadro orario**: 3 ore di scienze in 3A, 4 ore
     di lavoro per N01."""
     n01 = dataset["teachers"]["N01"]
-    riga = TeachingAssignment.objects.get(teacher=n01,
-                                          school_class__name="3A",
-                                          subject__code="SCI")
-    assert riga.weekly_minutes == 4 * 60
+    # ⚠ Da ADR-030 le ore di 3A non stanno su **una** riga: la cattedra nomina
+    # l'unità servita, quindi sono due ore a classe intera più un'ora su
+    # ciascuna delle due metà. Il costo dello sdoppiamento è la **somma** — ed
+    # è più visibile ora, perché il dato dice anche *dove* la quarta ora va.
+    righe = TeachingAssignment.objects.filter(teacher=n01, subject__code="SCI")
+    tre_a = [r for r in righe
+             if (r.school_class and r.school_class.name == "3A")
+             or (r.class_part and r.class_part.partition.school_class.name == "3A")]
+    assert sum(r.weekly_minutes for r in tre_a) == 4 * 60
+    assert sorted(r.weekly_minutes for r in tre_a) == [60, 60, 120]
     servizio = dataset["plans"]["SCI3"].services.get(subject__code="SCI")
     assert servizio.class_minutes == 3 * 60
     assert sum(a.duration_minutes for a in _attivita("SCI", classes__name="3A")) == 120

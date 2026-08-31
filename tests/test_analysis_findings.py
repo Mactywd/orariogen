@@ -35,9 +35,13 @@ def test_message_formatta_i_nomi():
 
 def test_tutte_le_causali_usano_solo_segnaposto_noti():
     # ⚠ `group` è entrato con ADR-020, ed è un **nome** come gli altri tre:
-    # il gruppo di elezione. I numeri restano fuori dalle frasi e stanno in
-    # `quantities`, che è ciò che rende il verdetto verificabile.
-    ammessi = {"resource", "subject", "unit", "group"}
+    # il gruppo di elezione. `teacher` è entrato con ADR-030, ed è un nome
+    # anch'esso: la quadratura è la sola causale che nomina **due** soggetti,
+    # perché lo scarto è fra ciò che un docente ha dichiarato e ciò che
+    # un'unità riceve, e tacerne uno renderebbe la frase inservibile. I numeri
+    # restano fuori dalle frasi e stanno in `quantities`, che è ciò che rende
+    # il verdetto verificabile.
+    ammessi = {"resource", "subject", "unit", "group", "teacher"}
     for code, template in causali.CAUSALI.items():
         campi = set(re.findall(r"{(\w+)}", template))
         assert campi <= ammessi, f"{code}: segnaposto {campi - ammessi}"

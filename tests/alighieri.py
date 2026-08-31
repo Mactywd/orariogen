@@ -764,8 +764,10 @@ def _maschera(spec):
     return sum(weeks.single_week(w) for w in _settimane(spec))
 
 
-def _ore_docente(class_name, subject_code, ore):
-    """Le ore che il **docente** lavora per quella classe, **in una settimana**.
+def _carico_docente(class_name, subject_code, ore):
+    """Le ore che il **docente** lavora per quella classe, **in una settimana**
+    e **per unità**: `{unità: ore}`, con l'unità nella stessa forma di
+    `EROGAZIONI` (`None`, `("part", …)`, `("group", …)`).
 
     ⚠ Non coincidono con quelle del quadro orario appena c'è uno sdoppiamento:
     l'ora di laboratorio a mezza classe si insegna due volte, e la riga di
@@ -778,15 +780,35 @@ def _ore_docente(class_name, subject_code, ore):
     stesso numero. Un dataset le cui maschere non compongono un monte ore
     costante fa fallire il `build`, che è il posto giusto in cui accorgersene
     — la stessa proprietà per cui `CoverageChecker` legge la maschera invece
-    di sommare le durate."""
+    di sommare le durate.
+
+    🔑 **Dal 2026-08-31 il conto è anche per unità** (L10), ed è ciò che rende
+    la cattedra capace di dire *a chi* l'ora è erogata e non solo quanta ne
+    è. La costanza si pretende ora su ogni unità separatamente, che è una
+    condizione più forte della vecchia sul totale: una coppia quindicinale che
+    alternasse la classe intera con una sua parte la violerebbe, e il `build`
+    lo direbbe. Nessuna riga del banco lo fa.
+
+    ⚠ **La derivazione è dichiarata, e con essa il suo prezzo**: le cattedre
+    del banco escono da `EROGAZIONI`, cioè dalla stessa tabella che genera le
+    attività, quindi su questo dataset `structural:workload` **non può**
+    fallire. È voluto — è così che le due dichiarazioni non tornano a
+    divergere — ma vuol dire che qui il banco fa da controllo su scala (23
+    docenti, 144 cattedre, zero scostamenti) e non da prova. La prova sta sul
+    testimone puntato di `test_workload.py`, che le scrive discordi apposta e
+    porta il proprio ramo di controllo."""
     righe = _erogazione(class_name, subject_code, ore)
-    per_settimana = {
-        sum(h for _u, h, _i, extra in righe
-            if w in _settimane(extra.get("settimane")))
-        for w in range(WEEKS_IN_YEAR)
-    }
-    assert len(per_settimana) == 1, (class_name, subject_code, per_settimana)
-    return per_settimana.pop()
+    out = {}
+    for unita in {u for u, _h, _i, _e in righe}:
+        per_settimana = {
+            sum(h for u, h, _i, extra in righe
+                if u == unita and w in _settimane(extra.get("settimane")))
+            for w in range(WEEKS_IN_YEAR)
+        }
+        assert len(per_settimana) == 1, (class_name, subject_code, unita,
+                                         per_settimana)
+        out[unita] = per_settimana.pop()
+    return out
 
 
 def build(qualita=False):
@@ -907,11 +929,23 @@ def build(qualita=False):
                                else [c[0] for c in CLASSES]):
                 year = classes[class_name].year
                 ore = _hours(tracks[class_name], year, subject_code)
-                TeachingAssignment.objects.create(
-                    teacher=t, subject=subjects[subject_code],
-                    school_class=classes[class_name],
-                    weekly_minutes=_ore_docente(class_name, subject_code, ore) * 60,
-                )
+                # L10: una cattedra per **unità servita**, non una per
+                # classe. Sul raggruppamento trasversale è la differenza fra
+                # dire il vero e dire il falso: NOVEL non fa l'inglese della
+                # 1A, fa metà 1A e metà 1B.
+                for unita, ore_doc in sorted(
+                        _carico_docente(class_name, subject_code, ore).items(),
+                        key=lambda kv: (kv[0] is not None, kv[0] or ())):
+                    TeachingAssignment.objects.create(
+                        teacher=t, subject=subjects[subject_code],
+                        school_class=(classes[class_name] if unita is None
+                                      else None),
+                        class_part=(parts[unita[1]] if unita
+                                    and unita[0] == "part" else None),
+                        group=(groups[unita[1]] if unita
+                               and unita[0] == "group" else None),
+                        weekly_minutes=ore_doc * 60,
+                    )
                 site = class_sites[class_name]
                 for unita, quante, ident, extra in _erogazione(
                         class_name, subject_code, ore):

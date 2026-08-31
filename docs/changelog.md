@@ -15,6 +15,84 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-31 (notte, tardi) — La quadratura del carico: L10, e la tabella
+  che nessuno leggeva** — `domain/analysis/checkers/workload.py`,
+  `structural:workload`, trentaduesimo checker.
+  [ADR-030](decisioni.md#adr-030--la-cattedra-nomina-lunità-che-serve-e-la-quadratura-è-un-checker).
+
+  🔑 **La misura che ha cambiato la domanda.** L10 chiedeva se i due rami
+  inutilizzati di `TeachingAssignment.unit` — parte e raggruppamento — fossero
+  un buco del dataset o una forma che il dominio non usa. La risposta stava un
+  piano più su: **nessuno legge quella tabella**. Cancellare tutte e 140 le
+  cattedre dell'Alighieri dentro un `atomic()` rollbackato e ripassare la sonda
+  dà un modello duro **identico riga per riga** — stesse variabili, stessi
+  constraint. Non è inerzia: è una tabella che può dire il falso senza che
+  niente lo dica.
+
+  🔑 **E diceva il falso, in tre modi diversi.** Confrontando cattedre e
+  attività: 140 dichiarate tutte su classe intera, 343 attività di cui **34 su
+  parti e 6 su gruppi**, e **62 chiavi discordi** su 7 docenti — mentre i
+  **totali per docente quadravano tutti e ventitré**. Le tre nature:
+  la **forma** (26 righe: cattedra sulla classe, attività sulla parte — IRC e
+  alternativa fanno 48 delle 62), l'**assenza** (le due trasversali di
+  NOVEL/ORLAN), e il **conteggio** (l'ora quindicinale del 5B).
+
+  🔑 **Il caso che decide è il raggruppamento trasversale**, e non è una
+  sfumatura. `ING1-BASE` sono le parti `1A_ING_B + 1B_ING_B`: NOVEL figurava su
+  `ING 1A`, ORLAN su `ING 1B`, e i totali quadravano perché **due errori si
+  annullavano**. La dichiarazione diceva *«NOVEL fa l'inglese della 1A»*; la
+  verità è *«metà 1A e metà 1B»*. Per il modulo di Aurora, che cerca un
+  supplente, la 1B non è nemmeno nominata. La forma piatta non è una verità più
+  grossolana: su un raggruppamento è una verità falsa.
+
+  🔑 **Il terzo scarto si è sciolto invece di essere risolto.** URBAN dava 120
+  dichiarati contro 180 erogati sul 5B — l'ora quindicinale, tre attività da
+  60′ su maschere 16 + 17 + 33 sommate senza guardarle. Letto **per firma di
+  settimana**, che è ciò che `check_schedule` già fa, quadra esatto: **600
+  contro 600 in entrambe le firme**. È la stessa trappola che `CoverageChecker`
+  documenta per i quadrimestri, e la stessa risposta: la quinta forma di
+  erogazione — la sola che non costa un'ora — fuori dalla firma ne costa una
+  intera.
+
+  ⚠ **Un docente senza cattedre non è sbilanciato: è non dichiarato.** Il
+  checker misura solo chi ha almeno una riga. Senza questa regola ogni
+  frammento di test con un'attività e nessuna cattedra direbbe «manca un'ora»
+  dove manca l'anagrafica — ed è la costruzione per cui la copertura tace su
+  una classe senza piano di studi. Il ramo di controllo lo tiene onesto: basta
+  **una** riga altrove perché il silenzio finisca.
+
+  ⚠ **L'unità sta fra le risorse, non solo nella frase.** Le dodici righe di
+  IRC dello stesso cappellano hanno causale, docente, materia e quantità
+  identiche (`60 → 0`): senza, sarebbero **un** finding, e quale delle dodici
+  sopravvivesse dipenderebbe dall'ordine di iterazione. È il difetto che
+  `Finding.key` già documenta su `coverage_mismatch`, ritrovato nella stessa
+  forma.
+
+  ⚠ **Il checker non ha builder, e non per dimenticanza.** Nessuna collocazione
+  crea o ripara uno scostamento — il carico è la somma delle durate.
+  `PLACEMENT_INDEPENDENT` lo dichiara: terzo caso del registro, accanto a
+  `structural:coverage`.
+
+  ⚠ **Prezzo dichiarato: sull'Alighieri il checker non può fallire.** Le
+  cattedre del banco si derivano ora da `EROGAZIONI`, la stessa tabella che
+  genera le attività — è così che le due dichiarazioni non tornano a divergere,
+  e vuol dire che là il banco è il **controllo su scala** e non la prova. La
+  prova sta sul testimone puntato di `tests/test_workload.py`: sedici test,
+  ognuno col proprio ramo di controllo.
+
+  **Dati:** l'Alighieri passa da **140 a 144 cattedre** — 112 su classe, **30
+  su parte**, **2 su raggruppamento** — e i due rami morti di `unit` sono vivi,
+  con `+/- = 0` intatto per tutti e 23 i docenti. Il Fermi non cambia: senza
+  partizioni non aveva modo di sbagliare forma, ed è la stessa ragione per cui
+  non aveva trovato L4. `_ore_docente` diventa `_carico_docente` e pretende ora
+  la costanza settimanale **per unità**, che è più forte della vecchia sul
+  totale.
+
+  ⚠ **E una misura di questo file era falsa.** Qui e in `CLAUDE.md` stava
+  scritto che i sette `test_alighieri_*` sono «86 test» che costano «oltre
+  un'ora»: sono **85**, e su macchina libera costano **21 min 22 s**. La misura
+  originale era stata presa mentre tre pytest morti si contendevano la CPU.
+
 - **2026-08-31 (notte) — Il questionario d'ingresso: il terzo gradino** —
   `domain/questionario.py` e `manage.py questionario`. Il gradino 1 legge
   l'orario dell'anno scorso; questo prende **ciò che in nessun orario sta** —

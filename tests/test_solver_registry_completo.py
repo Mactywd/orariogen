@@ -76,13 +76,19 @@ def test_structural_room_assignment_non_ha_un_builder_ed_e_voluto():
 
 
 def test_il_registro_dei_builder_e_completo():
-    """Ventotto chiavi su trentuno. I numeri sono scritti qui apposta: se
+    """Ventotto chiavi su trentadue. I numeri sono scritti qui apposta: se
     un checker nuovo entra in `domain/analysis` senza il builder
-    corrispondente, questo test lo dice per nome."""
+    corrispondente, questo test lo dice per nome.
+
+    ⚠ `structural:workload` e' il quarto esentato (ADR-030), e per la stessa
+    ragione strutturale di `structural:coverage`: nessuna collocazione crea o
+    ripara uno scostamento fra carico dichiarato ed erogato, perche' quel
+    carico e' la somma delle durate e non dipende da dove le ore stanno. Un
+    builder non avrebbe nulla da postare."""
     senza_builder = {"structural:coverage", "structural:placement",
-                     "structural:room_assignment"}
+                     "structural:room_assignment", "structural:workload"}
     mancanti = sorted(str(k) for k in CHECKERS
                       if k not in BUILDERS and k not in senza_builder)
     assert mancanti == []
-    assert len(CHECKERS) == 31
+    assert len(CHECKERS) == 32
     assert len(BUILDERS) == 28

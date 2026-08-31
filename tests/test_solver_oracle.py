@@ -84,6 +84,10 @@ FUORI = {
     # non e' questo oracolo a doverlo vedere, ed e' l'oracolo della seconda
     # fase (`tests/test_rooms_oracle.py`) a sorvegliarlo.
     "room_unassigned",
+    # la quadratura del carico (ADR-030) e' `PLACEMENT_INDEPENDENT` come la
+    # copertura: nessuna collocazione la crea o la ripara, perche' il carico e'
+    # la somma delle durate. Il delta rispetto alla baseline e' sempre vuoto.
+    "workload_mismatch",
 }
 
 

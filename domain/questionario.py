@@ -152,6 +152,9 @@ _CATALOGO = (
         # occupazione (ADR-017). ⚠ E non sono ablabili come le altre — le
         # cattedre puntano alle parti — quindi qui `tocca` è **dichiarato**, e
         # il test lo dice invece di misurarlo come gli altri.
+        # ⚠ Quella ragione era scritta in anticipo: fino ad ADR-030 **nessuna**
+        # cattedra puntava a una parte, ed erano le sole attività a scenderci.
+        # Da allora sono 30 su 144, e la riga qui sopra è diventata vera.
         tocca=(),
         # ⚠ Il perimetro sono le classi, e non i **sospetti**, che sarebbero la
         # risposta utile: `ricava` li trova (la stessa classe due volte nella

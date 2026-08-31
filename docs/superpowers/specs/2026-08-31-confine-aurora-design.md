@@ -118,6 +118,18 @@ fasce — cioè l'**11%**, e sono la parte a buon mercato: i nomi.
 Il grosso è quello che nessuno ha mai digitato: **128 righe di quadro orario,
 140 di cattedra, 55 di indisponibilità, 51 di suddivisione**.
 
+> ✅ **Corretto il 2026-08-31 da L10 / [ADR-030](../../decisioni.md):** le
+> cattedre sono **144**, non 140, perché una cattedra nomina ora l'**unità che
+> serve** — 112 su classe, 30 su parte, 2 su raggruppamento. Il conteggio non
+> cambia la conclusione di questo paragrafo, ma cambia la sua ragione: quelle
+> quattro righe in più sono precisamente il dato che una griglia settimanale
+> **non può contenere**, e quindi la parte dell'ingresso che nemmeno il
+> gradino 1 recupera. La misura sul giro completo lo dice per numeri: `ricava`
+> ritrova 141 chiavi di cattedra su 142, e l'unica storta è l'ora quindicinale
+> — cioè una cecità già dichiarata, non un errore. Prima erano 139, e le due
+> mancanti erano il raggruppamento trasversale: `ricava`, che legge l'orario
+> vero, aveva **ragione**; era la dichiarazione a sbagliare.
+
 ## 2. Il precedente dentro Aurora, e le due collisioni
 
 Aurora ha già un modulo che genera con CP-SAT: **Classi Prime**. Forma le

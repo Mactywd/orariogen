@@ -51,3 +51,6 @@ class Group(models.Model):
 
     name = models.CharField(max_length=100, unique=True)
     parts = models.ManyToManyField(ClassPart, related_name="groups")
+
+    def __str__(self):
+        return self.name

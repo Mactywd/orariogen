@@ -1521,3 +1521,72 @@ Design completo:
 (§4).
 
 **Data.** 2026-08-31
+
+---
+
+## ADR-030 — La cattedra nomina l'unità che serve, e la quadratura è un checker
+
+**Decisione.** Una riga di `TeachingAssignment` si dichiara sull'**unità che
+l'attività serve** — classe, parte o raggruppamento — e non sulla classe che la
+contiene. Il confronto fra il carico dichiarato e quello erogato diventa
+`structural:workload`, un checker `PLACEMENT_INDEPENDENT` che legge **per firma
+di settimana**, e che misura soltanto i docenti le cui cattedre sono state
+dichiarate.
+
+**Alternative scartate.**
+
+1. **Lasciare la forma piatta.** Era lo stato: 140 cattedre tutte su classe
+   intera, mentre 40 attività scendevano a parti e gruppi. Regge finché si
+   guardano i **totali** — sull'Alighieri quadravano tutti e ventitré i docenti
+   — e cade sul raggruppamento trasversale, dove i totali quadrano perché **due
+   errori si annullano**: NOVEL figurava su `ING 1A` e ORLAN su `ING 1B`, mentre
+   in verità ognuno insegna a metà 1A più metà 1B. Non è una verità più
+   grossolana, è una verità falsa, e per il gestionale delle sostituzioni
+   ([ADR-027](#adr-027--il-generatore-è-un-modulo-di-aurora-e-il-calcolo-è-un-lavoro)) è quella che manda il
+   supplente nella classe sbagliata senza nominare l'altra.
+2. **Tenere la cattedra piatta e derivare l'unità dall'attività quando serve.**
+   Sposta la bugia invece di toglierla: sul raggruppamento la derivazione è
+   ambigua per costruzione — l'ora non appartiene a nessuna delle due classi —
+   e il dato resterebbe non dichiarabile.
+3. **Un vincolo del solver invece di un checker.** Non ha soggetto: nessuna
+   collocazione crea o ripara uno scostamento, perché il carico è la somma
+   delle durate e quella non dipende da dove le ore stanno. Sarebbe un builder
+   che non può postare nulla. È il terzo `PLACEMENT_INDEPENDENT` del registro,
+   accanto a `structural:coverage`, e per la stessa ragione strutturale.
+4. **Misurare fuori dalla firma di settimana.** Sembra più semplice e sbaglia
+   sull'ora quindicinale: le due metà a maschere complementari sommate danno
+   120 minuti dove la settimana ne porta 60, cioè l'unica forma di erogazione
+   che *non costa un'ora* ne costerebbe una intera. Misurato sul 5B: 120
+   dichiarati contro 180 erogati fuori dalla firma, 600 contro 600 dentro. È la
+   stessa trappola che `CoverageChecker` documenta per i quadrimestri.
+5. **Misurare ogni docente, anche quello senza cattedre.** Direbbe «manca
+   un'ora» dove manca l'anagrafica, e farebbe parlare la causale su ogni
+   frammento di test. Un docente non dichiarato non è sbilanciato: è una
+   condizione diversa e **precedente**, che si nomina nel questionario
+   d'ingresso ([ADR-029](#adr-029--il-silenzio-non-è-una-risposta-una-domanda-si-chiude-perché-qualcuno-la-chiude)). Stessa
+   costruzione per cui la copertura tace su una classe senza piano di studi.
+
+**Motivo.** La decisione nasce da una misura, non da un'idea: fino al
+2026-08-31 **nessuno leggeva `TeachingAssignment`**. Cancellare tutte e 140 le
+cattedre dell'Alighieri lasciava il modello duro identico — stesse variabili,
+stessi constraint, riga per riga. Una tabella che il calcolo non legge non è per
+questo inerte: è una tabella che **può dire il falso senza che niente lo dica**,
+e infatti lo diceva. Correggere il dato senza dargli un lettore avrebbe ripetuto
+l'errore in silenzio, quindi la correzione e il checker sono la stessa decisione.
+
+⚠ **Prezzo dichiarato: sull'Alighieri il checker non può fallire.** Le cattedre
+del banco si derivano da `EROGAZIONI`, cioè dalla stessa tabella che genera le
+attività — è così che le due dichiarazioni non tornano a divergere, ma vuol dire
+che là il banco è il **controllo su scala** (23 docenti, 144 cattedre, zero
+scostamenti) e non la prova. La prova sta sul testimone puntato di
+`tests/test_workload.py`, che le scrive discordi apposta e porta il proprio ramo
+di controllo — la forma 2 del banco, applicata fuori dal banco.
+
+**Conseguenza sui dati.** L'Alighieri passa da **140 a 144 cattedre**: 112 su
+classe, **30 su parte**, **2 su raggruppamento**. I due rami di `unit` che
+nessun dato esercitava — la misura da cui L10 era nata — sono ora esercitati, e
+`+/- = 0` regge per tutti e ventitré i docenti. Il Fermi non cambia: senza
+partizioni non aveva modo di sbagliare forma, ed è la stessa ragione per cui non
+aveva trovato L4.
+
+**Data.** 2026-08-31

@@ -8,6 +8,22 @@ lavora **19** ore per 17 ore di curriculum, perché le due ore di laboratorio
 sdoppiate — 3A dall'ondata 2, 4A dall'ondata 4 — le insegna due volte
 ciascuna. Vedi [gruppi.md](gruppi.md) §3.
 
+🔑 **E dal 2026-08-31 una cattedra nomina l'unità che serve**
+([ADR-030](../../docs/decisioni.md)), quindi le 23 righe di questa tabella si
+scompongono in **144 righe di `TeachingAssignment`**: 112 su classe intera, **30
+su una parte**, **2 su un raggruppamento**. Erano 140 tutte su classe, e la
+colonna «Insegna» qui sotto continua a leggersi come prima perché elenca le
+**classi** in cui il docente entra — che è vero anche quando ci entra per metà.
+
+⚠ **Il caso che ha imposto il cambiamento è E01/E02.** Questa tabella dice che
+NOVEL insegna inglese «in 1A» e ORLAN «in 1B», e le due righe quadrano tutt'e
+due a 18 ore. È il numero giusto e il soggetto sbagliato: i due si dividono le
+prime per **livello**, non per classe, quindi ognuno insegna a metà 1A più metà
+1B ([gruppi.md](gruppi.md) §4). I totali quadravano perché **due errori si
+annullavano**, e il carico dichiarato non lo diceva. Ora le due righe stanno sul
+raggruppamento, ed è ciò che rende sensata la domanda che il gestionale delle
+sostituzioni pone: *chi manca, e a chi*.
+
 | ID | Docente | Abbr. | Insegna | Mh/s |
 |---|---|---|---|---:|
 | L01 | Amato Cristina | AMATO | ITA, LAT, STG in 1A 2A | 20 |

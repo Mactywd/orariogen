@@ -9,9 +9,10 @@ from itertools import product
 
 from domain import weeks
 from domain.models import (
-    Activity, ClassPart, ClassPartition, Holiday, InstituteSettings, Resource,
-    ResourceTimeConstraint, ResourceUnavailability, SchoolClass, Service,
-    Subject, SubjectConstraint, TimeGrid, effective_week_masks,
+    Activity, ClassPart, ClassPartition, Group, Holiday, InstituteSettings,
+    Resource, ResourceTimeConstraint, ResourceUnavailability, SchoolClass,
+    Service, Subject, SubjectConstraint, TeachingAssignment, TimeGrid,
+    effective_week_masks,
 )
 
 _SEVERITY_ORDER = {"hard": 0, "optional": 1, "preference": 2}
@@ -97,6 +98,20 @@ class AtomMap:
             klass[class_id] = frozenset(keys)
         return cls({p: frozenset(v) for p, v in part.items()}, klass, names,
                    parts_of)
+
+
+def _unit_ref(unit):
+    """L'unità di piazzamento come chiave stabile: `"class:12"`, `"part:5"`,
+    `"group:2"`. ⚠ Non è una chiave di occupazione — quelle appiattiscono
+    (ADR-017) e due unità diverse possono condividerle. Qui serve il
+    contrario: distinguere la classe intera dalla sua parte, perché una
+    cattedra dichiarata sull'una e un'ora erogata all'altra sono **due cose
+    diverse**, ed è esattamente lo scarto che L10 ha trovato."""
+    if isinstance(unit, ClassPart):
+        return f"part:{unit.pk}"
+    if isinstance(unit, Group):
+        return f"group:{unit.pk}"
+    return f"class:{unit.pk}"
 
 
 def activity_tokens(activity, assigned_room_id=None, atoms=None):
@@ -196,6 +211,9 @@ class ScheduleState:
         self.unit_plan_conflict = {}  # chiave → quanti piani diversi la dichiarano (ADR-020)
         self.break_boundaries = []    # boundary_slot degli intervalli della griglia
         self.subject_names = {}       # Subject pk → nome
+        self.declared_load = {}       # (Teacher pk, Subject pk, unità) → minuti (L10)
+        self.activity_units = {}      # Activity pk → tupla delle unità **dichiarate**
+        self.unit_names = {}          # unità → nome leggibile, per le causali
 
     @classmethod
     def build(cls, schedule, week=0):
@@ -231,6 +249,15 @@ class ScheduleState:
                 a, assigned_room_id=pl.assigned_room_id if pl else None,
                 atoms=atoms)
             state.tokens[a.id] = keys
+            # ⚠ Le unità **dichiarate**, non i token: `activity_tokens`
+            # appiattisce apposta — la classe occupa anche le sue parti, e il
+            # raggruppamento occupa le parti membre senza lasciare traccia di
+            # sé. È la lettura giusta per i conflitti e quella sbagliata per
+            # la quadratura, che deve sapere *a chi* l'ora è erogata (L10).
+            unita = (*a.classes.all(), *a.parts.all(), *a.groups.all())
+            state.activity_units[a.id] = tuple(sorted(_unit_ref(u) for u in unita))
+            for u in unita:
+                state.unit_names[_unit_ref(u)] = u.name
             for k, q in materials.items():
                 state.material_quantity[(a.id, k)] = q
             if pl is not None:
@@ -271,6 +298,13 @@ class ScheduleState:
             "pk", "max_weekly_weight_per_student"))
 
         state.subject_names = dict(Subject.objects.values_list("id", "name"))
+        for ta in TeachingAssignment.objects.select_related(
+                "school_class", "class_part", "group"):
+            unita = ta.unit
+            ref = _unit_ref(unita)
+            state.unit_names[ref] = unita.name
+            chiave = (ta.teacher_id, ta.subject_id, ref)
+            state.declared_load[chiave] = state.declared_load.get(chiave, 0) + ta.weekly_minutes
         services = defaultdict(dict)
         elezioni = defaultdict(lambda: defaultdict(list))
         opzioni = defaultdict(set)
