@@ -1590,3 +1590,102 @@ partizioni non aveva modo di sbagliare forma, ed è la stessa ragione per cui no
 aveva trovato L4.
 
 **Data.** 2026-08-31
+
+---
+
+## ADR-031 — Il dominio non diventa puro: il confine si dichiara e si sorveglia
+
+**Decisione.** Scioglie **L11**. Quattro parti.
+
+1. **Niente pacchetto senza Django.** Il dominio non si separa dall'ORM come
+   `api/intake/` di Classi Prime. La ragione è una misura, non una preferenza:
+   il **nucleo del calcolo è già senza query** — tutti e **ventotto i builder**
+   e **tredici file di checker su quattordici**, il quattordicesimo chiuso da
+   questo stesso pezzo — e ce l'ha per via
+   dell'istantanea che si passa (`ScheduleState`, `SolverContext`), non per via
+   di un confine di pacchetto. Ciò che il pacchetto comprerebbe è già in cassa.
+2. **Il confine è dichiarato e sorvegliato.** `tests/test_confine_orm.py` porta
+   due asserzioni di natura diversa: una **regola** (builder e checker a zero) e
+   un **cricchetto** sull'insieme dei punti di contatto, nella forma di
+   `tests/sonda.py` — asserito come insieme e non come numero, perché da qui
+   non deve più salire ma restare fermo.
+3. **Il chokepoint per la tenancy non si può costruire adesso**, e questa è la
+   scoperta che ha cambiato la voce. L11 lo chiedeva come «un punto solo da cui
+   passano le letture», ma le letture non hanno **niente da portare**: lo
+   `Schedule` — che **dodici** delle diciotto porte pubbliche che interrogano
+   già portano, undici come argomento e una via `ctx` — è il portatore dei
+   *piazzamenti*, non dell'**anagrafica**. `Activity` non ha
+   una FK a `Schedule` e non deve averla: le attività sono l'anagrafica, e lo
+   `Schedule` è **una** disposizione di quelle. Lo scopo dell'anagrafica è la
+   scuola, e la colonna `School` non esiste ancora (ADR-027, parte 1).
+   Aggiungere oggi un parametro che nessuno legge sarebbe generalità
+   speculativa, che è la cosa che questo repository rifiuta altrove.
+4. **Quello che si può fare adesso si è fatto**: le query che stavano **dentro
+   i cicli del calcolo** sono salite al caricamento. Non è ottimizzazione — è
+   che un caricatore si può scopare per scuola con una riga, e una query dentro
+   un ciclo no.
+
+**Le misure.**
+
+- **77 → 116 in una giornata.** La spec del confine contò 77 siti di query
+  fuori da `domain/models/` la mattina del 2026-08-31 (riprodotto esatto sul
+  commit `966e410`: 77). La sera erano **116** — L12 (`bootstrap.py`, 10) e L13
+  (`questionario.py`, 28) più uno di L10 — cresciuti di metà **senza che niente
+  lo dicesse**. È l'argomento del cricchetto: non che 116 sia troppo, ma che
+  nessuno lo sapeva. Dopo questo pezzo sono **110**, in **trentanove** punti
+  dichiarati.
+- **Il nucleo è già puro.** Quattordici file di builder, **2941 righe, zero
+  siti**. Quattordici file di checker, uno solo con query — e le sue tre erano
+  una **copia** di una funzione che `state` calcolava già, con il commento che
+  lo ammetteva (*«ricalcolata una sola volta qui in build() invece che ad ogni
+  check()»*). Ora l'espansione dell'unità di una riga `SubjectConstraint` è
+  scritta **una volta**, in `state.subject_row_unit_keys`.
+- **Il costo, misurato in query sull'Alighieri.** `check_schedule`: **718 →
+  60**. `analyze_capacity()`: **1206 → 20**. I 344 finding sono gli stessi
+  prima e dopo. Delle 718, **668 — il 93 %** — erano una riga sola:
+  `activity_tokens` chiedeva al database le parti di ogni classe di ogni
+  attività, una volta per attività, mentre `AtomMap.build` leggeva **quella
+  stessa riga** e ne buttava via il pezzo che serviva.
+
+**Alternative considerate.**
+
+1. **Il pacchetto senza Django, come Classi Prime.** Scartata per la misura di
+   §1: comprerebbe una purezza che c'è già dove serve. ⚠ E il conto secondario
+   dice quanto sarebbe *sembrata* grossa: diciassette file, **4064 righe**,
+   importano da `domain.models` senza mai interrogare — usano gli **enum**
+   (`SubjectConstraint.Type`, `ResourceTimeConstraint.Type`). Contati come
+   «accoppiamento» sarebbero un terzo del dominio; sono una riga di import da
+   spostare.
+2. **Un livello *repository* adesso**, con le letture dietro un'interfaccia.
+   Scartata per §3: un repository che non può ancora dire *di quale scuola*
+   è un'indirezione senza il suo contenuto. Si scriverà con la `School`, e il
+   lavoro fatto ora — le query salite al caricamento — è ciò che lo rende
+   meccanico invece che capillare.
+3. **Passare `schedule` alle porte che non prendono niente**
+   (`analyze_capacity()`, `AtomMap.build()`, `Relaxation.build()`). Scartata, e
+   sarebbe stata **sbagliata**: quelle leggono l'anagrafica, e lo `Schedule`
+   non la delimita. Il parametro giusto è la scuola, e arriverà con la colonna.
+4. **Solo il cricchetto, senza toccare il codice.** Scartata: avrebbe
+   congelato come «dichiarati» i tre punti che erano difetti — la copia
+   nel checker, l'import del privato del checker da `capacity`, e le due
+   righe dentro `_placeable`. Un inventario è utile se ciò che elenca è
+   difendibile; altrimenti è una lista di scuse.
+5. **Contare i siti e mettere un tetto numerico** (*«non più di 116»*).
+   Scartata per la stessa ragione per cui la sonda asserisce un insieme: un
+   numero permette di aggiungerne uno dove non va e toglierne uno dove andava
+   bene, restando verde.
+
+**Motivo.** La domanda di L11 era *«conviene la purezza?»*, e la misura ha
+risposto a una domanda diversa: **la purezza c'è, il chokepoint non si può
+ancora costruire, e ciò che manca è che qualcuno guardi.** Delle tre, la terza
+è l'unica che si pagava ogni giorno — 116 siti cresciuti da 77 senza che
+nessuno lo notasse, e 668 query su 718 spese a richiedere un dato già in
+memoria.
+
+⚠ **Ciò che questo ADR non decide.** Non se `domain/` diventerà un'app dentro
+Aurora o un pacchetto installabile; non la forma dell'API (ADR-027 §3 la
+dichiara un lavoro con coda e stato); e non *quando* arriva la `School`. Il
+cricchetto è scritto perché quel giorno il lavoro sia un elenco di trentanove
+righe da scopare, e non una caccia.
+
+**Data.** 2026-08-31

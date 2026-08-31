@@ -539,8 +539,8 @@ ST = SubjectConstraint.Type
 
 
 def _chiavi_unita(w, klass):
-    """L'espansione dell'unita' «classe» come la fa il checker (`_unit_keys`,
-    domain/analysis/checkers/subject_constraints.py): la classe **piu' tutte
+    """L'espansione dell'unita' «classe» come la calcola il caricamento
+    (`subject_row_unit_keys`, domain/analysis/state.py): la classe **piu' tutte
     le sue parti**. Filtrare sul solo `klass.pk` perderebbe le attivita'
     legate alla sola parte, che il checker invece vede — e una riga derivata
     senza vederle nasce gia' violata.
@@ -786,7 +786,7 @@ def _ci_stanno(w, kind, a, b):
     davvero (Task 15a). Due attivita' su parti diverse della stessa
     partizione non condividono nessuna chiave di occupazione: possono
     partire nella **stessa** fascia, e il checker le conta comunque
-    entrambe nel secchio (`_unit_keys` espande l'unita' alle parti). La
+    entrambe nel secchio (`state.subject_row_unit_keys` espande l'unita' alle parti). La
     sovrapposizione si vieta quindi solo quando i token si intersecano —
     che e' anche il caso, sulle stesse parti, di due attivita' che
     condividono il docente.
@@ -1082,7 +1082,7 @@ def _capienza_secchio(w, kind, rep, aids):
     sovrapposizione, ma due attivita' su parti diverse della stessa
     partizione non condividono nessuna chiave di occupazione: sono
     legittimamente simultanee, e il checker le somma comunque tutte e due
-    nello stesso secchio (`_unit_keys` espande l'unita' alle parti). Tenere
+    nello stesso secchio (`state.subject_row_unit_keys` espande l'unita' alle parti). Tenere
     il divieto di sovrapposizione avrebbe reso la guardia **stretta**,
     scartando righe violabili. Quindi la capienza si calcola per **strati**
     (`_strato`) e si sommano:
@@ -2094,9 +2094,9 @@ def _unita_parts(w):
     in chiavi di occupazione: `(kwargs per SubjectConstraint, chiavi)`.
 
     Due forme, non una. Sulla **classe** l'espansione e' `_chiavi_unita`
-    (la classe piu' tutte le sue parti, come `_unit_keys` del checker), e
+    (la classe piu' tutte le sue parti, come `state.subject_row_unit_keys`), e
     la riga vede entrambe le parti insieme. Sulla **parte** l'espansione e'
-    la sola parte (stessa lettura di `_unit_keys` per `class_part`): la riga
+    la sola parte (stessa lettura di `state.subject_row_unit_keys` per `class_part`): la riga
     vede l'attivita' di quella parte piu' tutte le attivita' a classe intera,
     che occupano ogni parte della classe e quindi entrano nell'unita'.
 
@@ -2104,7 +2104,7 @@ def _unita_parts(w):
     scarta appena **una** delle due parti smentisce l'ordine in un qualunque
     secchio; la riga sulla singola parte sopravvive lo stesso, e il potere
     vincolante misurato ne dipende (i numeri nel report). In piu' e' l'unica
-    forma che porta il ramo `class_part` di `_unit_keys` dentro il banco."""
+    forma che porta il ramo `class_part` di `state.subject_row_unit_keys` dentro il banco."""
     unita = [({"school_class": klass}, _chiavi_unita(w, klass))
              for klass in w.env["classes"]]
     unita += [({"class_part": part}, frozenset({part.pk}))
@@ -2581,7 +2581,7 @@ def implicate(w, findings):
 
     ⚠ **Ma solo li'.** Estendere per risorsa anche i findings che *nominano*
     le attivita' congelerebbe l'intera classe a ogni violazione di una riga di
-    materia (`_unit_resources` restituisce le chiavi dell'unita'), e il caso
+    materia (`subject_row_resources` restituisce le chiavi dell'unita'), e il caso
     misto congelata/libera **dentro la riga violata** — il cuore di ADR-018 —
     non verrebbe mai esercitato. Misurato: con l'estensione ovunque, 24 semi
     su 40 producono una costruzione utilizzabile e la deriva d'identita' non

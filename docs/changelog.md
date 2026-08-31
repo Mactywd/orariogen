@@ -15,6 +15,79 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-08-31 (notte, tardissimo) — Il confine dell'ORM: L11, e le 668 query
+  su 718 spese a richiedere un dato già in memoria** —
+  `tests/test_confine_orm.py`, [ADR-031](decisioni.md).
+
+  L11 chiedeva se comprare la purezza di Classi Prime — `api/intake/` senza
+  Django, con un test specchio sul confine — ai suoi **77 siti di query**. Come
+  per L10, la misura ha risposto a una domanda diversa, e in tre pezzi.
+
+  🔑 **La purezza c'è già dove serve, e non l'ha comprata un confine.** Il
+  nucleo del calcolo non interroga il database: quattordici file di builder —
+  **2941 righe, zero siti** — e tredici file di checker su quattordici, il
+  quattordicesimo chiuso qui sotto.
+  Non per una riga di import, ma per l'istantanea che si passa
+  (`ScheduleState`, `SolverContext`). ⚠ E il conto che faceva sembrare grosso
+  l'accoppiamento non regge: i sedici file che importano da `domain.models`
+  **senza mai interrogare** — 4064 righe, un terzo del dominio — usano gli
+  **enum**.
+
+  🔑 **Il chokepoint non si può costruire adesso**, ed è la parte che vale. La
+  voce lo chiedeva come «un punto solo da cui passano le letture», ma le
+  letture non hanno **niente da portare**: lo `Schedule` è già l'argomento di
+  dodici delle diciotto porte pubbliche che interrogano (undici come
+  argomento, una via `ctx`), e delimita i *piazzamenti*, non
+  l'**anagrafica**. `Activity` non ha una FK a `Schedule` e non deve averla —
+  le attività sono l'anagrafica, lo `Schedule` è una loro disposizione. Lo
+  scopo dell'anagrafica è la scuola, e la colonna non esiste (ADR-027 §1).
+  Passare `schedule` a `analyze_capacity()` sarebbe stato **sbagliato**, non
+  soltanto prematuro.
+
+  🔑 **Quello che mancava era che qualcuno guardasse.** I 77 siti erano contati
+  la mattina del 2026-08-31 (riprodotti esatti sul commit `966e410`: 77); la
+  sera dello stesso giorno erano **116** — L12 (`bootstrap.py`, 10), L13
+  (`questionario.py`, 28), uno di L10 — cresciuti di **metà in una giornata**
+  senza che niente lo dicesse. Non è che 116 sia troppo: è che nessuno lo
+  sapeva.
+
+  **Cosa entra.** `tests/test_confine_orm.py`, con due asserzioni di natura
+  diversa e apposta: una **regola** — builder e checker a zero, un numero che
+  deve restare zero — e un **cricchetto** sull'insieme dei **trentanove** punti
+  di contatto, ognuno col suo ruolo (caricatore / ingresso / comando /
+  uscita), nella forma di `tests/sonda.py`: asserito come *insieme* e non come
+  numero, perché un tetto numerico lascia aggiungerne uno dove non va e
+  toglierne uno dove andava bene, restando verde. ⚠ Il test sa che il punto è
+  dichiarato, non che il ruolo sia vero: quello lo vede solo chi legge.
+
+  **E le query dentro i cicli sono salite al caricamento** — che non è
+  ottimizzazione, è che un caricatore si scopa per scuola con una riga e una
+  query dentro un ciclo no. `check_schedule` sull'Alighieri: **718 → 60**.
+  `analyze_capacity()`: **1206 → 20**. I **344 finding sono gli stessi** prima
+  e dopo.
+
+  ⚠ **Delle 718, 668 — il 93 % — erano una riga sola.** `activity_tokens`
+  chiedeva al database le parti di ogni classe di ogni attività, una volta per
+  attività, mentre `AtomMap.build` leggeva **quella stessa riga** e ne buttava
+  via il pezzo che serviva. Ora la mappa porta `parts_of_class` e
+  `parts_of_group`: non sono atomi, ed è dichiarato nel docstring perché un
+  lettore non le scambi per tali.
+
+  **E c'era una frase scritta tre volte.** L'espansione dell'unità di una riga
+  `SubjectConstraint` stava in `state`, in `checkers.subject_constraints._unit_keys`
+  e per riflesso in `capacity._subject_rows`, che **importava il privato del
+  checker**. Le due di là interrogavano a ogni chiamata — `_unit_resources` una
+  volta per *finding*. Il commento in `state` lo ammetteva già (*«ricalcolata
+  una sola volta qui in build() invece che ad ogni check()»*) e nessuno l'aveva
+  letto come un difetto. Ora è `state.subject_row_unit_keys`, una volta, e il
+  checker scende a **zero** — che è ciò che rende la regola del nucleo esatta
+  invece che quasi vera.
+
+  ⚠ **L'alternativa di scrivere solo il cricchetto è stata scartata**, ed è la
+  scelta che tiene in piedi il resto: avrebbe congelato come «dichiarati» i tre
+  punti che erano difetti. Un inventario vale se ciò che elenca è difendibile,
+  altrimenti è una lista di scuse.
+
 - **2026-08-31 (notte, tardi) — La quadratura del carico: L10, e la tabella
   che nessuno leggeva** — `domain/analysis/checkers/workload.py`,
   `structural:workload`, trentaduesimo checker.

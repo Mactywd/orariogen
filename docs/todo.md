@@ -29,12 +29,14 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > [ADR-028](decisioni.md), dopo aver **letto Aurora** invece di ragionarci
 > sopra. Restano:
 >
-> - **due voci di lavoro** delle tre nate da quella lettura: **L9** (la
->   `ScheduleEntry` non tiene l'ora quindicinale) e **L11** (il dominio
->   interroga l'ORM in 77 punti, senza un chokepoint). ⚠ **L9 non si può fare
->   da qui**: vive nel repository di Aurora. **L10 è chiusa** il 2026-08-31 con
->   [ADR-030](decisioni.md) — e la misura ha cambiato la domanda: non era un
->   ramo inusato di `unit`, era che **nessuno leggeva `TeachingAssignment`**;
+> - **una voce di lavoro** delle tre nate da quella lettura: **L9**, la
+>   `ScheduleEntry` che non tiene l'ora quindicinale. ⚠ **Non si può fare da
+>   qui**: vive nel repository di Aurora. **L10 e L11 sono chiuse** il
+>   2026-08-31 con [ADR-030](decisioni.md) e [ADR-031](decisioni.md), e a
+>   entrambe la misura ha cambiato la domanda: L10 non era un ramo inusato di
+>   `unit` ma **nessuno che leggesse `TeachingAssignment`**; L11 non era la
+>   purezza da comprare ma **il chokepoint che non si può ancora costruire**,
+>   perché lo `Schedule` non delimita l'anagrafica e la `School` non esiste;
 > - **tre osservazioni** che richiedono la UI e che nessuno può fare al posto
 >   di chi ha il prodotto: l'ultimo residuo di O2 (il `Ciclo personalizzato`) e
 >   le due minuzie da tooltip di **O7**;
@@ -366,18 +368,37 @@ Il banco passa da **140 a 144 cattedre** (112 classe / 30 parte / 2 gruppo): i
 due rami morti di `unit` sono vivi. Il racconto sta in
 [changelog.md](changelog.md).
 
-### L11 🔧 Il dominio interroga l'ORM in 77 punti, senza un chokepoint
+### L11 ✅ Il confine dell'ORM: dichiarato e sorvegliato
 
-Classi Prime tiene `api/intake/` **senza Django**, con un test specchio sul
-confine, ed è la disciplina giusta anche qui. Ma la misura dice quanto costa:
-**77 siti di query** fuori da `domain/models/` — 21 nei comandi (che diventano
-rotte comunque), **36 in tre file** (`analysis/state.py` 16,
-`extraction.py` 10, `analysis/capacity.py` 10), il resto sparso.
+**Chiusa il 2026-08-31** con [ADR-031](decisioni.md). La voce chiedeva se
+comprare la purezza di Classi Prime (`api/intake/` senza Django) ai suoi 77
+siti di query. La misura ha risposto ad altro, in tre pezzi.
 
-⚠ ADR-027 lo dichiara **non deciso**, apposta: è un pezzo a sé e va deciso col
-suo costo davanti, non come corollario del confine. Ma è anche il prerequisito
-pratico della `School` FK — senza un punto solo da cui passano le letture,
-scoparle per scuola vuol dire toccarle a una a una.
+**La purezza c'è già dove serve**: il nucleo del calcolo non interroga — tutti
+e **ventotto i builder** (2941 righe, zero siti) e **tredici file di checker su
+quattordici** — il quattordicesimo chiuso da questo stesso pezzo, quindi ora
+quattordici su quattordici. Non per un confine di pacchetto, ma per l'istantanea che si
+passa (`ScheduleState`, `SolverContext`). Il pacchetto comprerebbe una cosa in
+cassa. ⚠ E i sedici file che *importano* da `domain.models` senza interrogare —
+**4064 righe** — usano gli **enum**: contati come accoppiamento sarebbero un
+terzo del dominio, sono una riga di import.
+
+**Il chokepoint non si può costruire adesso**, ed è la scoperta. Le letture non
+hanno niente da portare: delle **diciotto** porte pubbliche che interrogano,
+**dodici** portano già lo `Schedule` (undici come argomento, una via `ctx`) —
+ma lo `Schedule` delimita i **piazzamenti**, non l'anagrafica. `Activity` non ha
+FK a `Schedule` e non deve averla. Lo scopo dell'anagrafica è la scuola, e la
+colonna `School` non esiste ancora (ADR-027 §1).
+
+**Quello che mancava era che qualcuno guardasse.** I 77 siti della mattina
+erano **116** la sera dello stesso giorno — L12 e L13 — cresciuti di metà senza
+che niente lo dicesse. Ora `tests/test_confine_orm.py` porta una **regola**
+(nucleo a zero) e un **cricchetto** sull'insieme dei trentanove punti, nella
+forma di `tests/sonda.py`. E le query che stavano **dentro i cicli** sono
+salite al caricamento: `check_schedule` **718 → 60**, `analyze_capacity()`
+**1206 → 20**, stessi 344 finding. Delle 718, **668 — il 93 %** — erano una
+riga sola, che chiedeva al database un dato che `AtomMap.build` leggeva già e
+buttava via.
 
 
 Nessuno le sblocca: hanno una risposta tecnica e non aspettano né EDT né una

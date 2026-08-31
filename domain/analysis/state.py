@@ -67,12 +67,22 @@ class AtomMap:
     e quelle di partizioni diverse si intersecano.
 
     Costruito solo per le classi con almeno due partizioni non vuote: altrove
-    le mappe restano vuote e le chiavi di occupazione non cambiano di un bit."""
+    le mappe restano vuote e le chiavi di occupazione non cambiano di un bit.
+
+    ⚠ **Le due mappe piatte non sono atomi**, e stanno qui per una ragione
+    misurata. `parts_of_class` (tutte le classi, non solo quelle a due
+    partizioni) e `parts_of_group` sono *come un'unità si espande in parti*:
+    `activity_tokens` le chiedeva al database una volta per ogni classe e per
+    ogni raggruppamento di **ogni** attività. La riga che produce la prima è
+    **la stessa** che gli atomi leggono già e buttavano via — misurato sul
+    banco: 668 delle 718 query di `check_schedule`, il 93 %."""
 
     part: dict    # ClassPart pk → frozenset di atomi
     klass: dict   # SchoolClass pk → frozenset di atomi
     names: dict   # atomo → nome leggibile, per le causali
     parts_of: dict  # atomo → tupla delle parti che lo compongono (ADR-020)
+    parts_of_class: dict  # SchoolClass pk → frozenset delle sue ClassPart
+    parts_of_group: dict  # Group pk → frozenset delle ClassPart membre
 
     @classmethod
     def build(cls):
@@ -82,6 +92,12 @@ class AtomMap:
             by_class[class_id][partition_id].append(pk)
         class_names = dict(SchoolClass.objects.values_list("pk", "name"))
         part, klass, names, parts_of = {}, {}, {}, {}
+        parts_of_class = {c: frozenset(pk for blocco in ps.values() for pk in blocco)
+                          for c, ps in by_class.items()}
+        parts_of_group = defaultdict(set)
+        for group_id, part_id in Group.parts.through.objects.values_list(
+                "group_id", "classpart_id"):
+            parts_of_group[group_id].add(part_id)
         for class_id, partitions in by_class.items():
             blocks = [sorted(parts) for _, parts in sorted(partitions.items()) if parts]
             if len(blocks) < 2:
@@ -97,7 +113,8 @@ class AtomMap:
                     part.setdefault(part_pk, set()).add(key)
             klass[class_id] = frozenset(keys)
         return cls({p: frozenset(v) for p, v in part.items()}, klass, names,
-                   parts_of)
+                   parts_of, parts_of_class,
+                   {g: frozenset(v) for g, v in parts_of_group.items()})
 
 
 def _unit_ref(unit):
@@ -128,14 +145,13 @@ def activity_tokens(activity, assigned_room_id=None, atoms=None):
         keys.add(t.pk)
     for c in activity.classes.all():
         keys.add(c.pk)
-        keys.update(ClassPart.objects.filter(
-            partition__school_class=c).values_list("pk", flat=True))
+        keys |= atoms.parts_of_class.get(c.pk, frozenset())
         keys |= atoms.klass.get(c.pk, frozenset())
     for p in activity.parts.all():
         keys.add(p.pk)
         keys |= atoms.part.get(p.pk, frozenset())
     for g in activity.groups.all():
-        for part_pk in g.parts.values_list("pk", flat=True):
+        for part_pk in atoms.parts_of_group.get(g.pk, frozenset()):
             keys.add(part_pk)
             keys |= atoms.part.get(part_pk, frozenset())
     if assigned_room_id is not None:
@@ -157,17 +173,32 @@ def activity_tokens(activity, assigned_room_id=None, atoms=None):
     return frozenset(keys), materials
 
 
-def _subject_row_unit_keys(row):
-    """L'espansione dell'unità di una riga SubjectConstraint in chiavi di
-    occupazione (stessa logica di checkers.subject_constraints._unit_keys,
-    ricalcolata una sola volta qui in build() invece che ad ogni check())."""
+def subject_row_unit_keys(row, atoms):
+    """L'espansione dell'unità di una riga `SubjectConstraint` in chiavi di
+    occupazione.
+
+    ⚠ **Questa è l'unica.** Ne esistevano tre copie — qui, in
+    `checkers.subject_constraints._unit_keys` e per riflesso in
+    `capacity._subject_rows`, che importava il privato del checker — e le due
+    di là interrogavano il database *a ogni chiamata* invece che una volta al
+    caricamento. Tre implementazioni della stessa frase sono tre occasioni di
+    divergere; ora la frase sta scritta una volta e legge la mappa."""
     if row.school_class_id:
-        parts = ClassPart.objects.filter(
-            partition__school_class_id=row.school_class_id).values_list("pk", flat=True)
-        return frozenset({row.school_class_id, *parts})
+        return frozenset({row.school_class_id,
+                          *atoms.parts_of_class.get(row.school_class_id, ())})
     if row.class_part_id:
         return frozenset({row.class_part_id})
-    return frozenset(row.group.parts.values_list("pk", flat=True))
+    return atoms.parts_of_group.get(row.group_id, frozenset())
+
+
+def subject_row_resources(row, atoms):
+    """I pk di `Resource` che identificano l'unità della riga nel finding. Per
+    i raggruppamenti — che non sono `Resource` — le parti membre."""
+    if row.school_class_id:
+        return (row.school_class_id,)
+    if row.class_part_id:
+        return (row.class_part_id,)
+    return tuple(sorted(atoms.parts_of_group.get(row.group_id, ())))
 
 
 @dataclass(frozen=True)
@@ -202,6 +233,7 @@ class ScheduleState:
         # (contratto dichiarato in cima a questo modulo).
         self.time_rows = []           # tutte le righe ResourceTimeConstraint
         self.subject_rows = []        # [(riga SubjectConstraint, unit_keys precalcolate)]
+        self.subject_row_resources = {}  # SubjectConstraint pk → risorse dell'unità
         self.part_class = {}          # ClassPart pk → SchoolClass pk (partizione)
         self.class_caps = {}          # SchoolClass pk → max_weekly_weight_per_student
         self.services_by_plan = {}    # StudyPlan pk → {subject_id: class_minutes}
@@ -290,7 +322,10 @@ class ScheduleState:
         subject_rows = (SubjectConstraint.objects
                         .select_related("subject_a", "subject_b", "school_class",
                                         "class_part", "group"))
-        state.subject_rows = [(row, _subject_row_unit_keys(row)) for row in subject_rows]
+        state.subject_rows = [(row, subject_row_unit_keys(row, atoms))
+                              for row in subject_rows]
+        state.subject_row_resources = {
+            row.pk: subject_row_resources(row, atoms) for row, _ in state.subject_rows}
 
         state.part_class = dict(ClassPart.objects.values_list(
             "pk", "partition__school_class_id"))
@@ -329,9 +364,14 @@ class ScheduleState:
                                         for label, subs in gruppi.items()}
                                  for plan, gruppi in elezioni.items()}
 
+        # ⚠ Una query, non una per classe: la riga di prima chiedeva le parti
+        # dentro il ciclo, e la copertura è già la fase più costosa.
+        parti_per_classe = defaultdict(list)
+        for parte in ClassPart.objects.select_related(
+                "partition__school_class__study_plan", "study_plan"):
+            parti_per_classe[parte.partition.school_class_id].append(parte)
         for klass in SchoolClass.objects.select_related("study_plan"):
-            parts = list(ClassPart.objects.filter(partition__school_class=klass)
-                         .select_related("partition__school_class__study_plan", "study_plan"))
+            parts = parti_per_classe.get(klass.pk, [])
             if not parts:
                 state.student_units.append((klass.pk, klass.study_plan_id, klass.name))
                 continue

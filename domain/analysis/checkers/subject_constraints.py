@@ -8,32 +8,15 @@ from collections import defaultdict
 from domain.analysis import causali
 from domain.analysis.findings import Finding, Severity
 from domain.analysis.registry import Checker, register
-from domain.models import ClassPart, Group, SubjectConstraint
+from domain.models import SubjectConstraint
 from domain.models.resources import Resource
 
 T = SubjectConstraint.Type
 
-
-def _unit_keys(row):
-    if row.school_class_id:
-        parts = ClassPart.objects.filter(
-            partition__school_class_id=row.school_class_id).values_list("pk", flat=True)
-        return frozenset({row.school_class_id, *parts})
-    if row.class_part_id:
-        return frozenset({row.class_part_id})
-    return frozenset(Group.objects.get(pk=row.group_id)
-                     .parts.values_list("pk", flat=True))
-
-
-def _unit_resources(row):
-    """I pk di Resource che identificano l'unità nel finding (per i
-    raggruppamenti, che non sono Resource, le parti membre)."""
-    if row.school_class_id:
-        return (row.school_class_id,)
-    if row.class_part_id:
-        return (row.class_part_id,)
-    return tuple(sorted(Group.objects.get(pk=row.group_id)
-                        .parts.values_list("pk", flat=True)))
+# ⚠ Nessuna query in questo file, ed è una regola e non un caso: l'espansione
+# dell'unità di una riga sta in `state.subject_rows` e
+# `state.subject_row_resources`, calcolate al caricamento. Le due copie che
+# stavano qui la ricalcolavano **a ogni finding**.
 
 
 def _placed_of(state, keys, subject_id):
@@ -95,7 +78,7 @@ class _SubjectChecker(Checker):
     def finding(self, state, row, activity_ids, **quantities):
         return Finding(
             self.CODE, causali.message(self.CODE, subject=row.subject_a.name),
-            Severity.HARD, resources=_unit_resources(row),
+            Severity.HARD, resources=state.subject_row_resources[row.pk],
             activities=tuple(sorted(set(activity_ids))), quantities=quantities)
 
 

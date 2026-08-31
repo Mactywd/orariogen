@@ -49,6 +49,17 @@ uno o due per file.
 Il trapianto è quindi **meccanico ma non gratuito**: non c'è un chokepoint da
 cui passa tutto, che è invece esattamente la disciplina di Aurora.
 
+> ⚠ **Sciolto la sera stessa da [ADR-031](../../decisioni.md), e due cose qui
+> sopra sono da leggere con quello accanto.** I 77 erano **116** poche ore
+> dopo — L12 e L13 — cresciuti di metà senza che niente lo dicesse: il numero
+> non è uno stato, è una fotografia. E *«non c'è un chokepoint»* nasconde il
+> motivo: non ce n'è uno perché **non c'è ancora niente da fargli portare** —
+> lo `Schedule`, che dodici porte d'ingresso su diciotto già portano, delimita i
+> piazzamenti e non l'anagrafica. Il chokepoint arriva con la `School` di §1.1;
+> nel frattempo il confine è **dichiarato e sorvegliato**
+> (`tests/test_confine_orm.py`), e il nucleo del calcolo — 28 builder su 28,
+> 13 file di checker su 14 — non interrogava già allora.
+
 ### 1.3 Appiattire perde tre chiavi su 142 — e non a caso
 
 `ScheduleEntry` di Aurora è `(school, teacher, weekday, period_number,
@@ -341,3 +352,6 @@ storto, un quadro orario gonfiato produce un `INFEASIBLE` muto.
   con un test specchio sul confine. Sarebbe la cosa giusta anche qui, ma §1.2
   la misura: **77 siti di query**. È un pezzo a sé, e va deciso col suo costo
   davanti, non come corollario di questo.
+  → **Deciso la sera stessa, [ADR-031](../../decisioni.md): no.** Il pacchetto
+  comprerebbe una purezza già in cassa, e il conto dei siti misurava la cosa
+  sbagliata.

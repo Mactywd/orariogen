@@ -103,6 +103,10 @@ def _appartenenze():
     Non è `state.tokens`: vedi il ⚠ in testa al modulo. Qui si risale anche
     parte → classe e raggruppamento → classi, e si prendono **tutte** le aule
     dichiarate invece della sola candidata unica."""
+    # ⚠ Le stesse due mappe stanno in `AtomMap` (ADR-031), e qui **non** si
+    # riusano: `AtomMap.build` calcola anche il prodotto delle partizioni, che
+    # a `Estrai` non serve. È una duplicazione dichiarata, non una svista — e
+    # il giorno in cui serve anche l'atomo, la riga giusta è togliere queste.
     parts_of_class = defaultdict(set)
     class_of_part = {}
     for part_pk, class_pk in ClassPart.objects.values_list(
