@@ -337,6 +337,15 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > qualità non è esercitata da quel dataset, e il difetto qui sopra è emerso
 > solo seminandone cinque a mano.
 >
+> ⚠ **E con otto criteri il budget di default non basta: la catena si tronca.**
+> Misurato il 2026-09-01 eseguendo il comando sull'Alighieri (11 livelli): a
+> 15 s per livello il nono non trova soluzione, il ciclo esce, e i due criteri
+> sotto **non hanno mai turno** — e il rendiconto non lo dice, perché elenca
+> solo i livelli partiti. Con `--limite 60` la catena arriva in fondo in
+> **378 s** (contro 74) e `isolated_all` passa da 31 a **5**. È **L14** in
+> [docs/todo.md](docs/todo.md), e corregge un numero usato altrove: gli «82 s
+> con i criteri di qualità» di ADR-027 erano il costo di una catena troncata.
+>
 > Dal 2026-08-27 (sera) c'è anche la **separazione per popolazione**
 > (`Arbitrato` in `domain/solver/quality.py`,
 > [spec](docs/superpowers/specs/2026-08-27-separazione-popolazione-design.md)):

@@ -29,7 +29,10 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > [ADR-028](decisioni.md), dopo aver **letto Aurora** invece di ragionarci
 > sopra. Restano:
 >
-> - **nessuna voce di lavoro**: le tre nate da quella lettura sono chiuse. L10
+> - **una voce di lavoro**, aperta il 2026-09-01 provando il comando invece dei
+>   test: **L14**, la catena lessicografica che si tronca al nono livello su
+>   undici e un rendiconto che non lo dice. Le tre nate leggendo Aurora sono
+>   invece chiuse. L10
 >   e L11 il 2026-08-31 con [ADR-030](decisioni.md) e [ADR-031](decisioni.md),
 >   **L9** il 2026-09-01 in `Mactywd/aurora` — la voce era ferma perché vive
 >   là, non perché fosse difficile. E a tutt'e tre la misura ha cambiato la
@@ -261,6 +264,41 @@ mouse le promuove o le smentisce.
 ---
 
 ## 3. Lavoro — si può fare adesso
+
+### L14 🔧 La catena si tronca, e il rendiconto non lo dice — **aperta il 2026-09-01**
+
+Trovata **provando il comando**, non i test: `manage.py solve` sull'Alighieri
+con le sue 8 righe `QualityCriterion` (11 livelli in tutto) si ferma al
+**nono**. `weekly_spread_classes` non trova soluzione dentro i suoi 15 s, il
+ciclo di `solve_chain` esce con `break` — che è giusto, conserva la soluzione
+migliore trovata — e i **due criteri sotto di lui non hanno mai turno**.
+Riprodotto su database pulito: identico, allo stesso livello.
+
+🔑 **Non è un'infattibilità, è il budget, e la prova è che allargandolo la
+catena arriva in fondo.** Con `--limite 60` tutti e undici i livelli girano, in
+**378 s** contro 74, e la qualità non cambia di poco: `isolated_all` **31 → 5**,
+`free_half_days_teachers` 131 → 116, `regularity_classes` 924 → 915, più i tre
+livelli che prima non esistevano (`weekly_spread` 266, `slot_spread` 152,
+`preferences` 2).
+
+Due cose da fare, e sono diverse:
+
+1. **Il rendiconto deve distinguere tre stati, non due.** Oggi elenca i livelli
+   *partiti* e per l'ultimo scrive «non concluso»; chi legge non ha modo di
+   sapere che sotto ce n'erano altri due e che non sono stati provati. Un
+   livello «non partito» va nominato — è la stessa regola del progetto per cui
+   una famiglia esclusa dalla classifica dei vincoli si dichiara invece di
+   sparire.
+2. **`BUDGET_QUALITA = 15` è tarato su una catena corta.** Fu scelto quando i
+   criteri erano cinque e i livelli otto; con otto criteri il costo peggiore è
+   `15 × 11` e il *beneficio* si concentra dove il budget non arriva. Se il
+   default resta un numero per livello, va almeno detto quanto costa la catena
+   intera; l'alternativa è un budget che sappia di essere in coda.
+
+⚠ E la misura porta con sé un limite dichiarato di tutto il resto: **nessuno ha
+mai misurato il generatore su una scuola di taglia reale.** Il Fermi è 10
+classi e 284 attività, l'Alighieri 12 e 343; un liceo vero ne ha 30–60. La
+qualità già costa 378 s a 12 classi.
 
 ### L12 ✅ Il gradino 1 di D2 — **fatto il 2026-08-31**
 

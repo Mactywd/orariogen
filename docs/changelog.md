@@ -15,6 +15,51 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-09-01 — Provando il comando invece dei test: la catena si tronca al
+  nono livello su undici** — [L14](todo.md).
+
+  Domanda di stato — *«il generatore è funzionante? i criteri sono tutti
+  funzionanti?»* — e la sola risposta onesta era eseguirlo. Giro completo da
+  riga di comando su due database costruiti apposta, non sotto pytest.
+
+  ✅ **Il grosso gira, e in fretta.** Fermi: `solve` **OPTIMAL** in 1,6 s (8426
+  variabili, 1536 constraint), `assign_rooms` **92 richieste su 92**, catena
+  intera in ~2 s. Alighieri: `solve` **OPTIMAL** in 8,2 s (14 785 variabili,
+  13 996 constraint, 343 attività, zero scarti), `assign_rooms` **73 su 73** in
+  0,36 s, `analyze` 0,8 s a vuoto e 7 s sull'orario fatto, `export_ical` **11
+  286 eventi (2,4 MiB) in 0,9 s**, `questionario` **12 domande su 12** col
+  perimetro contato.
+
+  ⚠ **Ma con gli otto criteri di qualità la catena non arriva in fondo, e
+  nessuno lo dice.** Undici livelli; a `BUDGET_QUALITA` (15 s per livello) il
+  nono — `weekly_spread_classes` — non trova soluzione, `solve_chain` esce col
+  `break`, e `slot_spread_teachers` e `preferences_all` **non hanno mai turno**.
+  Il rendiconto elenca i livelli *partiti*, quindi la riga «non concluso»
+  dell'ultimo è l'unica traccia, e non dice che sotto ce n'erano altri due.
+  Riprodotto su database pulito: identico, stesso livello.
+
+  🔑 **La prima diagnosi era sbagliata, e a correggerla è stata una misura.**
+  Il livello usciva a **11,9 s** con un budget di 15: un `Solve` che termina
+  *prima* del limite non è scaduto, quindi sembrava `INFEASIBLE` — e sarebbe
+  stato un difetto di modello, cioè tutt'altra cosa. Invece con `--limite 60`
+  la catena **arriva in fondo a tutti e undici**, in 378 s: non è
+  infattibilità, è il budget. La lettura del codice aveva già escluso
+  l'estremo superiore sbagliato in `_sparpaglia`/`peggiore`; è la prova
+  empirica ad aver chiuso la questione.
+
+  📐 **E il budget non costa poco in qualità.** Da 15 s a 60 s per livello:
+  `isolated_all` **31 → 5**, `free_half_days_teachers` 131 → 116,
+  `regularity_classes` 924 → 915, più i tre livelli che prima non esistevano
+  affatto. Il numero che il progetto si portava dietro — «82 s con i criteri di
+  qualità», usato in [ADR-027](decisioni.md) per dire che un solve per
+  richiesta non ci sta — era quindi il costo di una **catena troncata**: quella
+  intera ne costa **378**, e l'argomento di ADR-027 ne esce rafforzato, non
+  indebolito.
+
+  ⚠ **Il limite che la prova dichiara su sé stessa**: nessuno ha mai misurato
+  il generatore su una scuola di taglia reale. Fermi 10 classi e 284 attività,
+  Alighieri 12 e 343; un liceo vero ne ha 30–60.
+
 - **2026-09-01 — L'ora quindicinale attraversa il confine: L9, e il campo che
   divide i lettori in due** — `Mactywd/aurora`, ramo
   `ora-quindicinale-scheduleentry`; [emendamento ad ADR-027](decisioni.md).
