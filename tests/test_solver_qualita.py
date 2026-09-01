@@ -15,7 +15,7 @@ from domain.analysis.conformity import check_schedule
 from domain.models import (QualityCriterion, ResourceTimeConstraint,
                            ResourceUnavailability)
 from domain.solver.model import apply, build_model, solve
-from domain.solver.objective import livelli
+from domain.solver.objective import MISURATO, VUOTO, livelli
 from tests.analysis_helpers import make_activity, mini_school
 
 pytestmark = pytest.mark.django_db
@@ -618,18 +618,30 @@ def test_fermi_i_criteri_di_qualita_misurati():
     livelli_ = soluzione.stats["livelli"]
     print(f"\nFermi qualità: {secondi:.1f}s, {len(livelli_)} livelli")
     for lv in livelli_:
-        print(f"   {lv['nome']:<22} {lv['valore']:>6}  "
-              f"limite {lv['limite']:>4}  divario {lv['divario']:>6}"
-              f"  {lv['secondi']}s")
+        def _n(v):
+            return "-" if v is None else v
+        print(f"   {lv['nome']:<22} {_n(lv['valore']):>6}  "
+              f"limite {_n(lv['limite']):>4}  divario {_n(lv['divario']):>6}"
+              f"  {lv['secondi']}s  {lv['stato']}")
 
     assert soluzione.status in ("OPTIMAL", "FEASIBLE")
     assert soluzione.unplaced == ()
     nomi = [lv["nome"] for lv in livelli_]
+    per_nome = {lv["nome"]: lv for lv in livelli_}
     # ⚠ `preferences` non diventa un livello: il Fermi non ha indisponibilità
     # verdi, quindi il criterio è la costante zero e `livelli_di_qualita` lo
     # salta. Cinque righe, quattro livelli — ed è la regola «un criterio senza
     # niente da misurare non è un livello», non una perdita.
-    assert "preferences_all" not in nomi
+    #
+    # ⚠ **Ma dal 2026-09-01 non è più un silenzio**: qui c'era scritto
+    # `"preferences_all" not in nomi`, e il criterio spariva del tutto dal
+    # rendiconto. Una scuola che dichiara un criterio e non trova la sua riga
+    # non può distinguere «non fa niente qui» da «me lo sono dimenticato». La
+    # regola resta — non è un livello, non minimizza, non fissa niente — e in
+    # più **si dichiara**.
+    assert per_nome["preferences_all"]["stato"] == VUOTO
+    assert per_nome["preferences_all"]["valore"] is None
+    misurati = [lv["nome"] for lv in livelli_ if lv["stato"] == MISURATO]
     # ⚠ I livelli che girano sono un **prefisso** dell'ordine dichiarato, non
     # necessariamente tutti: a 3 s per livello e con la macchina carica un
     # livello di qualità può non restituire alcuna soluzione, e allora la
@@ -638,9 +650,8 @@ def test_fermi_i_criteri_di_qualita_misurati():
     # suite intera e verde da solo, che è il modo peggiore di fallire.
     attesi = ["minuti_scartati", "attivita_scartate", "gaps_all",
               "isolated_all", "free_half_days_all", "regularity_all"]
-    assert nomi == attesi[:len(nomi)]
+    assert misurati == attesi[:len(misurati)], misurati
 
-    per_nome = {lv["nome"]: lv for lv in livelli_}
     assert per_nome["gaps_all"]["divario"] == 0, "zero è anche il suo limite"
     dimostrabili_male = [lv for lv in livelli_
                          if lv["nome"] in attesi[3:] and lv["divario"] is not None]

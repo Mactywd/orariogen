@@ -29,10 +29,11 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > [ADR-028](decisioni.md), dopo aver **letto Aurora** invece di ragionarci
 > sopra. Restano:
 >
-> - **una voce di lavoro**, aperta il 2026-09-01 provando il comando invece dei
->   test: **L14**, la catena lessicografica che si tronca al nono livello su
->   undici e un rendiconto che non lo dice. Le tre nate leggendo Aurora sono
->   invece chiuse. L10
+> - **una voce di lavoro a metà**, aperta il 2026-09-01 provando il comando
+>   invece dei test: **L14**, la catena lessicografica che si tronca al nono
+>   livello su undici. Il silenzio del rendiconto è chiuso lo stesso giorno; la
+>   taratura del budget resta, ed è una domanda di prodotto che si risponde
+>   dentro ADR-027 §3. Le tre nate leggendo Aurora sono invece chiuse. L10
 >   e L11 il 2026-08-31 con [ADR-030](decisioni.md) e [ADR-031](decisioni.md),
 >   **L9** il 2026-09-01 in `Mactywd/aurora` — la voce era ferma perché vive
 >   là, non perché fosse difficile. E a tutt'e tre la misura ha cambiato la
@@ -265,7 +266,7 @@ mouse le promuove o le smentisce.
 
 ## 3. Lavoro — si può fare adesso
 
-### L14 🔧 La catena si tronca, e il rendiconto non lo dice — **aperta il 2026-09-01**
+### L14 🔧 La catena si tronca — **metà chiusa il 2026-09-01**
 
 Trovata **provando il comando**, non i test: `manage.py solve` sull'Alighieri
 con le sue 8 righe `QualityCriterion` (11 livelli in tutto) si ferma al
@@ -281,19 +282,32 @@ catena arriva in fondo.** Con `--limite 60` tutti e undici i livelli girano, in
 livelli che prima non esistevano (`weekly_spread` 266, `slot_spread` 152,
 `preferences` 2).
 
-Due cose da fare, e sono diverse:
+⚠ **E non era una scoperta.** `tests/test_alighieri_qualita.py` documentava
+già la troncatura con la diagnosi giusta — *«sono i livelli dopo di lui a
+sparire»*, e i due criteri nuovi presi da soli chiudono senza fatica, quindi è
+la loro **posizione** a essere dura. Nuovo era che il fatto non fosse mai
+arrivato in questo elenco e che **il prodotto non lo dicesse a chi lo usa**.
 
-1. **Il rendiconto deve distinguere tre stati, non due.** Oggi elenca i livelli
-   *partiti* e per l'ultimo scrive «non concluso»; chi legge non ha modo di
-   sapere che sotto ce n'erano altri due e che non sono stati provati. Un
-   livello «non partito» va nominato — è la stessa regola del progetto per cui
-   una famiglia esclusa dalla classifica dei vincoli si dichiara invece di
-   sparire.
-2. **`BUDGET_QUALITA = 15` è tarato su una catena corta.** Fu scelto quando i
-   criteri erano cinque e i livelli otto; con otto criteri il costo peggiore è
-   `15 × 11` e il *beneficio* si concentra dove il budget non arriva. Se il
-   default resta un numero per livello, va almeno detto quanto costa la catena
-   intera; l'alternativa è un budget che sappia di essere in coda.
+Due cose da fare, ed erano diverse:
+
+1. ✅ **Il rendiconto distingue quattro stati, non due** — fatto il
+   2026-09-01. `misurato`, `non_concluso` (è partito e non ha restituito
+   niente), `mai_partito` (la catena si è fermata più in alto) e `vuoto`
+   (niente da misurare su quelle chiavi): i primi due stavano schiacciati
+   dentro `valore is None`, gli altri due non producevano alcuna riga. Sopra
+   l'elenco c'è una **nota** che nomina i criteri mai provati e dice l'unica
+   cosa che si può fare, `--limite` più alto. La descrizione di un livello sta
+   in `domain/solver/objective.py` e non nel comando, perché i comandi che
+   leggono una catena sono **due** e condividono `solve_chain`.
+2. ⛔ **`BUDGET_QUALITA = 15` è tarato su una catena corta** — resta aperto,
+   **e non è una taratura**. Fu scelto quando i criteri erano cinque e i
+   livelli otto; con otto criteri il costo peggiore è `15 × 11` e il
+   *beneficio* si concentra dove il budget non arriva. Ma quanto tempo può
+   costare un solve è una domanda di **prodotto**, e la risposta la dà il
+   pezzo che viene dopo: quando il calcolo è un lavoro con uno stato
+   ([ADR-027](decisioni.md) §3), 378 s è un tempo accettabile e il budget può
+   crescere. Deciderlo davanti a un comando sincrono vuol dire rispondere alla
+   domanda sbagliata.
 
 ⚠ E la misura porta con sé un limite dichiarato di tutto il resto: **nessuno ha
 mai misurato il generatore su una scuola di taglia reale.** Il Fermi è 10

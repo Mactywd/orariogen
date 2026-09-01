@@ -22,6 +22,7 @@ import pytest
 
 from domain.models import Activity, QualityCriterion, Teacher
 from domain.solver.model import apply, solve
+from domain.solver.objective import MAI_PARTITO
 from domain.solver.quality import Arbitrato
 from tests import alighieri
 
@@ -84,17 +85,24 @@ def test_la_catena_arriva_in_fondo_e_dichiara_cosa_ha_dimostrato():
     # 120 — quindi non è la loro quantità a essere dura, è la loro posizione.
     #
     # Ciò che si asserisce è quindi: l'ordine è quello dichiarato dai dati, e
-    # i **sei** criteri storici arrivano tutti in fondo. Un livello che non
-    # conclude resta nel rendiconto con `valore: None`, quindi la troncatura
-    # si vede; sono i livelli **dopo** di lui a sparire.
+    # i **sei** criteri storici arrivano tutti in fondo.
+    #
+    # ⚠ Qui c'era scritto «sono i livelli **dopo** di lui a sparire», ed era
+    # vero fino al 2026-09-01: la troncatura si vedeva solo contando le righe.
+    # Ora i livelli non provati restano nel rendiconto con
+    # `stato: mai_partito`, quindi l'elenco è **sempre** quello intero e la
+    # troncatura si legge sugli stati. Il difetto non era la troncatura — che
+    # è corretta — ma il fatto che il prodotto non la dicesse.
     ordine = [
         "minuti_scartati", "attivita_scartate", "violazioni_nuove",
         "gaps_teachers", "gaps_classes", "isolated_all",
         "free_half_days_teachers", "regularity_classes",
         "weekly_spread_classes", "slot_spread_teachers", "preferences_all",
     ]
-    assert list(esiti) == ordine[:len(esiti)], list(esiti)
-    assert len(esiti) >= ordine.index("regularity_classes") + 1, list(esiti)
+    assert list(esiti) == ordine, list(esiti)
+    provati = [n for n, l in esiti.items() if l["stato"] != MAI_PARTITO]
+    assert provati == ordine[:len(provati)], provati
+    assert len(provati) >= ordine.index("regularity_classes") + 1, provati
     # I buchi arrivano a zero **e lo dimostrano**, per entrambe le popolazioni.
     for nome in ("gaps_teachers", "gaps_classes"):
         assert esiti[nome]["valore"] == 0 and esiti[nome]["ottimo"], esiti[nome]
@@ -104,7 +112,8 @@ def test_la_catena_arriva_in_fondo_e_dichiara_cosa_ha_dimostrato():
     # `regularity_classes` (936, limite inferiore 101), ma quali esattamente
     # dipende da quanto la ricerca arriva a dimostrare dentro il budget, e
     # fissarlo sarebbe fissare un fatto sulla ricerca.
-    assert any(l["divario"] > 0 for l in soluzione.stats["livelli"])
+    assert any(l["divario"] is not None and l["divario"] > 0
+               for l in soluzione.stats["livelli"])
 
 
 def test_il_verde_conta_e_lo_dimostra():

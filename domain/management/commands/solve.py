@@ -44,28 +44,13 @@ from domain.analysis.findings import Severity
 from domain.models import (Activity, Extraction, QualityCriterion, Resource,
                            Schedule)
 from domain.solver.model import apply, solve
+from domain.solver.objective import descrivi_livello as _esito
+from domain.solver.objective import nota_di_troncatura
 from domain.solver.quality import Arbitrato
 
 
 def _hm(minutes):
     return f"{minutes // 60}h{minutes % 60:02d}"
-
-
-def _esito(livello):
-    """La riga di un livello. Estratta perché sia verificabile senza costruire
-    un'istanza che produca *deterministicamente* un divario: farla scattare con
-    un solve vero vorrebbe dire dipendere dalla velocità della macchina."""
-    valore, divario = livello["valore"], livello["divario"]
-    if valore is None:
-        return "non concluso"
-    if livello["ottimo"]:
-        return str(valore)
-    if divario == 0:
-        # 🔑 Valore e limite inferiore coincidono ma il solver non ha chiuso la
-        # dimostrazione: è l'ottimo, e leggerlo come «forse c'è di meglio»
-        # manda ad alzare il limite di tempo per niente.
-        return f"{valore} (è l'ottimo, non dimostrato)"
-    return f"{valore} (ottimo non dimostrato, non sotto {livello['limite']})"
 
 
 class Command(BaseCommand):
@@ -135,6 +120,9 @@ class Command(BaseCommand):
             for i, livello in enumerate(stats["livelli"], 1):
                 self.stdout.write(f"  [{i}] {livello['nome']}: {_esito(livello)}"
                                   f"   {livello['secondi']}s")
+            nota = nota_di_troncatura(stats["livelli"])
+            if nota is not None:
+                self.stdout.write(nota)
 
         if arbitrato is not None:
             self.stdout.write("\n== Arbitrato fra popolazioni ==")

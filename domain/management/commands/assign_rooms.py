@@ -10,6 +10,7 @@ from django.core.management.base import BaseCommand, CommandError
 from domain.analysis.conformity import check_schedule
 from domain.analysis.findings import Severity
 from domain.models import Activity, Extraction, Schedule
+from domain.solver.objective import descrivi_livello, nota_di_troncatura
 from domain.solver.rooms import apply_rooms, solve_rooms
 
 
@@ -67,12 +68,12 @@ class Command(BaseCommand):
         if stats["livelli"]:
             self.stdout.write("\n== Criteri, in ordine di priorità ==")
             for i, livello in enumerate(stats["livelli"], 1):
-                valore = livello["valore"]
-                esito = ("non concluso" if valore is None
-                         else f"{valore}" + ("" if livello["ottimo"]
-                                             else " (ottimo non dimostrato)"))
-                self.stdout.write(f"  [{i}] {livello['nome']}: {esito}"
-                                  f"   {livello['secondi']}s")
+                self.stdout.write(
+                    f"  [{i}] {livello['nome']}: {descrivi_livello(livello)}"
+                    f"   {livello['secondi']}s")
+            nota = nota_di_troncatura(stats["livelli"])
+            if nota is not None:
+                self.stdout.write(nota)
 
         if soluzione.status not in ("OPTIMAL", "FEASIBLE"):
             raise CommandError(

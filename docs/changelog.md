@@ -38,6 +38,16 @@ quelle già fatte.
   dell'ultimo è l'unica traccia, e non dice che sotto ce n'erano altri due.
   Riprodotto su database pulito: identico, stesso livello.
 
+  ⚠ **E non era una scoperta: il banco lo sapeva.**
+  `tests/test_alighieri_qualita.py` documentava già la troncatura con la
+  diagnosi giusta — *«sono i livelli dopo di lui a sparire»*, e la misura che
+  presi da soli i due criteri nuovi chiudono senza fatica (`weekly_spread`
+  220, `slot_spread` 120), *«quindi non è la loro quantità a essere dura, è la
+  loro posizione»*. Nuovo era il resto: che quel fatto non fosse mai arrivato
+  in `todo.md`, in `CLAUDE.md` né qui, e soprattutto che **il prodotto non lo
+  dicesse a chi lo usa**. Un fenomeno noto ai test e taciuto all'utente è un
+  difetto del prodotto, non della documentazione.
+
   🔑 **La prima diagnosi era sbagliata, e a correggerla è stata una misura.**
   Il livello usciva a **11,9 s** con un budget di 15: un `Solve` che termina
   *prima* del limite non è scaduto, quindi sembrava `INFEASIBLE` — e sarebbe
@@ -59,6 +69,45 @@ quelle già fatte.
   ⚠ **Il limite che la prova dichiara su sé stessa**: nessuno ha mai misurato
   il generatore su una scuola di taglia reale. Fermi 10 classi e 284 attività,
   Alighieri 12 e 343; un liceo vero ne ha 30–60.
+
+  ✅ **Il silenzio è chiuso lo stesso giorno** (punto 1 di L14). Un livello ha
+  ora **quattro** stati e non due: `misurato`, `non_concluso` (è partito e non
+  ha restituito niente), `mai_partito` (la catena si è fermata più in alto) e
+  `vuoto` (niente da misurare su quelle chiavi). I primi due esistevano
+  schiacciati dentro `valore is None`; gli altri due **non comparivano
+  affatto**, perché non producevano una riga.
+
+  🔑 **Il caso `vuoto` è lo stesso silenzio con un'altra causa**, ed era una
+  regola scritta: *«un criterio senza niente da misurare non è un livello»*
+  (il `PREFERENCES` del Fermi, che non ha indisponibilità verdi). La regola
+  resta — non minimizza e non fissa niente — ma una scuola che dichiara un
+  criterio e non trova la sua riga non può distinguere «non fa niente qui» da
+  «me lo sono dimenticato». Ora c'è la riga, e dice quale dei due.
+
+  E la descrizione di un livello vive in `domain/solver/objective.py`, non nel
+  comando, perché i comandi che leggono una catena sono **due**: `solve` e
+  `assign_rooms` condividono `solve_chain`, quindi ne condividevano la
+  troncatura e una descrizione duplicata avrebbe corretto un solo lato.
+  Sopra le righe c'è una **nota** che nomina i criteri mai provati e dice
+  l'unica cosa che si può fare — `--limite` più alto — perché un rendiconto di
+  undici voci si legge dall'alto e l'ultima riga del comando dice «calcolo
+  terminato».
+
+  ⚠ **Non cambia il codice di uscita**: la soluzione restituita è valida e
+  ottimizzata fin dove si è arrivati. Era un'informazione che mancava, non un
+  fallimento nuovo.
+
+  Le prove hanno il loro ramo di controllo (una catena intera non ha livelli
+  mancati, e non stampa la nota) e mordono: tolto il tratto che nomina i non
+  provati cade un test, tolto anche quello del vuoto ne cadono due. Suite:
+  **959 passed, 17 skipped** nel giro rapido (erano 954), più i due file del
+  banco toccati, 20 passed in 8 min 45.
+
+  ⛔ **Il punto 2 di L14 resta aperto e non è una taratura**: quanto tempo può
+  costare un solve è una domanda di prodotto, e la risposta la dà il pezzo che
+  viene dopo — quando il calcolo è un lavoro con uno stato (ADR-027 §3), 378 s
+  è un tempo accettabile e il budget può crescere. Deciderlo davanti a un
+  comando sincrono vorrebbe dire rispondere alla domanda sbagliata.
 
 - **2026-09-01 — L'ora quindicinale attraversa il confine: L9, e il campo che
   divide i lettori in due** — `Mactywd/aurora`, ramo

@@ -160,11 +160,11 @@ def test_il_rendiconto_distingue_l_ottimo_non_dimostrato_dal_divario():
     frasi diventano diverse, e quella a divario zero **toglie** il consiglio di
     alzare `--limite` invece di darlo a vuoto.
 
-    I quattro casi vengono dalla misura sul Fermi: `gaps` dimostra 0;
+    I sei casi vengono dalla misura sul Fermi e dall'Alighieri: `gaps` dimostra 0;
     `isolated` **arriva** a 0 e non lo dimostra; `regularity` si ferma a 236
     con limite inferiore 18; un livello scaduto senza soluzione non conclude."""
     from domain.management.commands.solve import _esito
-    from domain.solver.objective import Esito
+    from domain.solver.objective import MAI_PARTITO, VUOTO, Esito
 
     def riga(**kw):
         return _esito(Esito(**kw).as_dict())
@@ -178,6 +178,17 @@ def test_il_rendiconto_distingue_l_ottimo_non_dimostrato_dal_divario():
         "236 (ottimo non dimostrato, non sotto 18)")
     assert riga(nome="x", valore=None, ottimo=False,
                 secondi=15.0, limite=None) == "non concluso"
+    # 🔑 I due stati che il 2026-09-01 hanno smesso di essere silenzi. «Non
+    # concluso» e «mai partito» non sono la stessa notizia: il primo dice che
+    # il livello ha provato, il secondo che la catena si e' fermata sopra di
+    # lui — e prima non compariva affatto, perche' il livello non produceva una
+    # riga.
+    assert riga(nome="slot_spread_teachers", valore=None, ottimo=False,
+                secondi=0.0, limite=None, stato=MAI_PARTITO) == (
+        "non partito — la catena si è interrotta più in alto")
+    assert riga(nome="preferences_all", valore=None, ottimo=False,
+                secondi=0.0, limite=None, stato=VUOTO) == (
+        "niente da misurare su queste chiavi")
 
 
 def test_i_lavoratori_si_dichiarano():
@@ -189,3 +200,46 @@ def test_i_lavoratori_si_dichiarano():
                   classes=[env["klass"]])
     testo, _ = _esegui(env["schedule"])
     assert "(1 in ricerca)" in testo
+
+
+def test_la_nota_dice_quanti_criteri_non_sono_stati_provati():
+    """🔑 **Le righe per livello non bastano.** Un rendiconto di undici voci si
+    legge dall'alto, e l'ultima riga del comando dice «calcolo terminato»: chi
+    si ferma lì non sa che due criteri dichiarati dalla scuola non sono stati
+    nemmeno provati. La nota li nomina e dice l'unica cosa che si può fare,
+    che è dare più tempo.
+
+    Misurato sull'Alighieri: nove livelli stampati su undici, e prima di questa
+    riga nulla nell'output lo diceva."""
+    from domain.solver.objective import (MAI_PARTITO, MISURATO, NON_CONCLUSO,
+                                         nota_di_troncatura)
+
+    def livello(nome, stato):
+        return {"nome": nome, "stato": stato}
+
+    nota = nota_di_troncatura([
+        livello("gaps_teachers", MISURATO),
+        livello("weekly_spread_classes", NON_CONCLUSO),
+        livello("slot_spread_teachers", MAI_PARTITO),
+        livello("preferences_all", MAI_PARTITO),
+    ])
+    assert "weekly_spread_classes" in nota, "dove si è rotta"
+    assert "2 criteri non sono stati provati" in nota
+    assert "slot_spread_teachers" in nota and "preferences_all" in nota
+    assert "--limite" in nota, "il ponte fra il fatto e l'azione"
+
+    # singolare, perché una riga che dice «1 criteri» si legge come un difetto
+    uno = nota_di_troncatura([livello("x", NON_CONCLUSO),
+                              livello("y", MAI_PARTITO)])
+    assert "un criterio non è stato provato" in uno, uno
+
+
+def test_una_catena_intera_non_ha_nota():
+    """Il ramo di controllo: senza livelli mancati non si stampa niente. Una
+    nota che comparisse sempre sarebbe rumore, e in due esecuzioni non
+    distinguerebbe il caso buono da quello cattivo."""
+    from domain.solver.objective import MISURATO, nota_di_troncatura
+
+    assert nota_di_troncatura([{"nome": "gaps_all", "stato": MISURATO},
+                               {"nome": "isolated_all", "stato": MISURATO}]) is None
+    assert nota_di_troncatura([]) is None

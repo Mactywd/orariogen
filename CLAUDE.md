@@ -340,11 +340,15 @@ Coperto finora (una scuola di esempio inserita in EDT):
 > ⚠ **E con otto criteri il budget di default non basta: la catena si tronca.**
 > Misurato il 2026-09-01 eseguendo il comando sull'Alighieri (11 livelli): a
 > 15 s per livello il nono non trova soluzione, il ciclo esce, e i due criteri
-> sotto **non hanno mai turno** — e il rendiconto non lo dice, perché elenca
-> solo i livelli partiti. Con `--limite 60` la catena arriva in fondo in
-> **378 s** (contro 74) e `isolated_all` passa da 31 a **5**. È **L14** in
-> [docs/todo.md](docs/todo.md), e corregge un numero usato altrove: gli «82 s
-> con i criteri di qualità» di ADR-027 erano il costo di una catena troncata.
+> sotto **non hanno mai turno**. Con `--limite 60` la catena arriva in fondo in
+> **378 s** (contro 74) e `isolated_all` passa da 31 a **5** — quindi gli «82 s
+> con i criteri di qualità» di ADR-027 erano il costo di una catena **troncata**.
+> 🔑 Il banco lo documentava già; il difetto era che **il prodotto lo taceva**.
+> Ora un livello ha **quattro** stati (`misurato`, `non_concluso`,
+> `mai_partito`, `vuoto`, in `objective.py` con la descrizione condivisa dai due
+> comandi che leggono una catena) e una **nota** nomina i criteri mai provati.
+> Resta aperta la sola taratura del budget — **L14** in
+> [docs/todo.md](docs/todo.md) — che è una domanda di prodotto per ADR-027 §3.
 >
 > Dal 2026-08-27 (sera) c'è anche la **separazione per popolazione**
 > (`Arbitrato` in `domain/solver/quality.py`,

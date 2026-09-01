@@ -94,13 +94,27 @@ class Level:
     costruisci: object = None
 
 
+#: Lo stato di un livello nel rendiconto. ⚠ **Sono quattro e non due**, ed è la
+#: correzione del 2026-09-01: `valore is None` copriva da solo due fatti
+#: diversi — «è partito e non ha restituito niente» e «non è mai partito» — e
+#: il secondo non compariva affatto, perché la catena si interrompe e i livelli
+#: sotto non producono un `Esito`. Chi legge vedeva un elenco più corto senza
+#: alcun modo di sapere che lo fosse. È la stessa regola per cui la classifica
+#: dei vincoli **dichiara** le famiglie che esclude invece di ometterle.
+MISURATO = "misurato"
+NON_CONCLUSO = "non_concluso"     # è partito, nessuna soluzione nel suo budget
+MAI_PARTITO = "mai_partito"       # la catena si è interrotta più in alto
+VUOTO = "vuoto"                   # niente da misurare su queste chiavi
+
+
 @dataclass(frozen=True)
 class Esito:
     nome: str
-    valore: int | None   # None se il livello non ha concluso
+    valore: int | None   # None se il livello non ha un valore da mostrare
     ottimo: bool         # False se ha restituito una soluzione senza dimostrarla
     secondi: float
     limite: int | None = None   # il limite inferiore dimostrato
+    stato: str = MISURATO
 
     @property
     def divario(self):
@@ -118,7 +132,62 @@ class Esito:
     def as_dict(self):
         return {"nome": self.nome, "valore": self.valore,
                 "ottimo": self.ottimo, "secondi": self.secondi,
-                "limite": self.limite, "divario": self.divario}
+                "limite": self.limite, "divario": self.divario,
+                "stato": self.stato}
+
+
+def descrivi_livello(livello):
+    """La riga di un livello, dal suo `as_dict()`.
+
+    Sta qui e non nel comando perché i comandi che leggono una catena sono
+    **due** — `solve` e `assign_rooms`, che condividono `solve_chain` e quindi
+    ne condividono la troncatura — e una descrizione duplicata è un modo di
+    correggerne una sola.
+
+    ⚠ È verificabile senza costruire un'istanza che produca
+    *deterministicamente* un divario: farla scattare con un solve vero
+    vorrebbe dire dipendere dalla velocità della macchina."""
+    stato = livello.get("stato", MISURATO)
+    if stato == MAI_PARTITO:
+        return "non partito — la catena si è interrotta più in alto"
+    if stato == VUOTO:
+        return "niente da misurare su queste chiavi"
+    valore, divario = livello["valore"], livello["divario"]
+    if valore is None:
+        return "non concluso"
+    if livello["ottimo"]:
+        return str(valore)
+    if divario == 0:
+        # 🔑 Valore e limite inferiore coincidono ma il solver non ha chiuso la
+        # dimostrazione: è l'ottimo, e leggerlo come «forse c'è di meglio»
+        # manda ad alzare il limite di tempo per niente.
+        return f"{valore} (è l'ottimo, non dimostrato)"
+    return f"{valore} (ottimo non dimostrato, non sotto {livello['limite']})"
+
+
+def nota_di_troncatura(livelli):
+    """La riga che dice che la catena si è fermata, o `None` se è intera.
+
+    🔑 **Le righe per livello da sole non bastano.** Un rendiconto di undici
+    voci si legge dall'alto e si abbandona; l'ultima riga del comando dice
+    «calcolo terminato» e chi si ferma lì non sa che due criteri dichiarati
+    dalla scuola non sono stati nemmeno provati. La nota nomina **quanti** e
+    dice l'unica cosa che si può fare al riguardo, che è dare più tempo — lo
+    stesso ponte fra il fatto e l'azione della classifica dei vincoli.
+
+    ⚠ Non è un errore e non cambia il codice di uscita: la soluzione
+    restituita è valida e ottimizzata fin dove si è arrivati. È un'informazione
+    che mancava, non un fallimento nuovo."""
+    mancati = [l for l in livelli if l.get("stato") == MAI_PARTITO]
+    if not mancati:
+        return None
+    rotto = next((l for l in livelli if l.get("stato") == NON_CONCLUSO), None)
+    dove = f" a `{rotto['nome']}`" if rotto is not None else ""
+    quanti = ("un criterio non è stato provato" if len(mancati) == 1
+              else f"{len(mancati)} criteri non sono stati provati")
+    return (f"⚠ La catena si è interrotta{dove}: {quanti} "
+            f"({', '.join(l['nome'] for l in mancati)}). "
+            f"Con `--limite` più alto ci arriva.")
 
 
 def livelli(ctx, model, arbitrato=None):
@@ -289,6 +358,9 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
     l'ottimo e `BUDGET_QUALITA` per i criteri di qualità, che non lo dimostrano
     mai. Vedi la misura in testa a quella costante.
     """
+    # I livelli si percorrono **e si affettano** (i non provati vanno nominati),
+    # quindi serve una sequenza e non un iteratore qualunque.
+    levels = list(levels)
     # `solver` iniettabile: e' la cucitura con cui un test puo' far mancare un
     # livello **deterministicamente**, invece di sperare che un limite di tempo
     # morda. Il ramo «un livello non conclude» altrimenti non sarebbe affermato
@@ -324,13 +396,18 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
     solver.parameters.presolve_substitution_level = 0
 
     esiti, soluzione, stato_buono = [], None, None
-    for level in levels:
+    for indice, level in enumerate(levels):
         var = level.var
         if level.costruisci is not None:
             # la costruzione pigra: vedi il docstring di `Level`
             var = level.costruisci(model)
             if var is None:
-                continue      # niente da misurare su queste chiavi
+                # niente da misurare su queste chiavi — e lo si **dice**: un
+                # criterio dichiarato dalla scuola che non ha nulla da
+                # misurare è un'informazione, non un livello da nascondere.
+                esiti.append(Esito(level.nome, None, False, 0.0,
+                                   stato=VUOTO))
+                continue
             level = replace(level, var=var, costruisci=None)
         limite = budget(level)
         solver.parameters.max_time_in_seconds = (
@@ -340,7 +417,18 @@ def solve_chain(model, levels, *, estrai, suggerisci=None, time_limit=None,
         stato = solver.Solve(model)
         secondi = round(time.monotonic() - inizio, 3)
         if stato not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            esiti.append(Esito(level.nome, None, False, secondi))
+            esiti.append(Esito(level.nome, None, False, secondi,
+                               stato=NON_CONCLUSO))
+            # ⚠ I livelli sotto **non si provano nemmeno**, ed è giusto: senza
+            # una soluzione per questo livello non c'è niente da fissare, e
+            # ripartire da capo più in basso ottimizzerebbe un criterio meno
+            # importante violando l'ordine dichiarato. Ma «non provati» non è
+            # «assenti»: entrano nel rendiconto col loro nome, altrimenti chi
+            # legge crede che la catena finisca qui. Che siano poi vuoti o
+            # misurabili non si può sapere — costruirli è ciò che non si è
+            # fatto.
+            esiti.extend(Esito(l.nome, None, False, 0.0, stato=MAI_PARTITO)
+                         for l in levels[indice + 1:])
             if soluzione is None:
                 return stato, None, tuple(esiti)
             break

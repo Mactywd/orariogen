@@ -7,6 +7,7 @@ secondo decide **solo** a parita' del primo, e che non lo peggiora."""
 import pytest
 
 from domain.solver.model import solve
+from domain.solver.objective import NON_CONCLUSO
 from tests.analysis_helpers import make_activity, mini_school
 
 pytestmark = pytest.mark.django_db
@@ -162,6 +163,7 @@ def test_un_livello_che_non_conclude_non_annulla_i_precedenti():
     assert [e.nome for e in esiti] == ["primo", "secondo"]
     assert esiti[0].valore == 2 and esiti[0].ottimo
     assert esiti[1].valore is None and not esiti[1].ottimo
+    assert esiti[1].stato == NON_CONCLUSO, "e' partito e non ha concluso"
 
 
 def test_un_livello_che_non_dimostra_l_ottimo_lo_dichiara():
@@ -422,3 +424,117 @@ def test_i_suggerimenti_si_sostituiscono_invece_di_accumularsi():
         f"{len(proto.solution_hint.vars)} suggerimenti per {len(ctx.x)} "
         f"variabili: si stanno accumulando")
     assert solve(env["schedule"], workers=1).status == "OPTIMAL"
+
+
+def _catena_di_tre(cade_al=None):
+    """Tre livelli su un modellino, con un solver che puo' cadere a comando.
+
+    Restituisce `(stato, soluzione, esiti)`. `cade_al=None` e' il ramo di
+    controllo: nessuna caduta, tutti e tre concludono."""
+    from ortools.sat.python import cp_model
+
+    from domain.solver.objective import Level, solve_chain
+
+    model = cp_model.CpModel()
+    x = [model.NewBoolVar(f"x{i}") for i in range(4)]
+    model.Add(sum(x) <= 2)
+    var = []
+    for nome, espressione in (("primo", sum(1 - v for v in x)),
+                              ("secondo", x[0] + x[1]),
+                              ("terzo", x[2] + x[3])):
+        v = model.NewIntVar(0, 4, nome)
+        model.Add(v == espressione)
+        var.append(v)
+
+    class _Solver:
+        def __init__(self):
+            self._vero = cp_model.CpSolver()
+            self.parameters = self._vero.parameters
+            self.chiamate = 0
+
+        def Solve(self, m):
+            self.chiamate += 1
+            if cade_al is not None and self.chiamate == cade_al:
+                return cp_model.UNKNOWN
+            return self._vero.Solve(m)
+
+        def Value(self, v):
+            return self._vero.Value(v)
+
+        def BestObjectiveBound(self):
+            return self._vero.BestObjectiveBound()
+
+    return solve_chain(
+        model, [Level(n, v) for n, v in zip(("primo", "secondo", "terzo"), var)],
+        estrai=lambda s: {i: s.Value(v) for i, v in enumerate(x)},
+        solver=_Solver())
+
+
+def test_un_livello_mai_partito_ha_comunque_un_nome():
+    """🔑 **La troncatura si vedeva solo contando.**
+
+    Quando un livello non conclude la catena si ferma — ed e' giusto: senza una
+    soluzione per lui non c'e' niente da fissare, e ripartire piu' in basso
+    ottimizzerebbe un criterio meno importante violando l'ordine dichiarato.
+    Ma fino al 2026-09-01 i livelli **sotto** di lui non producevano alcun
+    `Esito`, quindi il rendiconto si limitava a essere piu' corto: chi legge
+    non aveva modo di distinguere «la catena aveva tre livelli e il terzo non
+    e' stato provato» da «la catena aveva due livelli».
+
+    Misurato sul prodotto, non immaginato: sull'Alighieri con otto criteri di
+    qualita' la catena si ferma al nono livello su undici, e il comando
+    stampava nove righe senza dire nulla delle due mancanti."""
+    from domain.solver.objective import MAI_PARTITO, NON_CONCLUSO
+
+    _stato, soluzione, esiti = _catena_di_tre(cade_al=2)
+
+    assert soluzione is not None, "la fotografia del primo livello resta"
+    assert [e.nome for e in esiti] == ["primo", "secondo", "terzo"], (
+        "il terzo livello non e' stato provato, ma va **nominato**")
+    assert esiti[1].stato == NON_CONCLUSO
+    assert esiti[2].stato == MAI_PARTITO
+    assert esiti[2].valore is None and esiti[2].secondi == 0.0
+
+
+def test_il_ramo_di_controllo_una_catena_intera_non_ha_livelli_mancati():
+    """Il ramo che rende la prova sopra un'affermazione e non una tautologia:
+    senza caduta nessun livello e' `mai_partito`, e il numero di righe e' lo
+    stesso. Senza questo, `stato=MAI_PARTITO` su tutti passerebbe."""
+    from domain.solver.objective import MISURATO
+
+    _stato, _soluzione, esiti = _catena_di_tre()
+
+    assert [e.nome for e in esiti] == ["primo", "secondo", "terzo"]
+    assert all(e.stato == MISURATO for e in esiti), [e.stato for e in esiti]
+    assert all(e.valore is not None for e in esiti)
+
+
+def test_un_livello_senza_niente_da_misurare_lo_dichiara():
+    """L'altra meta' dello stesso silenzio, e la stessa correzione.
+
+    Un criterio la cui quantita' e' identicamente nulla (`massimo <= 0`) non
+    produce una variabile: la sua fabbrica torna `None`. Prima il livello
+    spariva, e una scuola che avesse dichiarato quel criterio non aveva modo di
+    sapere che non stava facendo niente — che e' proprio l'informazione utile.
+
+    ⚠ Non e' lo stesso stato di `mai_partito`: qui **si e' guardato** e non
+    c'era niente; li' non si e' guardato affatto."""
+    from ortools.sat.python import cp_model
+
+    from domain.solver.objective import (MISURATO, VUOTO, Level, solve_chain)
+
+    model = cp_model.CpModel()
+    x = [model.NewBoolVar(f"x{i}") for i in range(3)]
+    model.Add(sum(x) <= 2)
+    pieno = model.NewIntVar(0, 3, "pieno")
+    model.Add(pieno == sum(x))
+
+    livelli = [Level("vuoto", None, costruisci=lambda _m: None),
+               Level("pieno", None, costruisci=lambda _m: pieno)]
+    _stato, _soluzione, esiti = solve_chain(
+        model, livelli, estrai=lambda s: {i: s.Value(v) for i, v in enumerate(x)})
+
+    assert [e.nome for e in esiti] == ["vuoto", "pieno"]
+    assert esiti[0].stato == VUOTO and esiti[0].valore is None
+    assert esiti[1].stato == MISURATO and esiti[1].valore == 0, (
+        "il livello che ha qualcosa da misurare continua a misurarlo")
