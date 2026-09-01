@@ -1,4 +1,0 @@
-ortools
-Django>=5.1,<6
-pytest
-pytest-django
