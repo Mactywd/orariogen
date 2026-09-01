@@ -1818,3 +1818,68 @@ Design completo:
 [docs/superpowers/specs/2026-09-01-modulo-orario-in-aurora-design.md](superpowers/specs/2026-09-01-modulo-orario-in-aurora-design.md).
 
 **Data.** 2026-09-01
+
+---
+
+## ADR-033 — La pubblicazione porta il periodo nella maschera, e non sceglie al posto della scuola
+
+**Decisione.** Il primo pezzo di [ADR-032](#adr-032--il-codice-entra-in-aurora-come-app-e-i-documenti-gli-vanno-dietro)
+— la pubblicazione da `Placement` alla griglia piatta — ha richiesto tre
+decisioni che ADR-027 §3.2 non porta.
+
+1. **Il periodo attraversa il confine dentro la maschera.** ADR-010 dice che un
+   orario si *rigenera* a ogni periodo, e Aurora non ha un campo per dire da
+   quando a quando una riga vale. Ma la maschera di settimane **è** quel campo:
+   pubblicando si intersecano le settimane dell'attività con quelle del
+   periodo, e due quadrimestri escono su maschere disgiunte che convivono nella
+   stessa tabella. Nessuno deve cancellare il primo per scrivere il secondo.
+2. **La cella ambigua si nomina, non si risolve.** L'unicità di
+   `ScheduleEntry` è `(docente, giorno, ora, classe, maschera)` e **non porta
+   la materia**: due parti della stessa classe, stesso docente, materie
+   diverse, stessa ora — legittimo da noi — là collidono. Non esce nessuna
+   delle due e la cella entra nella perdita. Scegliere quale vince sarebbe
+   inventare un orario che nessuno ha deciso, in silenzio.
+3. **Il sabato non si pubblica.** `ScheduleEntry.WEEKDAY_CHOICES` ha cinque
+   giorni. Una scuola che ne fa sei oggi non è pubblicabile, e il modo giusto
+   di dirlo non è scrivere il sabato di lunedì: le ore del sesto giorno si
+   contano nella perdita e non escono.
+
+**Alternative considerate.**
+
+1. **Un campo di validità a date** su `ScheduleEntry`, invece di far lavorare
+   la maschera. Scartata: sarebbe un secondo asse temporale accanto a uno che
+   già c'è, e i due potrebbero contraddirsi — una riga valida per date ma
+   spenta dalla maschera è uno stato che nessun lettore sa risolvere.
+2. **Pubblicare la materia dentro l'unicità** di Aurora, allargandola.
+   Scartata per ora: cambia un vincolo di un prodotto in produzione per un
+   caso che il banco non produce (zero celle ambigue sull'Alighieri) e che il
+   Fermi non ha. Si riapre se un dataset vero lo produce.
+3. **Il sabato mappato su un sesto valore** aggiunto alle scelte di Aurora.
+   Non è scartata, è **rimandata al suo pezzo**: tocca il modello di Aurora e
+   la sua UI, non la pubblicazione, ed è una riga di §5.4 e non di §5.1.
+
+**Motivo.** Le tre hanno la stessa forma, ed è la forma di tutto ADR-027: **la
+perdita si nomina invece di evitarla.** `pubblica` restituisce le righe *e* un
+`Perdita` che conta cosa la griglia non ha saputo tenere, separando le due
+nature — un'unità incompleta (la parte esce come la sua classe: Aurora vede
+una lezione dove ce n'è mezza, e il supplente serve comunque) da un'ora che
+**non esce affatto**.
+
+🔑 **E la misura ha corretto ADR-027 in meglio.** Quell'ADR dichiara che
+appiattendo si perdono **tre chiavi su 142** — due il raggruppamento
+trasversale, una l'ora quindicinale. Rifatta sul banco dopo L9, la griglia
+porta **142 chiavi su 142, ore comprese**, purché la maschera si legga: contate
+cieche, le ore sbagliano su una chiave sola (l'ora quindicinale del 5B, tre
+ore nella griglia dove la settimana ne porta due); contate **dentro una
+settimana**, su nessuna. Il campo di validità di L9 non ha ridotto quella
+perdita, l'ha **chiusa**.
+
+⚠ **E l'oracolo dichiara il proprio limite**, o il numero sarebbe una
+millanteria: le cattedre di riferimento sono appiattite *nello stesso modo*
+(la parte diventa la sua classe, il gruppo le classi delle sue parti), quindi
+quel confronto **non può vedere** la perdita del gruppo — la vede identica da
+tutt'e due i lati. È esattamente per questo che `Perdita` la conta a parte
+invece di dedurla da un confronto: sull'Alighieri **34 attività su una parte e
+6 su un raggruppamento**, stabili su cinque ottimi distinti.
+
+**Data.** 2026-09-01

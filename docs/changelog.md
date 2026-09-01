@@ -15,6 +15,58 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-09-01 — La pubblicazione: la griglia piatta porta 142 chiavi su 142,
+  e la perdita di ADR-027 era di prima di L9** — [L15](todo.md) pezzo 1,
+  [ADR-033](decisioni.md).
+
+  Il primo dei sei pezzi di L15, e il solo che **non dipende dalla topologia**:
+  da `Placement` alla riga `(docente, giorno, ora, classe, materia, maschera)`
+  è una funzione pura, si prova sul banco con i dati che ci sono, e la
+  scrittura finale in Aurora è un adattatore di poche righe.
+  `domain/publication.py` + `manage.py publish`.
+
+  🔑 **La misura ha corretto ADR-027 in meglio.** Quell'ADR dichiara che
+  appiattendo si perdono **tre chiavi su 142** — due il raggruppamento
+  trasversale, una l'ora quindicinale. Rifatta sul banco *dopo* L9, la griglia
+  ne porta **142 su 142, ore comprese**: contate cieche alla maschera le ore
+  sbagliano su una chiave sola (`Urbani Chiara · 5B · SCI`, tre ore nella
+  griglia dove la settimana ne porta due), contate **dentro una settimana** su
+  nessuna. Il campo di validità di L9 non ha ridotto quella perdita, l'ha
+  chiusa — e l'ora quindicinale esce come due righe da **16 e 17 settimane**,
+  disgiunte, la cui unione è esattamente l'annuale.
+
+  ⚠ **E ciò che resta perso non è una chiave, è cosa una chiave significa.**
+  Sull'Alighieri: **34 attività su una parte** di classe escono come la classe
+  intera, **6 raggruppamenti** come le classi che toccano. Vero e incompleto —
+  Aurora vede una lezione dove ce n'è mezza, e il supplente serve comunque.
+  Numeri stabili su cinque ottimi distinti a otto lavoratori.
+
+  ⚠ **L'oracolo dichiara il proprio limite**, o quel 142 su 142 sarebbe una
+  millanteria: le cattedre di riferimento sono appiattite **nello stesso
+  modo**, quindi il confronto non può vedere la perdita del gruppo — la vede
+  identica da tutt'e due i lati. È per questo che `Perdita` la conta a parte
+  invece di dedurla da un confronto.
+
+  Tre decisioni che ADR-027 §3.2 non portava ([ADR-033](decisioni.md)): il
+  **periodo attraversa il confine dentro la maschera** (ADR-010 dice che
+  l'orario si rigenera a ogni periodo, Aurora non ha un campo «da quando a
+  quando», ma le settimane bastano e due quadrimestri convivono su maschere
+  disgiunte); la **cella ambigua si nomina invece di risolversi** (l'unicità di
+  Aurora non porta la materia, quindi due parti con materie diverse nella
+  stessa ora là collidono: non esce nessuna delle due); il **sabato non si
+  pubblica**, perché `WEEKDAY_CHOICES` ha cinque giorni e scrivere il sabato di
+  lunedì sarebbe peggio che non scriverlo.
+
+  ✅ **E il Fermi fa da controprova, come sempre al contrario**: **288 righe,
+  perdita vuota** — l'orario passa il confine intero, perché quel dataset non ha
+  né parti né raggruppamenti né ore quindicinali. 288 è anche, alla lettera, il
+  suo monte ore-classe. L'Alighieri: **369 righe**, 23 docenti, 12 classi.
+
+  Le cinque proprietà sono provate per **sabotaggio** in tutt'e due i versi
+  (maschera cruda invece che effettiva, periodo non intersecato, cella ambigua
+  risolta d'ufficio, ore contate da zero, sabato pubblicato): ognuna fa cadere
+  il suo test e nessun'altra ne fa cadere di estranei.
+
 - **2026-09-01 — Misurando Aurora prima di scriverci dentro: il design del
   modulo, e quattro numeri di ADR-027 che erano diversi** —
   [L15](todo.md), [ADR-032](decisioni.md),

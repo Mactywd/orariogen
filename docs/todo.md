@@ -314,9 +314,19 @@ misurato — `gunicorn --timeout 180` — e la catena intera dell'Alighieri cost
 
 I sei pezzi, in ordine (§5 del design):
 
-1. [ ] **La pubblicazione** — da `Placement` alla riga piatta. È una funzione
-       pura, **non dipende dalla topologia**, e si prova sul banco con i dati
-       che ci sono: si può fare in questo repository, adesso.
+1. [x] **La pubblicazione** — fatta il 2026-09-01 (`domain/publication.py`,
+       `manage.py publish`, [ADR-033](decisioni.md)). 🔑 **E la misura ha
+       corretto ADR-027 in meglio**: quell'ADR dichiara tre chiavi perse su
+       142, la griglia ne porta **142 su 142, ore comprese**, purché la
+       maschera si legga — contate cieche sbagliano su una chiave sola (l'ora
+       quindicinale del 5B), contate dentro una settimana su nessuna. Il campo
+       di L9 non ha ridotto quella perdita, l'ha **chiusa**. ⚠ Ciò che resta
+       perso non è una chiave, è **cosa una chiave significa**: 34 attività su
+       una parte escono come la classe intera e 6 raggruppamenti come le classi
+       che toccano. Tre decisioni nuove in [ADR-033](decisioni.md) — il periodo
+       viaggia nella maschera, la cella ambigua si nomina invece di
+       risolversi, il sabato non si pubblica perché Aurora non ce l'ha.
+       Alighieri **369 righe**, Fermi **288 e perdita vuota**.
 2. [ ] **Il trasloco** — l'app entra in Aurora col nome `orario`, migrazioni
        riscritte *prima* che esistano dati. Zero cambi di comportamento: il
        criterio è che le due suite restino verdi con gli stessi numeri.
@@ -534,7 +544,7 @@ colonna `School` non esiste ancora (ADR-027 §1).
 **Quello che mancava era che qualcuno guardasse.** I 77 siti della mattina
 erano **116** la sera dello stesso giorno — L12 e L13 — cresciuti di metà senza
 che niente lo dicesse. Ora `tests/test_confine_orm.py` porta una **regola**
-(nucleo a zero) e un **cricchetto** sull'insieme dei trentanove punti, nella
+(nucleo a zero) e un **cricchetto** sull'insieme dei quarantuno punti, nella
 forma di `tests/sonda.py`. E le query che stavano **dentro i cicli** sono
 salite al caricamento: `check_schedule` **718 → 60**, `analyze_capacity()`
 **1206 → 20**, stessi 344 finding. Delle 718, **668 — il 93 %** — erano una

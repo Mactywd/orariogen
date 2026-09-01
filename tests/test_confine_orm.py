@@ -70,7 +70,9 @@ CONFINE = {
     ("domain/management/commands/extract.py", "Command._stampa"): COMANDO,
     ("domain/management/commands/extract.py", "Command.handle"): COMANDO,
     ("domain/management/commands/place_and_fix.py", "Command.handle"): COMANDO,
+    ("domain/management/commands/publish.py", "Command.handle"): COMANDO,
     ("domain/management/commands/solve.py", "Command.handle"): COMANDO,
+    ("domain/publication.py", "pubblica"): CARICATORE,
     # ⚠ `<modulo>`: le lambda del catalogo delle domande, valutate al momento
     # della domanda e non all'import. È l'unico contatto a livello di modulo.
     ("domain/questionario.py", "<modulo>"): INGRESSO,
