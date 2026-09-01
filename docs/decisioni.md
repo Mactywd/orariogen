@@ -1442,6 +1442,21 @@ sono attitudini, non impegni. Filtrare anche le seconde toglierebbe a un
 docente la sua classe nella settimana in cui la sua ora quindicinale non cade,
 cioè lo scarterebbe come supplente proprio quando è libero.
 
+**Secondo emendamento del 2026-09-01 — i numeri della parte 1, misurati.**
+Il design dell'implementazione ([ADR-032](#adr-032--il-codice-entra-in-aurora-come-app-e-i-documenti-gli-vanno-dietro))
+li ha contati invece di ripeterli, e quattro sono diversi. Le tabelle sono
+**34**: `SetupQuestion` è nata lo stesso giorno di questo ADR, con L13, e porta
+con sé l'**ottava** unicità globale (`SetupQuestion.key`) che l'elenco di
+sopra non ha. Ce n'è una **nona** che quell'elenco non poteva contenere perché
+non è un campo `unique`: il constraint di `QualityCriterion` su
+`(kind, population)`, globale come gli altri. La chiave di scuola serve su
+**13** tabelle e non su tutte — le altre 21 la ereditano per FK non nullabili,
+e un campo proprio sarebbe un secondo posto dove la stessa verità può
+diventare falsa. E il livello «ingresso» di §3.3 nasconde una collisione che
+questo ADR non nomina: `Teacher`, `SchoolClass`, `Subject` e la griglia oraria
+**esistono già da tutt'e due le parti**, e le nostre sono un soprainsieme
+delle sue.
+
 ---
 
 ## ADR-028 — La via d'ingresso è l'orario dell'anno scorso, e il dialogo chiede il terzo che manca
@@ -1726,9 +1741,80 @@ nessuno lo notasse, e 668 query su 718 spese a richiedere un dato già in
 memoria.
 
 ⚠ **Ciò che questo ADR non decide.** Non se `domain/` diventerà un'app dentro
-Aurora o un pacchetto installabile; non la forma dell'API (ADR-027 §3 la
+Aurora o un pacchetto installabile — → **deciso il 2026-09-01 con
+[ADR-032](#adr-032--il-codice-entra-in-aurora-come-app-e-i-documenti-gli-vanno-dietro):
+un'app, e i documenti le vanno dietro**; non la forma dell'API (ADR-027 §3 la
 dichiara un lavoro con coda e stato); e non *quando* arriva la `School`. Il
 cricchetto è scritto perché quel giorno il lavoro sia un elenco di trentanove
 righe da scopare, e non una caccia.
 
 **Data.** 2026-08-31
+
+---
+
+## ADR-032 — Il codice entra in Aurora come app, e i documenti gli vanno dietro
+
+**Decisione.** Risponde alla domanda che [ADR-027](#adr-027--il-generatore-è-un-modulo-di-aurora-e-il-calcolo-è-un-lavoro)
+decide di non porre e che [ADR-031](#adr-031--il-dominio-non-diventa-puro-il-confine-si-dichiara-e-si-sorveglia)
+dichiara aperta: **dove vive il codice.**
+
+`domain/` diventa l'app **`orario`** dentro `Mactywd/aurora`, e ci va **per
+intero** — modelli, solver, analisi, comandi, test, dataset. Con lui i
+documenti: `docs/edt/`, `data/`, questo file, il changelog, il todo.
+
+**Alternative considerate.**
+
+1. **Un pacchetto installabile**, con la scuola presa da una
+   `settings.ORARIO_SCHOOL_MODEL` sul modello di `AUTH_USER_MODEL`. Scartata:
+   quel meccanismo funziona perché `User` è dichiarato `swappable`, e una
+   migrazione può dipendere da un modello che non conosce. `School` non lo è, e
+   non ha ragione di diventarlo per noi. Senza, le nostre migrazioni
+   **congelano** `to='api.school'` — cioè il pacchetto smette di svilupparsi da
+   solo, che era l'unico motivo per tenerlo separato.
+2. **Un pacchetto senza chiave esterna**, con un `school_id` intero. Scartata:
+   perde la cascata e l'integrità referenziale, cioè le due cose che rendono
+   una tenancy verificabile invece che promessa. Cancellare una scuola
+   lascerebbe 34 tabelle di orfani senza che nessun vincolo dica niente.
+3. **Una copia vendorizzata** (subtree, submodule, copia a mano). Scartata: due
+   copie dello stesso codice divergono, ed è alla lettera l'accumulo di
+   versioni che le convenzioni di questo repository vietano.
+4. **Lasciare il codice qui e portare in Aurora solo un client.** Scartata
+   dalla misura di §1.3 del design: quattro tabelle esistono da tutt'e due le
+   parti con lo stesso nome, e un client non risolve una collisione di
+   anagrafica — la nasconde dietro una sincronizzazione, che è la stessa
+   divergenza dell'alternativa 3 con un altro nome.
+
+**Motivo.** Uno solo, e non ammette sfumature: **la chiave esterna verso la
+`School`.** ADR-027 §3.1 la vuole, e una FK ordinaria si scrive solo fra due
+app della stessa installazione. Tutte le alternative la comprano a un prezzo
+che non vale la pena pagare, e nessuna compra in cambio qualcosa che serva.
+
+Tre misure la confermano invece di limitarsi a non contraddirla: **ortools è
+già nel `requirements.txt` di Aurora**, con un commento che nomina questo
+modulo (*«la dipendenza si ammortizza sul futuro modulo di generazione
+dell'orario»*); il dominio **non importa nulla del progetto** che lo ospita
+(le occorrenze di `settings.` nel codice sono `InstituteSettings`, cioè un
+dato); e le due suite **non si sommano**, perché il comando che Aurora
+documenta è `manage.py test api` e per costruzione non tocca le altre app —
+1614 test in 249 s là, 959 in 231 s qui, più i ~21 min del banco.
+
+🔑 **E i documenti vanno dietro al codice per la stessa ragione per cui il
+codice va dentro Aurora**: sono la parte che spiega *perché* è così. Un
+reverse engineering di EDT separato dal generatore che ne discende è un
+archivio, non una documentazione — e la prima volta che una misura contraddice
+una riga, le due metà divergono senza che nessuno lo veda.
+
+⚠ **La conseguenza va guardata in faccia**: questo repository smette di essere
+il posto dove il generatore si sviluppa. Se poi si archivi o resti come storia
+è una decisione di chi lo possiede, e questo ADR non la prende.
+
+⚠ **E il trasloco ha una finestra.** L'etichetta dell'app è `domain`, che
+dentro Aurora — accanto ad `api` — non dice niente a nessuno; rinominarla in
+`orario` costa una riscrittura delle venti migrazioni, e va fatta **prima**
+che esistano dati di una scuola vera. Dopo, costa una migrazione di dati per
+cliente.
+
+Design completo:
+[docs/superpowers/specs/2026-09-01-modulo-orario-in-aurora-design.md](superpowers/specs/2026-09-01-modulo-orario-in-aurora-design.md).
+
+**Data.** 2026-09-01

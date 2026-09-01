@@ -593,9 +593,18 @@ l'orario. **Nessuna voce di lavoro è aperta**: le tre nate leggendo Aurora sono
 chiuse — L10 e L11 il 2026-08-31 ([ADR-030](docs/decisioni.md),
 [ADR-031](docs/decisioni.md)), **L9** il 2026-09-01 in `Mactywd/aurora`
 (`ScheduleEntry.iso_week_mask`) — e a tutt'e tre la misura ha cambiato la
-domanda. ⛔ Ciò che resta grosso è **fuori dall'elenco e dichiarato**:
-l'*implementazione* di ADR-027 — la `School` sulle 33 tabelle, la pubblicazione
-verso `ScheduleEntry`, il calcolo come lavoro — decisa e non costruita. Restano
+domanda. 🔧 Ciò che resta grosso è **L15**, aperta il 2026-09-01: l'implementazione
+di ADR-027, **decisa, progettata e non costruita**
+([design](docs/superpowers/specs/2026-09-01-modulo-orario-in-aurora-design.md)) —
+`domain/` diventa l'app `orario` dentro Aurora ([ADR-032](docs/decisioni.md): la
+FK verso la `School` si scrive ordinaria solo fra app della stessa
+installazione), e misurando Aurora tre numeri dell'ADR sono cambiati — **34**
+tabelle non 33, la scuola su **13** non su tutte, **nove** unicità globali non
+sette — e una quarta misura l'ADR non la nomina: `Teacher`, `SchoolClass`,
+`Subject` e la griglia **esistono già da tutt'e due le parti**, e le nostre sono
+un soprainsieme delle sue. ⛔ Il pezzo senza appoggi è la **coda**: Aurora non ha
+celery né rq né thread, e il muro è `gunicorn --timeout 180` contro i 378 s
+della catena intera. Restano
 **tre osservazioni** che richiedono la UI di EDT (il `Ciclo personalizzato`, le
 due minuzie di O7) e **quattro** debiti dichiarati. 🔑 **L11 in particolare**: la purezza
 del dominio *c'è già dove serve* — 28 builder su 28 e 14 file di checker su 14

@@ -15,6 +15,93 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-09-01 — Misurando Aurora prima di scriverci dentro: il design del
+  modulo, e quattro numeri di ADR-027 che erano diversi** —
+  [L15](todo.md), [ADR-032](decisioni.md),
+  [design](superpowers/specs/2026-09-01-modulo-orario-in-aurora-design.md).
+
+  ADR-027 decide che il generatore è un modulo di Aurora e che il calcolo è un
+  lavoro. Non decide **dove vive il codice**, e non compare in nessuna delle
+  sue due liste — né fra le cose decise né fra quelle dichiarate fuori. Prima
+  di aprire una migrazione, Aurora è stata misurata.
+
+  🔑 **La topologia: un'app dentro Aurora, non un pacchetto** ([ADR-032](decisioni.md)),
+  e il motivo è uno solo — la chiave esterna verso la `School`. Il pacchetto la
+  comprerebbe con `settings.ORARIO_SCHOOL_MODEL`, che funziona per `User`
+  perché `User` è `swappable`: senza, le migrazioni **congelano**
+  `to='api.school'` e il pacchetto smette di svilupparsi da solo, che era
+  l'unico motivo per tenerlo separato. Le altre due strade — `school_id`
+  intero, copia vendorizzata — perdono l'integrità referenziale la prima e
+  divergono la seconda.
+
+  ⚠ **Quattro numeri di ADR-027 sono diversi da come li dichiara**, e uno non
+  c'era proprio:
+
+  | | ADR-027 | misurato |
+  |---|---|---|
+  | tabelle | 33 | **34** |
+  | che devono portare la scuola | tutte | **13** |
+  | unicità globali | sette | **otto**, più una che non è un campo |
+  | tabelle che collidono con Aurora | — | **quattro** |
+
+  Le prime due discrepanze hanno la stessa causa e non è un errore:
+  `SetupQuestion` è nata **lo stesso giorno**, con L13, dopo che l'ADR era
+  scritto — porta la trentaquattresima tabella e l'ottava unicità
+  (`SetupQuestion.key`). La nona unicità invece l'ADR non poteva elencarla
+  perché non è un campo `unique`: `QualityCriterion` ha un constraint su
+  `(kind, population)`, globale esattamente come gli altri.
+
+  🔑 **La chiave di scuola serve su 13 tabelle, non su 34**: le altre 21 la
+  ereditano per FK non nullabili, e un campo proprio sarebbe un secondo posto
+  dove la stessa verità può diventare falsa. ⚠ E **due delle tredici sono lì
+  per una nullabilità**, non perché siano radici — `Resource.site` e
+  `RelaxationQuota.resource`: una scuola a plesso unico non compila la sede,
+  quindi l'albero delle risorse non raggiunge la scuola per nessun cammino
+  solido, e con lui i sei tipi concreti che ne discendono.
+
+  🔑 **La quarta misura è quella che ADR-027 non nomina affatto**: `Teacher`,
+  `SchoolClass`, `Subject` e la griglia oraria **esistono già da tutt'e due le
+  parti**. Il livello «ingresso» dell'ADR dice *le tabelle di Aurora*, e quelle
+  tabelle non sono vicine alle nostre — sono **le nostre proiettate su due
+  colonne**: `Teacher(school, name)` contro cognome, nome, sigla, stato,
+  `Mh/s`, `HSMax`, materia preferita, M2M delle insegnabili e la `Resource`
+  sotto. La collisione è **a senso unico**, quindi non c'è da riconciliare due
+  modelli: c'è da sostituire una proiezione con l'originale, e il raggio è
+  piccolo — **8 riferimenti** in tutta Aurora (4 `Teacher`, 3 `SchoolClass`, 1
+  `Subject`, **0** `TimeSlot`). ⚠ L'unica perdita vera è che Aurora ha **un**
+  campo `name` dove noi abbiamo cognome e nome: ricomporre è banale, scomporre
+  no, e `"Maria De Luca"` non si taglia con una regola. Si migra tutto in
+  `last_name` lasciando `first_name` vuoto, perché sia **brutto e visibile**
+  invece che sbagliato in silenzio.
+
+  ⛔ **E il pezzo senza appoggi è la coda.** `requirements.txt` di Aurora: nessun
+  celery, nessun rq, nessun thread di lavoro; il compose di produzione ha tre
+  servizi. Il calcolo come lavoro non è una scelta di implementazione, è
+  **infrastruttura che non esiste**. Il muro invece è scritto e commentato —
+  `gunicorn --timeout 180`, «gunicorn UCCIDE il worker che non ha risposto» — e
+  la catena intera dell'Alighieri costa **378 s**, più del doppio.
+  ⚠ **I «82 s» che ADR-027 cita erano una catena troncata**, misurati prima di
+  L14: il numero vero rafforza l'argomento dell'ADR invece di indebolirlo — un
+  solve per richiesta non ci sta di un fattore due, non di un margine.
+
+  ✅ **Due misure confermano la topologia invece di limitarsi a non
+  contraddirla.** `ortools` è **già** nel `requirements.txt` di Aurora, e il
+  commento sopra nomina questo modulo: *«la dipendenza si ammortizza sul futuro
+  modulo di generazione dell'orario, che senza un solver non si fa»* — la
+  dipendenza più cara del pezzo è già pagata, da chi sapeva per cosa. E le due
+  suite **non si sommano**: Aurora documenta `manage.py test api`, che per
+  costruzione non tocca le altre app (1614 test in 249 s là, 959 in 231 s qui,
+  più i ~21 min del banco).
+
+  ⚠ **Una finestra che si chiude.** L'etichetta dell'app è `domain`, che dentro
+  Aurora non dice niente a nessuno; rinominarla costa una riscrittura delle
+  venti migrazioni e va fatta **prima** che esistano dati di una scuola vera.
+  Dopo, costa una migrazione di dati per cliente.
+
+  Il design chiude con sei pezzi in ordine, e il primo **non dipende dalla
+  topologia**: la pubblicazione da `Placement` alla riga piatta è una funzione
+  pura che si prova sul banco con i dati che ci sono.
+
 - **2026-09-01 — Provando il comando invece dei test: la catena si tronca al
   nono livello su undici** — [L14](todo.md).
 

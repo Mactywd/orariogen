@@ -48,11 +48,13 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 >   le due minuzie da tooltip di **O7**;
 > - **quattro debiti** dichiarati, tutti con la ragione scritta accanto.
 >
-> ⛔ **E resta fuori dall'elenco, dichiarato, il pezzo più grosso**:
-> l'*implementazione* di ADR-027 — la `School` sulle 33 tabelle, la
-> pubblicazione verso `ScheduleEntry`, il calcolo come lavoro. È deciso e non
-> costruito, e non è mai stata una voce di lavoro perché era bloccato su
-> Aurora. Ora non lo è più.
+> ⚠ **E il pezzo più grosso è entrato nell'elenco il 2026-09-01**:
+> l'*implementazione* di ADR-027 è ora **L15**, con il suo design
+> ([2026-09-01-modulo-orario-in-aurora](superpowers/specs/2026-09-01-modulo-orario-in-aurora-design.md)).
+> Fin qui stava dichiarato fuori perché bloccato su Aurora; leggendo Aurora si
+> è sbloccato, e misurandola sono cambiati tre dei suoi numeri — le tabelle
+> sono **34** e non 33, la chiave di scuola serve su **13** e non su tutte, le
+> unicità globali sono **nove** e non sette.
 >
 > ⚠ **Guardare Aurora ha cambiato tutt'e due le domande, non solo le
 > risposte.** D2 chiedeva *«un formato o un dialogo?»*, e la risposta è
@@ -265,6 +267,68 @@ mouse le promuove o le smentisce.
 ---
 
 ## 3. Lavoro — si può fare adesso
+
+### L15 🔧 L'implementazione di ADR-027 — **aperta il 2026-09-01, il design c'è**
+
+Il pezzo più grosso del progetto, e fin qui era dichiarato fuori dall'elenco
+perché bloccato su Aurora. Non lo è più. Il design è
+[2026-09-01-modulo-orario-in-aurora](superpowers/specs/2026-09-01-modulo-orario-in-aurora-design.md),
+scritto **dopo aver misurato Aurora** invece che ragionandoci sopra, e le
+misure hanno corretto tre numeri di ADR-027 e ne hanno trovato uno che l'ADR
+non nomina affatto.
+
+🔑 **La domanda che ADR-027 non pone**: *dove vive il codice.* La risposta è
+che `domain/` diventa l'app `orario` dentro `Mactywd/aurora`, e ci va per
+intero — documenti compresi, perché senza il codice accanto si staccano dal
+loro oggetto ([ADR-032](decisioni.md)). Il motivo è uno solo: la chiave
+esterna verso la `School`, che ADR-027 §3.1 vuole e che si scrive in modo
+ordinario solo fra app della stessa installazione.
+
+Le misure che il design porta, in breve:
+
+| | ADR-027 | misurato |
+|---|---|---|
+| tabelle | 33 | **34** (`SetupQuestion` è nata lo stesso giorno, con L13) |
+| che devono portare la scuola | tutte | **13** — le altre 21 la ereditano per archi non nullable |
+| unicità globali | sette | **otto** campi (manca `SetupQuestion.key`) **più una che non è un campo**, `QualityCriterion(kind, population)` |
+| tabelle che collidono con Aurora | non nominate | **quattro** — `Teacher`, `SchoolClass`, `Subject`, la griglia oraria |
+
+⚠ **E due delle tredici sono lì per una FK nullable**, non perché siano
+radici: `Resource.site` e `RelaxationQuota.resource`. Una scuola a plesso unico
+non compila la sede, quindi l'albero delle risorse non raggiunge la scuola per
+nessun cammino solido — e con lui i sei tipi concreti che ne discendono.
+
+⚠ **La collisione dell'anagrafica è a senso unico**, ed è la sola buona notizia
+del pezzo: ogni campo che Aurora ha esiste anche da noi, nessuno dei nostri
+esiste da lei. Non c'è da riconciliare due modelli, c'è da sostituire una
+proiezione con l'originale — e il raggio è piccolo, **8 riferimenti** in tutta
+Aurora. L'unica perdita vera è che Aurora ha **un** campo `name` dove noi
+abbiamo cognome e nome: ricomporre è banale, scomporre no.
+
+⛔ **E il pezzo che non ha nulla su cui appoggiarsi è la coda.** Aurora non ha
+celery, non ha rq, non ha un thread di lavoro, e il compose di produzione ha
+tre servizi. Il calcolo come lavoro (ADR-027 §3) non è una scelta di
+implementazione: è infrastruttura che non esiste. Il muro invece è scritto e
+misurato — `gunicorn --timeout 180` — e la catena intera dell'Alighieri costa
+**378 s**, cioè più del doppio.
+
+I sei pezzi, in ordine (§5 del design):
+
+1. [ ] **La pubblicazione** — da `Placement` alla riga piatta. È una funzione
+       pura, **non dipende dalla topologia**, e si prova sul banco con i dati
+       che ci sono: si può fare in questo repository, adesso.
+2. [ ] **Il trasloco** — l'app entra in Aurora col nome `orario`, migrazioni
+       riscritte *prima* che esistano dati. Zero cambi di comportamento: il
+       criterio è che le due suite restino verdi con gli stessi numeri.
+3. [ ] **La scuola** — 13 FK, 9 unicità, `InstituteSettings` a riga per scuola,
+       e il test che nessuna tabella sia raggiungibile per due cammini.
+4. [ ] **Le collisioni** — le tre tabelle che spariscono, gli 8 riferimenti che
+       si spostano, e la griglia oraria con la sua domanda aperta (⚠
+       `DayConfiguration` ammette un giorno più corto, la `TimeGrid` no).
+5. [ ] **Il lavoro** — coda, stato, polling; e prima di tutto *come*. È qui che
+       si risponde a **L14 punto 2**.
+6. [ ] **Le rotte** — `analyze` sincrona, `export_ical`, `extract` come
+       parametro, il gate del modulo.
 
 ### L14 🔧 La catena si tronca — **metà chiusa il 2026-09-01**
 
