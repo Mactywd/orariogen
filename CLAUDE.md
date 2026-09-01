@@ -576,13 +576,16 @@ senza `SetupQuestion` il dialogo non può terminare, perché una famiglia vuota 
 una mai chiesta hanno le stesse zero righe). ⚠ E l'ablazione ha corretto l'elenco del gradino 3:
 **discipline e classi di concorso non toccano il calcolo** — zero builder, zero
 celle, zero constraint — quindi quella domanda si fa per il gestionale, non per
-l'orario. Resta **una voce di lavoro** delle tre nate leggendo Aurora — **L9**,
-e ⚠ **non si può fare da qui**: vive nel repository di Aurora — più **tre
-osservazioni** che richiedono la UI di EDT (il `Ciclo personalizzato`, le due
-minuzie di O7) e **quattro** debiti dichiarati. ⛔ L10 e L11 sono chiuse il
-2026-08-31 con [ADR-030](docs/decisioni.md) e [ADR-031](docs/decisioni.md), e a
-entrambe la misura ha cambiato la domanda. 🔑 **L11 in particolare**: la purezza
-del dominio *c'è già dove serve* — 28 builder su 28 e 13 file di checker su 14
+l'orario. **Nessuna voce di lavoro è aperta**: le tre nate leggendo Aurora sono
+chiuse — L10 e L11 il 2026-08-31 ([ADR-030](docs/decisioni.md),
+[ADR-031](docs/decisioni.md)), **L9** il 2026-09-01 in `Mactywd/aurora`
+(`ScheduleEntry.iso_week_mask`) — e a tutt'e tre la misura ha cambiato la
+domanda. ⛔ Ciò che resta grosso è **fuori dall'elenco e dichiarato**:
+l'*implementazione* di ADR-027 — la `School` sulle 33 tabelle, la pubblicazione
+verso `ScheduleEntry`, il calcolo come lavoro — decisa e non costruita. Restano
+**tre osservazioni** che richiedono la UI di EDT (il `Ciclo personalizzato`, le
+due minuzie di O7) e **quattro** debiti dichiarati. 🔑 **L11 in particolare**: la purezza
+del dominio *c'è già dove serve* — 28 builder su 28 e 14 file di checker su 14
 non interrogano il database, per via dell'istantanea che si passa e non di un
 confine di pacchetto — e il chokepoint per la tenancy **non si può costruire
 adesso**, perché lo `Schedule` — che dodici delle diciotto porte che interrogano già

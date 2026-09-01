@@ -1405,6 +1405,43 @@ Design completo:
 
 **Data.** 2026-08-31
 
+**Emendamento del 2026-09-01 — la forma del campo di validità, e l'indice che
+non ha bisogno di un'ancora.** Questo ADR diceva *«un campo, non un modello
+nuovo»* e si fermava lì. Implementandolo (L9, in `Mactywd/aurora`) la forma ha
+richiesto tre decisioni che il campo da solo non porta.
+
+1. **È una maschera di settimane, e l'indice è la settimana ISO** — non un
+   progressivo dell'anno scolastico come `Activity.week_mask` da noi, dove il
+   bit *w* è la settimana che comincia a `SchoolYear.first_week_monday + 7w`.
+   Il motivo è che **Aurora non ha un anno scolastico**: nessuna data
+   d'inizio, nessun calendario, solo la data che le viene chiesta. Un indice
+   contato da una prima settimana avrebbe voluto quell'ancora *da qualche
+   altra parte*, e un'ancora sbagliata sposta in silenzio ogni riga della
+   scuola di una settimana. Un indice ISO si ricava dalla data e basta: la
+   riga si legge da sé.
+   ⚠ E **non una parità pari/dispari**, che sarebbe stata il campo più piccolo
+   di tutti: il 2026 ha **53** settimane ISO, quindi fra il 28 dicembre (53) e
+   il 4 gennaio (1) il numero cambia senza cambiare parità, e un'alternanza
+   scritta come parità salterebbe un turno esattamente a cavallo di ogni anno
+   scolastico che attraversa un anno a 53 settimane.
+2. **Il default dice «tutte le settimane» per esteso**, non con uno `0` né con
+   `NULL`. Un valore sentinella vuole un lettore che lo sappia interpretare, e
+   chi non lo sapesse leggerebbe «mai» — cioè cancellerebbe l'orario invece di
+   ignorare un campo che non conosce.
+3. **L'unicità di `ScheduleEntry` cresce di una colonna**, perché senza la
+   maschera la coppia quindicinale **non è scrivibile**: le due metà possono
+   cadere sulla stessa cella. ⚠ E non è un'ipotesi — imponendogliela con
+   `pinned` sull'Alighieri il modello risponde `OPTIMAL` a zero scarti, perché
+   a settimane disgiunte l'occupazione non le vede confliggere.
+
+🔑 **E il pezzo ha trovato che il campo divide i lettori in due**, che è la
+parte che vale oltre L9. Un motore delle sostituzioni fa due domande diverse
+alla stessa tabella: *«questa lezione si tiene oggi?»*, che guarda la data, e
+*«di chi è questa classe? chi insegna ginnastica?»*, che **non** la guarda —
+sono attitudini, non impegni. Filtrare anche le seconde toglierebbe a un
+docente la sua classe nella settimana in cui la sua ora quindicinale non cade,
+cioè lo scarterebbe come supplente proprio quando è libero.
+
 ---
 
 ## ADR-028 — La via d'ingresso è l'orario dell'anno scorso, e il dialogo chiede il terzo che manca

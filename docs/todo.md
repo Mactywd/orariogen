@@ -29,18 +29,26 @@ Stato: `[ ]` aperta · `[~]` in corso · `[x]` chiusa (scende in fondo, con la d
 > [ADR-028](decisioni.md), dopo aver **letto Aurora** invece di ragionarci
 > sopra. Restano:
 >
-> - **una voce di lavoro** delle tre nate da quella lettura: **L9**, la
->   `ScheduleEntry` che non tiene l'ora quindicinale. ⚠ **Non si può fare da
->   qui**: vive nel repository di Aurora. **L10 e L11 sono chiuse** il
->   2026-08-31 con [ADR-030](decisioni.md) e [ADR-031](decisioni.md), e a
->   entrambe la misura ha cambiato la domanda: L10 non era un ramo inusato di
->   `unit` ma **nessuno che leggesse `TeachingAssignment`**; L11 non era la
->   purezza da comprare ma **il chokepoint che non si può ancora costruire**,
->   perché lo `Schedule` non delimita l'anagrafica e la `School` non esiste;
+> - **nessuna voce di lavoro**: le tre nate da quella lettura sono chiuse. L10
+>   e L11 il 2026-08-31 con [ADR-030](decisioni.md) e [ADR-031](decisioni.md),
+>   **L9** il 2026-09-01 in `Mactywd/aurora` — la voce era ferma perché vive
+>   là, non perché fosse difficile. E a tutt'e tre la misura ha cambiato la
+>   domanda: L10 non era un ramo inusato di `unit` ma **nessuno che leggesse
+>   `TeachingAssignment`**; L11 non era la purezza da comprare ma **il
+>   chokepoint che non si può ancora costruire**, perché lo `Schedule` non
+>   delimita l'anagrafica e la `School` non esiste; L9 non era «un campo» ma
+>   **quale indice**, e la risposta — la settimana ISO — è l'unica che non
+>   chiede ad Aurora un calendario che non ha;
 > - **tre osservazioni** che richiedono la UI e che nessuno può fare al posto
 >   di chi ha il prodotto: l'ultimo residuo di O2 (il `Ciclo personalizzato`) e
 >   le due minuzie da tooltip di **O7**;
 > - **quattro debiti** dichiarati, tutti con la ragione scritta accanto.
+>
+> ⛔ **E resta fuori dall'elenco, dichiarato, il pezzo più grosso**:
+> l'*implementazione* di ADR-027 — la `School` sulle 33 tabelle, la
+> pubblicazione verso `ScheduleEntry`, il calcolo come lavoro. È deciso e non
+> costruito, e non è mai stata una voce di lavoro perché era bloccato su
+> Aurora. Ora non lo è più.
 >
 > ⚠ **Guardare Aurora ha cambiato tutt'e due le domande, non solo le
 > risposte.** D2 chiedeva *«un formato o un dialogo?»*, e la risposta è
@@ -332,24 +340,41 @@ utile: `ricava` li trova e `manage.py bootstrap` li stampa, ma `applica` non li
 scrive, perché una partizione senza gli alunni dentro non è una riga che si
 possa mettere. Chi vuole l'elenco rilegge la griglia.
 
-### L9 🔧 La `ScheduleEntry` di Aurora non tiene l'ora quindicinale
+### L9 ✅ La `ScheduleEntry` di Aurora tiene l'ora quindicinale — fatto il 2026-09-01
 
-La crescita minima che ADR-027 nomina: **un campo di validità** sulla riga
-della griglia piatta, non un modello nuovo. È la maschera di ADR-014 che
-attraversa il confine.
+Chiusa in **`Mactywd/aurora`** (ramo `ora-quindicinale-scheduleentry`), che è
+il motivo per cui la voce era ferma. `ScheduleEntry.iso_week_mask` è il campo
+di validità che ADR-027 nominava; la forma sta nel suo
+[emendamento](decisioni.md#adr-027--il-generatore-è-un-modulo-di-aurora-e-il-calcolo-è-un-lavoro).
 
-⚠ Serve al caso **falso**, non a quello incompleto. Delle tre chiavi che la
-pubblicazione perde, due sono il raggruppamento trasversale — Aurora sente
-«Orlandi insegna a 1A», che è vero e incompleto, ed è la stessa
-approssimazione con cui già convive dandosi classi dal nome composto
-(`3B/5O`). La terza è l'ora quindicinale, che fa credere ad Aurora una lezione
-che **una settimana su due non si tiene**: lì il motore cerca un supplente per
-un'ora che non esiste.
+🔑 **Tre cose che «un campo» non diceva, e che il pezzo ha dovuto decidere.**
+L'indice è la **settimana ISO** e non un progressivo, perché Aurora non ha un
+anno scolastico da cui contare — nessuna data d'inizio, nessun calendario — e
+una maschera con l'ancora altrove si sposta tutta di una settimana se
+quell'ancora è sbagliata. Non è una **parità**, che sarebbe stata il campo più
+piccolo: il 2026 ha 53 settimane ISO, e fra il 28 dicembre (53) e il 4 gennaio
+(1) la parità non cambia — un'alternanza scritta così salta un turno a cavallo
+di ogni anno a 53 settimane. E l'**unicità cresce di una colonna**, perché
+senza la maschera la coppia quindicinale non è scrivibile.
 
-🔑 Ed è il punto in cui i due prodotti si scoprono uguali: la sostituzione che
-Aurora genera ogni mattina *è* la sostituzione di ADR-014 — una riga con la
+⚠ **Che le due metà possano condividere una cella non è un'ipotesi**:
+imponendogliela con `pinned` sull'Alighieri il modello risponde `OPTIMAL` a
+zero scarti — a settimane disgiunte l'occupazione non le vede confliggere.
+Sull'ottimo che il solver sceglie da sé cadono invece su due celle e le
+collisioni sono **zero**: la misura da sola avrebbe detto «nessun problema», ed
+è il testimone puntato a dire che il problema è a un ottimo di distanza.
+
+🔑 **E il campo divide i lettori in due**, che è la scoperta oltre la voce. Il
+motore fa due domande alla stessa tabella: *«questa lezione si tiene oggi?»*,
+che guarda la data, e *«di chi è questa classe? chi insegna ginnastica?»*, che
+non la guarda — sono **attitudini**. Filtrare anche le seconde toglierebbe a un
+docente la sua classe nella settimana in cui la sua ora quindicinale non cade,
+cioè lo scarterebbe come supplente proprio quando è libero.
+
+🔑 Resta vero il punto in cui i due prodotti si scoprono uguali: la sostituzione
+che Aurora genera ogni mattina *è* la sostituzione di ADR-014 — una riga con la
 maschera di una settimana che oscura l'originale. Aurora la produce, noi la
-modelliamo, e oggi non si parlano.
+modelliamo, e **ora hanno il campo per dirselo**.
 
 ### L10 ✅ La cattedra nomina l'unità che serve — fatto il 2026-08-31
 

@@ -15,6 +15,64 @@ quelle già fatte.
 > rivelate false, le decisioni scartate col motivo. Una voce che dice solo cosa
 > è stato aggiunto la dice il diff.
 
+- **2026-09-01 — L'ora quindicinale attraversa il confine: L9, e il campo che
+  divide i lettori in due** — `Mactywd/aurora`, ramo
+  `ora-quindicinale-scheduleentry`; [emendamento ad ADR-027](decisioni.md).
+
+  L'ultima delle tre voci nate leggendo Aurora, e la sola che non si potesse
+  fare da qui. ADR-027 la scriveva in una riga — *«un campo di validità sulla
+  `ScheduleEntry`, non un modello nuovo»* — e implementarla ha richiesto tre
+  decisioni che quella riga non conteneva.
+
+  🔑 **L'indice è la settimana ISO, e la ragione è che Aurora non ha un
+  calendario.** Da noi `Activity.week_mask` conta dal `first_week_monday` del
+  `SchoolYear`; là non c'è un `SchoolYear`, non c'è una data d'inizio, c'è solo
+  la data che al motore viene chiesta. Una maschera con l'ancora *da qualche
+  altra parte* si sposta tutta di una settimana se quell'ancora è sbagliata, e
+  nessuno se ne accorge. Con l'indice ISO la riga si legge da sé.
+
+  🔑 **E non una parità, che sarebbe stato il campo più piccolo di tutti.** Il
+  2026 ha **53** settimane ISO: fra il 28 dicembre (53) e il 4 gennaio (1) il
+  numero cambia *senza* cambiare parità, quindi un'alternanza scritta come
+  «pari/dispari» salta un turno a cavallo di ogni anno scolastico che
+  attraversa un anno a 53 settimane — cioè proprio quello in corso. Una
+  maschera dice settimana per settimana e non ha turni da saltare. C'è un test
+  che lo fissa.
+
+  ⚠ **L'unicità è cresciuta di una colonna, e la misura ha corretto la
+  domanda.** `(docente, giorno, ora, classe)` rendeva la coppia quindicinale
+  **impossibile da scrivere**: due righe complementari sulla stessa cella
+  violano quella chiave. Sull'ottimo che il solver sceglie da sé le due metà
+  cadono su celle diverse — appiattendo l'Alighieri risolto: **369 righe piatte
+  distinte, zero collisioni** — e la misura da sola avrebbe detto «nessun
+  problema». È il **testimone puntato** a dire il contrario: imponendo la
+  stessa cella a tutt'e due con `pinned`, il modello risponde `OPTIMAL` a zero
+  scarti, perché a settimane disgiunte l'occupazione non le vede confliggere.
+  Il problema era a un ottimo di distanza.
+
+  🔑 **La scoperta che vale oltre la voce: il campo divide i lettori in due.**
+  Un motore delle sostituzioni fa due domande alla stessa tabella. *«Questa
+  lezione si tiene oggi?»* guarda la data — e sono gli indici per giorno di
+  `DomainServices`, l'input `schedule_entries` del flusso, la copertura attesa
+  dei flow test. *«Di chi è questa classe? Chi insegna ginnastica?»* **non** la
+  guarda: sono **attitudini**, non impegni. Filtrare anche le seconde
+  toglierebbe a un docente la sua classe nella settimana in cui la sua ora
+  quindicinale non cade — cioè lo scarterebbe come supplente proprio quando è
+  libero. ⚠ E `_entries_by_teacher` stava dalla parte sbagliata nella prima
+  stesura: lo legge `is_gym_teacher`, che dichiara «any day» nel suo commento.
+
+  Il resto è conseguenza: il default «tutte le settimane» scritto **per esteso**
+  e non con uno `0` che chi non lo conosce leggerebbe «mai»; la fotografia
+  dell'orario che porta le settimane (`CONTENT_VERSION` 1 → 2, con la v1 ancora
+  leggibile e ciò che non dice **dichiarato** invece che indovinato); il campo
+  esposto sull'API.
+
+  Suite di Aurora: **1614 test** (1605 prima), verdi. Ogni prova ha il suo ramo
+  di controllo, e non è cerimonia — «la riga non si vede» è soddisfatto anche
+  da una riga che non si vede mai. Verificato **sabotando**: spento il
+  predicato cadono due test, spento il campo nella fotografia ne cadono altri
+  due.
+
 - **2026-08-31 (notte, tardissimo) — Il confine dell'ORM: L11, e le 668 query
   su 718 spese a richiedere un dato già in memoria** —
   `tests/test_confine_orm.py`, [ADR-031](decisioni.md).
