@@ -1393,6 +1393,12 @@ Prime tiene `api/intake/` senza Django con un test specchio sul confine, e
 sarebbe giusto anche qui, ma il dominio interroga l'ORM in **77 punti** — 21
 nei comandi, 36 in tre file. È un pezzo a sé, da decidere col suo costo
 davanti.
+→ **Deciso la sera stessa con [ADR-031](#adr-031--il-dominio-non-diventa-puro-il-confine-si-dichiara-e-si-sorveglia): no.** E il conto dei 77 punti misurava la cosa
+sbagliata — la purezza che il pacchetto comprerebbe è **già in cassa** dove
+serve (28 builder su 28 e 14 file di checker su 14 non interrogano), e il
+chokepoint per la tenancy di questo ADR **non si può ancora costruire**, perché
+lo `Schedule` delimita i piazzamenti e non l'anagrafica, e la `School` — la
+parte 1 qui sopra — non esiste.
 
 Design completo:
 [docs/superpowers/specs/2026-08-31-confine-aurora-design.md](superpowers/specs/2026-08-31-confine-aurora-design.md).
